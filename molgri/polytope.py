@@ -1,26 +1,9 @@
 """
-NetworkX graphs representing Platonic solids in 3- or 4D.
+In this file, the only goal is creating and selecting points on (hyper) spheres - we do not do any hulls, spherical
+Voronois etc.
 
-Specifically, we implement the 3D polytopes
-icosahedron and cube and the 4D polytope hypercube. As a start, vertices of the polytope are added as
-nodes and edges as connections between them. For the cube, a point is also added in the middle of each face diagonal
-and the edges from these face points to the four vertices are added. For the hypercube, a point is added at the center
-of each of the 8 sub-cells and in the middle of all square faces, edges to these points are also added.
-
-It's important that polytopes can also be subdivided in smaller units so that grids with larger numbers of points
-can be created. For this, use divide_edges() command. 3D polytopes (polyhedra) can also be plotted - for 4D polyhedra,
-each 3D cell can be plotted.
-
-Points and their projections should always be accessed with getters and include only non-repeating rotation
-quaternions for cube4D.
-
-Objects:
-    - Polytope (abstract)
-    - Polyhedron (abstract, only 3D, implements plotting)
-    - PolyhedronFromG (helper for testing/plotting, initiated with an existing graph)
-    - Cube4DPolytope
-    - IcosahedronPolytope
-    - Cube3DPolytope
+The main algorithm that may be subject to change in the future is select_a_node_to_delete, a system to decide which
+nodes should be removed first.
 """
 
 from abc import ABC, abstractmethod
@@ -32,476 +15,11 @@ import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi, golden
 from scipy.sparse import coo_array
-from scipy.spatial.distance import cdist
 import plotly.graph_objects as go
 
-from molgri.utils import (distance_between_quaternions, normalise_vectors, dist_on_sphere,
-                                hemisphere_quaternion_set, which_row_is_k, q_in_upper_sphere)
+from molgri.utils import (normalise_vectors, which_row_is_k, q_in_upper_sphere)
 
-class Polytope(ABC):
 
-    """
-    A polytope is a d-dim object consisting of a set of nodes (vertices) and connections between them (edges) saved
-    in self.G (graph).
-
-    The basic polytope will be created when the object is initiated. All further divisions should be performed
-    with the function self.divide_edges()
-    """
-
-    def __init__(self, d: int = 3):
-        """
-        The  central my_property of a Polytope is its graph G. The nodes of G are integers that uniquely describe a node
-        (also called central index). Each node has the following properties:
-         - polytope_point (coordinates of the point on the surface of a polytope)
-         - projection (coordinates of the point normed to length 1)
-         - level (in which subdivision step was the point created)
-         - face (to which sub-unit of te polytope does the point belong)
-
-        Args:
-            d: number of dimensions
-        """
-
-        self.G = nx.Graph()
-        self.current_level = 0
-        self.side_len = 0
-        self.current_max_ci = 0
-        self.d = d
-
-        # saved objects in order to not re-construct them unnecessarily (unless the level of division has changed)
-        self.current_nodes = (None, self.current_level)
-
-        # function that depends on the object being created
-        self._create_level0()
-
-
-########################################################################################################################
-#
-#               GETTER METHODS, USER INTERFACE
-#
-########################################################################################################################
-
-    def __str__(self):
-        return f"Polytope up to level {self.current_level}"
-
-    def get_nodes(self, N: int = None, projection: bool = False) -> NDArray:
-        """
-        The main getter of this object. Returns an array in which every row is either a polytope point or its
-        projection, either for all points or up to node N. It is important that this is consistent, so that if you
-        request 15 elements now and 18 elements later, the first 15 will be the same - also for each new construction
-        of this object.
-
-        Args:
-            N (int): number of points to return; if None, return all available ones
-            projection (bool): if True, return projections of points onto the (hyper)sphere
-
-        Returns:
-            an array of shape (N, self.d) in which every row is a point
-        """
-        # checking N
-        N = self._check_N(N=N)
-
-        # checking projection
-        if projection:
-            attribute_name = "projection"
-        else:
-            attribute_name = "polytope_point"
-
-        result = self._get_attributes_array_sorted_by_index(attribute_name)[:N]
-        if len(result) > 0:
-            assert result.shape == (N, self.d)
-        return result
-
-    def _check_N(self, N: int = None) -> int:
-        N_available = self.G.number_of_nodes()
-        # can't order more points than there are
-        if N is None:
-            N = N_available
-        if N > N_available:
-            raise ValueError(f"Cannot order more points than there are! N={N} > {N_available}")
-        return N
-
-    def _get_attributes_array_sorted_by_index(self, attribute_name: str) -> NDArray:
-        """
-        Return an array where every row/item is an attribute. Always returns data on all nodes sorted by central index.
-
-        Args:
-            attribute_name (str): either a name of one of node attributes or 'polytope_point' if you want
-            non-projected nodes themselves
-
-        Returns:
-            An array of attributes, the length of which will be the total number of nodes
-        """
-        # check if sorted nodes already available
-        N_nodes = self.G.number_of_nodes()
-        if N_nodes == 0:
-            return np.array([])
-        elif self.current_nodes[1] == N_nodes:
-            all_sorted_nodes = self.current_nodes[0]
-        else:
-            all_sorted_nodes = np.array(sorted(self.G.nodes(), key=lambda n: self.G.nodes[n]['central_index']))
-            # save if requested again
-            self.current_nodes = all_sorted_nodes, N_nodes
-
-        if attribute_name == "polytope_point":
-            return all_sorted_nodes
-        else:
-            return np.array([self.G.nodes[tuple(n)][attribute_name] for n in all_sorted_nodes])
-
-    def plot(self, show_nodes: bool = True, show_projected_nodes: bool = True, show_vertices: bool = True):
-        fig = go.Figure()
-        nodes = self.get_nodes(projection=False)
-        projected_nodes = self.get_nodes(projection=True)
-        adjacencies = self.get_polytope_adj_matrix()
-        if show_nodes:
-            fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], mode="markers", marker=dict(
-                color='black')))
-        if show_projected_nodes:
-            x = projected_nodes.T[0]
-            y = projected_nodes.T[1]
-            z = projected_nodes.T[2]
-            fig.add_trace(go.Scatter3d(x=x, y=y, z=z, mode="markers", marker=dict(color='green')))
-        if show_vertices:
-            rows, columns = adjacencies.nonzero()
-
-            for row, col in zip(rows, columns):
-                start = nodes[row]
-                end = nodes[col]
-                fig.add_trace(go.Scatter3d(x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
-                                           mode="lines",
-                                           line=dict(
-                    color='black')))
-
-        fig.show()
-
-    ########################################################################################################################
-#
-#               ADJACENCY AND CLOSENESS OF POINTS
-#
-########################################################################################################################
-
-    def _remove_last_node(self):
-        import numpy as np
-        print(np.random.choice(self.G.nodes()))
-        self.G.remove_node(self.current_max_ci)
-
-
-    def get_neighbours_of(self, point_index, **kwargs):
-        adj_matrix = self.get_polytope_adj_matrix(**kwargs)
-        return np.nonzero(adj_matrix[point_index])[0]
-
-    def get_polytope_adj_matrix(self, only_nodes: ArrayLike = None):
-        # include_opposing_neighbours=True, nly_half_of_cube=True):
-        """
-        Get adjacency matrix sorted by central index. Default is to use the creation graph to get adjacency
-        relationship.
-
-        Args:
-            include_opposing_neighbours ():
-
-        Returns:
-
-        """
-        if only_nodes is None:
-            only_nodes = self.get_nodes(projection=False)
-        adj_matrix = nx.adjacency_matrix(self.G, nodelist=[tuple(n) for n in only_nodes])
-        return adj_matrix
-
-
-    def get_cdist_matrix(self, only_nodes: ArrayLike = None) -> NDArray:
-        """
-        Cdist matrix of distances on (hyper)spheres.
-
-        Args:
-            only_nodes (ArrayLike): enables you to provide a list of nodes & only those will be included in the result
-
-        Returns:
-            a symmetric array (N, N) in which every item is a (hyper)sphere distance between points
-        """
-        if only_nodes is None:
-            chosen_G = self.G
-        else:
-            chosen_G = self.G.subgraph(nodes=only_nodes)
-
-        projected_nodes = sorted(chosen_G.nodes, key=lambda n: chosen_G.nodes[n]['central_index'])
-        projected_nodes = np.array([chosen_G.nodes[n]['projection'] for n in projected_nodes])
-
-        if self.d == 3:
-            method = "cos"
-        elif self.d == 4:
-            method = distance_between_quaternions
-        else:
-            raise ValueError("Must have 3 or 4 dimensions")
-        return cdist(projected_nodes, projected_nodes, method)
-
-########################################################################################################################
-#
-#               CREATION & SUBDIVISION METHODS
-#
-########################################################################################################################
-
-    @abstractmethod
-    def _create_level0(self):
-        """This is implemented by each subclass since they have different edges, vertices and faces"""
-        self._end_of_divison()
-
-    def divide_edges(self):
-        """
-        Subdivide once by putting a new point at mid-point of each existing edge and replacing this sub-edge with
-        two edges from the two old to the new point.
-
-        In sub-modules, additional edges may be added before and/or after performing divisions.
-        """
-        self._add_mid_edge_nodes()
-        self._end_of_divison()
-
-    def _end_of_divison(self):
-        """
-        Use at the end of _create_level0 or divide edges. Two functions:
-        1) increase the level, decrease side length
-        2) randomly shuffle all newly created points and assign CI to them
-        """
-        # find all nodes created in current level of division
-        # here exceptionally DON't use get_nodes since CI not assigned yet
-        new_nodes = [n for n, l in self.G.nodes(data="level") if l == self.current_level]
-
-        # shuffle them and assign CI
-        np.random.seed(15)
-        np.random.shuffle(new_nodes)
-        for i, n in enumerate(new_nodes):
-            self.G.nodes[tuple(n)]["central_index"] = self.current_max_ci + i
-        self.current_max_ci += len(new_nodes)
-
-        # adapt current level and side_len
-        self.current_level += 1
-        self.side_len = self.side_len / 2
-
-    def _add_mid_edge_nodes(self):
-        """
-        For each edge in the system, add a new point in the middle of the edge and replace the previous long edge with
-        two shorter ones.
-        """
-        indices_to_add = list(self.G.edges())
-        self._add_average_point_and_edges(indices_to_add, add_edges=True)
-        # remove the old connection: old_point1 -------- old_point2
-        for old1, old2 in indices_to_add:
-            self.G.remove_edge(old1, old2)
-
-    def _add_polytope_point(self, polytope_point: ArrayLike, face: set = None, face_neighbours_indices=None):
-        """
-        This is the only method that adds nodes to self.G.
-
-        Args:
-            polytope_point (ArrayLike): coordinates on the surface of polyhedron
-            face (set or None): a set of integers that assign this point to one or more faces of the polyhedron
-            face_neighbours_indices (): a list of neighbours from which we can determine the face(s) of the new point (
-            overriden by face if given)
-
-        Returns:
-
-        """
-        if face_neighbours_indices is None:
-            face_neighbours_indices = []
-        if face is None:
-            face = self._find_face(face_neighbours_indices)
-
-        # not adding central_index yet
-        self.G.add_node(tuple(polytope_point), level=self.current_level,
-                        face=face, projection=normalise_vectors(polytope_point))
-
-    def _add_edges_of_len(self, edge_len: float, wished_levels: List[int] = None, only_seconds: bool = True,
-                          only_face: bool = True):
-        """
-        Finds and adds all possible edges of specifies length between existing nodes (optionally only between nodes
-        fulfilling face/level/second neighbour condition to save computational time).
-
-        In order to shorten the time to search for appropriate points, it is advisable to make use of filters:
-         - only_seconds will only search for connections between points that are second neighbours of each other
-         - wished_levels defines at which division level the points between which the edge is created should be
-         - only_face: only connections between points on the same face will be created
-
-        Args:
-            edge_len: length of edge on the polyhedron surface that is condition for adding edges
-            wished_levels: at what level of division should the points that we want to connect be?
-            only_seconds: if True, search only among the points that are second neighbours
-            only_face: if True, search only among the points that lie on the same face
-        """
-        if wished_levels is None:
-            wished_levels = [self.current_level, self.current_level]
-        else:
-            wished_levels.sort(reverse=True)
-        assert len(wished_levels) == 2
-
-        # central indices of all points within wished level
-        selected_level = [n for n, d in self.G.nodes(data=True) if d['level'] == wished_levels[0]]
-        for new_node in selected_level:
-            # searching only second neighbours of the node if this option has been selected
-            if only_seconds:
-                sec_neighbours = list(second_neighbours(self.G, new_node))
-                sec_neighbours = [n for n in sec_neighbours if self.G.nodes[n]["level"] == wished_levels[1]]
-            else:
-                sec_neighbours = [n for n in self.G.nodes if self.G.nodes[n]["level"] == wished_levels[1]]
-            for other_node in sec_neighbours:
-                new_node_point = np.array(new_node)
-                other_node_point = np.array(other_node)
-                node_dist = np.linalg.norm(new_node_point-other_node_point)
-                # check face criterion
-                if not only_face or self._find_face([new_node, other_node]):
-                    # check distance criterion
-                    if np.isclose(node_dist, edge_len):
-                        length = dist_on_sphere(self.G.nodes[tuple(new_node)]["projection"],
-                                                self.G.nodes[tuple(other_node)]["projection"])
-                        self.G.add_edge(new_node, other_node, p_dist=edge_len, length=length)
-
-
-    def get_N_element_graph(self, N_ordered_points: NDArray):
-        #TODO
-        my_nodes = []
-        # need to calculate valid graph by dropping the points that are not within N ordered points
-        valid_G = self.G.copy()
-        all_in = 0
-        nodes = sorted(self.G.nodes(), key=lambda n: self.G.nodes[n]['central_index'])
-        for node in nodes:
-            is_in_list = np.any([np.allclose(self.G.nodes[node]["projection"], x) for x in N_ordered_points])
-            if not is_in_list:
-                remove_and_reconnect(valid_G, node)
-                #if it acts like a bridge, reconnect
-                # if len(valid_G.edges(node)) <= 2:
-                #     remove_and_reconnect(valid_G, node)
-                # else:
-                #     valid_G.remove_node(node)
-            else:
-                # update my nodes
-                my_nodes.append(node)
-            all_in += is_in_list
-
-        assert all_in == len(N_ordered_points)
-        assert valid_G.number_of_nodes() == len(N_ordered_points)
-        return valid_G, my_nodes
-
-    def _add_average_point_and_edges(self, list_old_indices: list, add_edges=True):
-        """
-        A helper function to _add_square_diagonal_nodes, _add_cube_diagonal_nodes and _add_mid_edge_nodes.
-        Given a list in which every item is a set of nodes, add a new point that is the average of them and also add
-        new edges between the newly created points and all of the old ones.
-
-        It adds new edges and does not delete any existing ones.
-
-        Args:
-            list_old_indices: each item is a list of already existing nodes - the average of their polytope_points
-            should be added as a new point
-        """
-        # indices that are currently in a sublist will be averaged and that will be a new point
-        for old_points in list_old_indices:
-            # new node is the midpoint of the old ones
-            new_point = np.average(np.array(old_points), axis=0)
-            self._add_polytope_point(new_point, face_neighbours_indices=old_points)
-            if add_edges:
-                for n in old_points:
-                    distance = np.linalg.norm(new_point - n)
-                    length = dist_on_sphere(self.G.nodes[tuple(new_point)]["projection"], self.G.nodes[tuple(n)][
-                        "projection"])
-                    self.G.add_edge(tuple(new_point), tuple(n), p_dist=distance, length=length)
-
-########################################################################################################################
-#
-#               OTHER HELP FUNCTIONS
-#
-########################################################################################################################
-
-    def _find_face(self, node_list: list) -> set:
-        """
-        Find the face that is common between all nodes in the list. (May be an empty set.)
-
-        Args:
-            node_list: a list in which each element is a tuple of coordinates that has been added to self.G as a node
-
-        Returns:
-            the set of faces (may be empty) that all nodes in this list share
-        """
-        face = set(self.G.nodes[node_list[0]]["face"])
-        for neig in node_list[1:]:
-            faces_neighbour_vector = self.G.nodes[neig]["face"]
-            face = face.intersection(set(faces_neighbour_vector))
-        return face
-
-    def _get_count_of_point_categories(self) -> NDArray:
-        """
-        Helper function for testing. Check how many nodes fit in distinct "projection categories" based on how central
-        they are on the hypersphere.
-
-        Returns:
-            count of nodes belonging to groups based on how far away from the unit sphere they are
-        """
-        return np.unique([np.linalg.norm(d["projection"] - np.array(n)) for n, d in self.G.nodes(data=True)],
-                         return_counts=True)[1]
-
-    def _get_count_of_edge_categories(self) -> NDArray:
-        """
-        Helper function for testing. Check how many edges fit in distinct "projection categories" based on how central
-        they are on the hypersphere.
-
-        Returns:
-            count of edges belonging to groups based on how far away from the unit sphere they are
-        """
-        return np.unique([c for a, b, c in self.G.edges(data="p_dist")], return_counts=True)[1]
-
-    def get_edges_of_categories(self, categories: list = None, nbunch = None, data: bool = True) -> ArrayLike:
-        """
-        Get only those edges that belong to categories defined by distance to the sphere.
-
-        Args:
-            categories: a list of integers; if None, use all categories
-            data: whether to return a view of edges that includes data
-
-        Returns:
-            a view of edges [(n1, n2, attributes), (...), ...]
-        """
-        all_edges = self.G.edges(data=data)
-        nbunch_edges = self.G.edges(nbunch=nbunch, data=data)
-
-        if categories is None:
-            return [e for e in all_edges if e in nbunch_edges]
-        else:
-            # sort according to p_dist so we can filter by indices of categories
-            all_edges = sorted(all_edges, key=lambda edge: edge[2].get('p_dist', 1))
-            category_counts = self._get_count_of_edge_categories()
-            running_sum_counts = np.cumsum(category_counts)
-            running_sum_counts = np.concatenate([[0], running_sum_counts])
-
-            result = []
-
-            # cant check on more categories than there are
-            max_num_cat = len(category_counts)
-            for cat_index in categories[:max_num_cat]:
-                start, stop = running_sum_counts[cat_index:cat_index+2]
-                result.extend([e for e in all_edges[start:stop] if e in nbunch_edges])
-            return result
-
-
-class PolyhedronFromG(Polytope):
-
-    """
-    A mock polyhedron created from an existing graph. No guarantee that it actually represents a polyhedron. Useful for
-    side tasks like visualisations, searches ...
-    """
-
-    def __init__(self, G: nx.Graph):
-        super().__init__()
-        self.G = G
-
-    def _create_level0(self):
-        pass
-
-    def get_nodes_by_index(self, indices: list, projection=False):
-        if projection:
-            ci2node = {d["central_index"]:d["projection"] for n, d in self.G.nodes(data=True)}
-        else:
-            ci2node = {d["central_index"]: n for n, d in self.G.nodes(data=True)}
-        result = []
-        for i in indices:
-            if i in ci2node.keys():
-                result.append(ci2node[i])
-        return result
 
 
 
@@ -525,17 +43,13 @@ class NewPolytope(ABC):
         # function that depends on the object being created
         self._create_level0()
 
-
-########################################################################################################################
-#
-#               GETTER METHODS, USER INTERFACE
-#
-########################################################################################################################
-
     def __str__(self):
         return f"Polytope up to level {self.current_level}"
 
-    def get_nodes(self, projection: bool = False) -> NDArray:
+    def get_nodes(self, projection: bool = False, indices: bool = False) -> NDArray:
+        if indices:
+            # just in case after nodes have been removed node names aren't consecutive integers anymore
+            return np.array([key for key, value in sorted(self.G.nodes.items())])
         if projection:
             attribute_name = "projection"
         else:
@@ -544,19 +58,38 @@ class NewPolytope(ABC):
         sorted_nodes = [value[attribute_name] for key, value in sorted(self.G.nodes.items())]
         return np.array(sorted_nodes)
 
-    def plot(self, show_nodes: bool = True, show_projected_nodes: bool = True, show_vertices: bool = True):
+    def create_exactly_N_points(self, N: int):
+        """
+        Start the initial distribution, keep dividing the edges until you have more points than N, then remove and
+        reconnect until you have exactly N points.
+        """
+        while self.G.number_of_nodes() < N:
+            self.divide_edges()
+        while self.G.number_of_nodes() > N:
+            node_to_remove = select_a_node_to_delete(self.G)
+            remove_and_reconnect(self.G, node_to_remove)
+
+    def plot(self, show_nodes: bool = True, show_projected_nodes: bool = True,
+             show_vertices: bool = True, show_node_numbers: bool = False):
         fig = go.Figure()
         nodes = self.get_nodes(projection=False)
         projected_nodes = self.get_nodes(projection=True)
+        indices = self.get_nodes(projection=False, indices=True)
         adjacencies = self.get_polytope_adj_matrix()
         if show_nodes:
-            fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], mode="markers", marker=dict(
-                color='black')))
+            if show_node_numbers:
+                fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], text=indices, mode="text+markers", marker=dict(
+                    color='black')))
+            else:
+                fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], mode="markers", marker=dict(
+                    color='black')))
         if show_projected_nodes:
-            x = projected_nodes.T[0]
-            y = projected_nodes.T[1]
-            z = projected_nodes.T[2]
-            fig.add_trace(go.Scatter3d(x=x, y=y, z=z, mode="markers", marker=dict(color='green')))
+            if show_node_numbers:
+                fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], text=indices, mode="text+markers", marker=dict(
+                    color='green')))
+            else:
+                fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], mode="markers", marker=dict(
+                    color='green')))
         if show_vertices:
             rows, columns = adjacencies.nonzero()
 
@@ -681,7 +214,6 @@ class NewPolytope(ABC):
                 new_node_point = self.G.nodes[new_node]["node"]
                 other_node_point = self.G.nodes[other_node]["node"]
                 node_dist = np.linalg.norm(new_node_point-other_node_point)
-                print(node_dist, edge_len)
                 # check face criterion
                 if not only_face or self._find_face([new_node, other_node]):
                     # check distance criterion
@@ -765,7 +297,7 @@ class NewPolytope(ABC):
 
 
 
-class PolyhedronFromG(Polytope):
+class PolyhedronFromG(NewPolytope):
 
     """
     A mock polyhedron created from an existing graph. No guarantee that it actually represents a polyhedron. Useful for
@@ -791,7 +323,7 @@ class PolyhedronFromG(Polytope):
         return result
 
 
-class Cube4DPolytope(Polytope):
+class Cube4DPolytope(NewPolytope):
     """
     CubeGrid is a graph object, its central feature is self.G (networkx graph). In the beginning, each node is
     a vertex of a 3D cube, its center or the center of its face. It is possible to subdivide the sides, in that case
@@ -1023,11 +555,8 @@ class IcosahedronPolytope(NewPolytope):
         for i, vert in enumerate(vertices):
             set_of_faces = set(faces_i for faces_i, face in enumerate(faces) if i in face)
             self._add_polytope_point(vert, face=set_of_faces)
-        # create edges
-        print("Start adding edges")
         self._add_edges_of_len(self.side_len, wished_levels=[self.current_level, self.current_level],
                                only_seconds=False, only_face=False)
-        print("End adding edges")
         # perform end of creation
         super()._create_level0()
 
@@ -1116,6 +645,20 @@ def remove_and_reconnect(g: nx.Graph, node: int):
     g.add_edges_from(new_edges)
     g.remove_node(node)
 
+def select_a_node_to_delete(G, alg="random"):
+    """
+    Among the nodes with the smallest number of edges, randomly select a node to delete.
+    """
+    if alg == "smallest_num_edges":
+        sorted_nodes = sorted(G.nodes(), key=lambda x: G.degree(x), reverse=False)
+        sorted_nodes = np.array(sorted_nodes)
+        degrees_of_nodes = np.array([G.degree(node) for node in sorted_nodes])
+        mask = degrees_of_nodes == np.min(degrees_of_nodes)
+        choose_from = sorted_nodes[mask]
+        return np.random.choice(choose_from)
+    elif alg == "random":
+        return np.random.choice(G.nodes())
+
 
 def find_opposing_q(node, G):
     """
@@ -1137,11 +680,12 @@ def find_opposing_q(node, G):
 
 if __name__ == "__main__":
     my_ico = IcosahedronPolytope()
-    my_ico.divide_edges()
+    #my_ico.divide_edges()
     #my_ico.divide_edges()
 
-    my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)
+    #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
+    my_ico.create_exactly_N_points(14)
+    my_ico.plot(show_nodes=False, show_projected_nodes=True, show_vertices=False, show_node_numbers=True)
 
-    remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
 
-    my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)
+    #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)

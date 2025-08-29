@@ -16,13 +16,9 @@ class TranslationObject():
     def __init__(self, N_ray: int, R_min: float, R_max: float, N_rad: int):
         self.radial_points = np.linspace(R_min, R_max, num=N_rad, endpoint=True)
 
-        # generate at least N_ray points by dividing edges:
         self.polytope = IcosahedronPolytope()
-        while len(self.polytope.get_nodes()) < N_ray:
-            self.polytope.divide_edges()
-
-        # now you select only a subset of N_ray points
-        self.ray_points = self.polytope.get_nodes(N=N_ray, projection=True)
+        self.polytope.create_exactly_N_points(N_ray)
+        self.ray_points = self.polytope.get_nodes(projection=True)
 
 
 
