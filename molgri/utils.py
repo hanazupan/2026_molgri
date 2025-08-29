@@ -2,6 +2,7 @@
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
 
+UNIQUE_TOL = 5
 
 def which_row_is_k(my_array: NDArray, k: NDArray) -> ArrayLike:
     """
@@ -14,6 +15,15 @@ def which_row_is_k(my_array: NDArray, k: NDArray) -> ArrayLike:
 
     """
     return np.nonzero(np.all(np.isclose(k, my_array), axis=1))[0]
+
+
+def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
+    """
+    Check if all rows of the array are unique up to tol number of decimal places.
+    """
+    my_unique = np.unique(my_array.round(tol), axis=0)
+    difference = np.abs(len(my_array) - len(my_unique))
+    assert len(my_array) == len(my_unique), f"{difference} elements of an array are not unique up to tolerance."
 
 
 def norm_per_axis(array: NDArray, axis: int = None) -> NDArray:

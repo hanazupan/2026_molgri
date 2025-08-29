@@ -20,17 +20,23 @@ import plotly.graph_objects as go
 from molgri.utils import (normalise_vectors, which_row_is_k, q_in_upper_sphere)
 
 
-
-
-
 class NewPolytope(ABC):
 
     """
     A polytope is a d-dim object consisting of a set of nodes (vertices) and connections between them (edges) saved
     in self.G (graph).
 
-    The basic polytope will be created when the object is initiated. All further divisions should be performed
-    with the function self.divide_edges()
+    The nodes are integers, useful for us are their attributes "node" (3D coordinate on the polygon) and "projection"
+    (coordinate projected on a sphere of radius 1) as well as "level" (on which level of subdivision was this node
+    added). Edges have no special properties.
+
+    The getter for all nodes and their attributes is get_nodes().
+
+    The basic polytope is created when the object is initiated. All further divisions can be performed
+    with the function self.divide_edges(), but if you know exactly how many points you want in the end, use
+    create_exactly_N_points.
+
+    The function plot() is very useful for visualization
     """
 
     def __init__(self, d: int = 3):
@@ -75,7 +81,7 @@ class NewPolytope(ABC):
         nodes = self.get_nodes(projection=False)
         projected_nodes = self.get_nodes(projection=True)
         indices = self.get_nodes(projection=False, indices=True)
-        adjacencies = self.get_polytope_adj_matrix()
+        adjacencies = nx.adjacency_matrix(self.G)
         if show_nodes:
             if show_node_numbers:
                 fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], text=indices, mode="text+markers", marker=dict(
@@ -103,25 +109,6 @@ class NewPolytope(ABC):
 
         fig.show()
 
-    ########################################################################################################################
-#
-#               ADJACENCY AND CLOSENESS OF POINTS
-#
-########################################################################################################################
-
-    # def _remove_last_node(self):
-    #     import numpy as np
-    #     print(np.random.choice(self.G.nodes()))
-    #     self.G.remove_node(self.current_max_ci)
-
-
-    def get_neighbours_of(self, point_index, **kwargs):
-        adj_matrix = self.get_polytope_adj_matrix(**kwargs)
-        return np.nonzero(adj_matrix[point_index])[0]
-
-    def get_polytope_adj_matrix(self):
-        adj_matrix = nx.adjacency_matrix(self.G)
-        return adj_matrix
 
 ########################################################################################################################
 #
@@ -150,17 +137,6 @@ class NewPolytope(ABC):
         Use at the end of _create_level0 or divide edges. Two functions:
         1) increase the level, decrease side length
         """
-        # find all nodes created in current level of division
-        # here exceptionally DON't use get_nodes since CI not assigned yet
-        # TODO: relabel when you are done
-        #old_node_indices = [n for n, l in self.G.nodes(data="level") if l == self.current_level]
-        #new_node_indices = [n for n, l in self.G.nodes(data="level") if l == self.current_level]
-
-        # random shuffling of new nodes
-        #np.random.seed(15)
-        #np.random.shuffle(new_node_indices)
-        #index_mapping = dict(zip(old_node_indices, new_node_indices))
-
 
         # adapt current level and side_len
         self.current_level += 1
@@ -311,16 +287,6 @@ class PolyhedronFromG(NewPolytope):
     def _create_level0(self):
         pass
 
-    def get_nodes_by_index(self, indices: list, projection=False):
-        if projection:
-            ci2node = {d["central_index"]:d["projection"] for n, d in self.G.nodes(data=True)}
-        else:
-            ci2node = {d["central_index"]: n for n, d in self.G.nodes(data=True)}
-        result = []
-        for i in indices:
-            if i in ci2node.keys():
-                result.append(ci2node[i])
-        return result
 
 
 class Cube4DPolytope(NewPolytope):
@@ -680,12 +646,12 @@ def find_opposing_q(node, G):
 
 if __name__ == "__main__":
     my_ico = IcosahedronPolytope()
-    #my_ico.divide_edges()
+    my_ico.divide_edges()
     #my_ico.divide_edges()
 
     #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
-    my_ico.create_exactly_N_points(14)
-    my_ico.plot(show_nodes=False, show_projected_nodes=True, show_vertices=False, show_node_numbers=True)
+    #my_ico.create_exactly_N_points(14)
+    my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True, show_node_numbers=True)
 
 
     #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)
