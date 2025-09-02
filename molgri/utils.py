@@ -1,8 +1,41 @@
 
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
+from scipy.constants import pi
 
 UNIQUE_TOL = 5
+
+# ========================= VERY GENERAL ARRAY STUFF ================================
+
+# is_tested
+def check_equality(arr1: NDArray, arr2: NDArray, atol: float = None, rtol: float = None) -> bool:
+    """
+    Use the numpy function np.allclose to compare two arrays and return True if they are all equal. This function
+    is a wrapper where I can set my preferred absolute and relative tolerance
+    """
+    if atol is None:
+        atol = 1e-8
+    if rtol is None:
+        rtol = 1e-5
+    return np.allclose(arr1, arr2, atol=atol, rtol=rtol)
+
+
+# is_tested
+def is_array_with_d_dim_r_rows_c_columns(my_array: NDArray, d: int = None, r: int = None, c: int = None):
+    """
+    Assert that the object is an array. If you specify d, r, c, it will check if this number of dimensions, rows, and/or
+    columns are present.
+    """
+    assert type(my_array) == np.ndarray, "The first argument is not an array"
+    # only check if dimension if d specified
+    if d is not None:
+        assert len(my_array.shape) == d, f"The dimension of an array is not d: {len(my_array.shape)}=!={d}"
+    if r is not None:
+        assert my_array.shape[0] == r, f"The number of rows is not r: {my_array.shape[0]}=!={r}"
+    if c is not None:
+        assert my_array.shape[1] == c, f"The number of columns is not c: {my_array.shape[1]}=!={c}"
+    return True
+
 
 def which_row_is_k(my_array: NDArray, k: NDArray) -> ArrayLike:
     """
@@ -25,6 +58,47 @@ def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
     difference = np.abs(len(my_array) - len(my_unique))
     assert len(my_array) == len(my_unique), f"{difference} elements of an array are not unique up to tolerance."
 
+
+def all_row_norms_equal_k(my_array: NDArray, k: float, atol: float = None, rtol: float = None) -> NDArray:
+    """
+    Same as all_row_norms_similar, but also test that the norm equals k.
+    """
+    my_norms = all_row_norms_similar(my_array=my_array, atol=atol, rtol=rtol)
+    assert check_equality(my_norms, np.array(k), atol=atol, rtol=rtol), "The norms are not equal to k"
+    return my_norms
+
+
+def k_argmin_in_array(my_array: NDArray, k: int):
+    """
+    Of all the values in the array, find the indices of the k smallest values.
+
+    Args:
+        my_array (): array in which to search
+        k (): number of results
+
+    Returns:
+        k indices indicating smallest item, second smallest etc
+    """
+
+    idx = np.argpartition(my_array, k)
+    return idx[:k]
+
+
+def k_argmax_in_array(my_array: NDArray, k: int):
+    """
+    Of all the values in the array, find the indices of the k largest values.
+
+    Args:
+        my_array (): array in which to search
+        k (): number of results
+
+    Returns:
+        k indices indicating larges item, second largest etc
+    """
+    return np.argpartition(my_array, -k)[-k:]
+
+
+# ========================= NORMS ================================
 
 def norm_per_axis(array: NDArray, axis: int = None) -> NDArray:
     """
@@ -50,6 +124,45 @@ def norm_per_axis(array: NDArray, axis: int = None) -> NDArray:
     return np.repeat(my_norm, array.shape[axis], axis=axis)
 
 
+# is_tested
+def all_row_norms_similar(my_array: NDArray, atol: float = None, rtol: float = None) -> NDArray:
+    """
+    Assert that in an 2D array each row has the same norm (up to the floating point tolerance).
+
+    Returns:
+        the array of norms in the same shape as my_array
+    """
+    is_array_with_d_dim_r_rows_c_columns(my_array, d=2)
+    axis = 1
+    all_norms = norm_per_axis(my_array, axis=axis)
+    average_norm = np.average(all_norms)
+    assert check_equality(all_norms, average_norm, atol=atol, rtol=rtol), "The norms of all rows are not equal"
+    return all_norms
+
+
+# is_tested
+def normalise_vectors(array: NDArray, axis: int = None, length: float = 1) -> NDArray:
+    """
+    Returns the unit vector of the vector or along some axis of an array.
+    Default behaviour: if axis not specified, normalise a 1D vector or normalise 2D array row-wise. If axis specified,
+    axis=0 normalises column-wise and axis=1 row-wise.
+
+    Args:
+        array: numpy array containing a vector or a set of vectors that should be normalised - per default assuming
+               every row in an array is a vector
+        axis: optionally specify along which axis the normalisation should occur
+        length: desired new length for all vectors in the array
+
+    Returns:
+        an array of the same shape as the input array where vectors are normalised, now all have length 'length'
+    """
+    assert length >= 0, "Length of a vector cannot be negative"
+    my_norm = norm_per_axis(array=array, axis=axis)
+    return length * np.divide(array, my_norm)
+
+# ========================= NORMAL SPHERES ================================
+
+# is_tested
 def angle_between_vectors(central_vec: np.ndarray, side_vector: np.ndarray) -> np.array:
     """
     Having two vectors or two arrays in which each row is a vector, calculate all angles between vectors.
@@ -78,25 +191,7 @@ def angle_between_vectors(central_vec: np.ndarray, side_vector: np.ndarray) -> n
     return angle_vectors
 
 
-def normalise_vectors(array: NDArray, axis: int = None, length: float = 1) -> NDArray:
-    """
-    Returns the unit vector of the vector or along some axis of an array.
-    Default behaviour: if axis not specified, normalise a 1D vector or normalise 2D array row-wise. If axis specified,
-    axis=0 normalises column-wise and axis=1 row-wise.
-
-    Args:
-        array: numpy array containing a vector or a set of vectors that should be normalised - per default assuming
-               every row in an array is a vector
-        axis: optionally specify along which axis the normalisation should occur
-        length: desired new length for all vectors in the array
-
-    Returns:
-        an array of the same shape as the input array where vectors are normalised, now all have length 'length'
-    """
-    assert length >= 0, "Length of a vector cannot be negative"
-    my_norm = norm_per_axis(array=array, axis=axis)
-    return length * np.divide(array, my_norm)
-
+# is_tested
 def dist_on_sphere(vector1: np.ndarray, vector2: np.ndarray) -> np.ndarray:
     """
     Distance between two points on a sphere is a product of the radius (has to be the same for both) and angle
@@ -119,6 +214,109 @@ def dist_on_sphere(vector1: np.ndarray, vector2: np.ndarray) -> np.ndarray:
     angle = angle_between_vectors(vector1, vector2)
     return angle * flat_norm
 
+
+def random_sphere_points(n: int = 1000) -> NDArray:
+    """
+    Create n points that are truly randomly distributed across the sphere.
+
+    Args:
+        n: number of points
+
+    Returns:
+        an array of grid points, shape (n, 3)
+    """
+    coord = np.random.normal(size=(n, 3))
+    normalized_coord = normalise_vectors(coord)
+    return normalized_coord
+
+
+# is_tested
+def sort_points_on_sphere_ccw(points: NDArray) -> NDArray:
+    """
+    Gets an array of points on a 2D sphere; returns an array of the same points, but ordered in a counter-clockwise
+    manner.
+
+    Args:
+        points (NDArray): an array in which each row is a coordinate of a point on a unit sphere (2-sphere)
+
+    Returns:
+        the same array of points, but sorted in a counter-clockwise manner. The first point remains in first position.
+    """
+
+    def is_ccw(v_0, v_c, v_i):
+        # checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW (counter-clockwise)
+        return (np.dot(np.cross(v_c - v_0, v_i - v_c), v_i) < 0)
+
+    #all_row_norms_equal_k(points, 1), "Not points on a unit sphere"
+    vector_center = normalise_vectors(np.average(points, axis=0), length=np.linalg.norm(points, axis=1)[0])
+    N = len(points)
+    # angle between first point, center point, and each additional point
+    alpha = np.zeros(N)  # initialize array
+    for i in range(1, N):
+        alpha_candidate = _get_alpha_with_spherical_cosine_law(vector_center, points[0], points[i])
+        if is_ccw(points[0], vector_center, points[i]):
+            alpha[i] = alpha_candidate
+        else:
+            alpha[i] = 2*pi - alpha_candidate
+    assert np.all(alpha >= 0), alpha
+
+    output = points[np.argsort(alpha)]
+    return output
+
+
+# is_tested
+def _get_alpha_with_spherical_cosine_law(A: NDArray, B: NDArray, C: NDArray):
+    """
+    A, B and C are points on a sphere that form a triangle, given as vectors in cartesian coordinates. We use
+    the spherical law of cosines to obtain the angle at point A.
+    """
+    # check that they all have the same norm (are on the same sphere)
+    #assert np.allclose(np.linalg.norm(A), np.linalg.norm(B)) and np.allclose(np.linalg.norm(A), np.linalg.norm(C))
+    # consider spherical triangle:
+    A = normalise_vectors(A)
+    B = normalise_vectors(B)
+    C = normalise_vectors(C)
+    # and lengths of the opposite sides a, b, c are
+    a = dist_on_sphere(B, C)
+    b = dist_on_sphere(C, A)
+    c = dist_on_sphere(A, B)
+    # using cosine law on spheres (need rounding so we don't numerically get over/under the range of arccos):
+    alpha = np.arccos(np.round((np.cos(a) - np.cos(b) * np.cos(c)) / (np.sin(b) * np.sin(c)), 7))
+    return alpha
+
+
+# is_tested
+def exact_area_of_spherical_polygon(vertices: NDArray, r: float = 1) -> float:
+    """
+    Use the formula (Todhunter, I. (1886). Spherical Trigonometry), to calculate the
+    area of a spherical polygon with given
+    vertices. In the formula, r, is the radius of the sphere, n the number of polygon vertices, theta_i-s are the radian
+    angles of a spherical polygon.
+
+    Args:
+        vertices (NDArray): A (m, 3) array of points on a unit 2-sphere. Points must be ordered counter-clockwise and
+        unique.
+
+    Returns:
+
+    """
+    n = len(vertices)
+    thetas = []
+    for i in range(n):
+        # using cosine law on spheres:
+        theta = _get_alpha_with_spherical_cosine_law(vertices[i], vertices[i-1], vertices[(i + 1) % n])
+        thetas.append(theta)
+    area = (np.sum(thetas) - (n-2)*pi) * r**2
+    # chose the smaller of two possible spherical polygons described by these vertices
+    if area > 2 * pi * r**2:
+        area = 4 * pi * r**2 - area
+    assert area >= 0, f"Area cannot be negative!"
+    return area
+
+
+# ========================= QUATERNION STUFF ================================
+
+# is_tested
 def distance_between_quaternions(q1: NDArray, q2: NDArray) -> ArrayLike:
     """
     Calculate the distance between two unit quaternions or the pairwise distances between two arrays of unit
@@ -138,6 +336,7 @@ def distance_between_quaternions(q1: NDArray, q2: NDArray) -> ArrayLike:
         raise ValueError("Shape of quaternions not okay")
     # if the distance would be more than half hypersphere, use the smaller distance
     return np.where(theta > pi / 2, pi-theta, theta)
+
 
 def hemisphere_quaternion_set(quaternions: NDArray, upper=True) -> NDArray:
     """
@@ -175,6 +374,8 @@ def hemisphere_quaternion_set(quaternions: NDArray, upper=True) -> NDArray:
 
     return np.array(non_repeating_quaternions)
 
+
+# is_tested
 def q_in_upper_sphere(q: NDArray) -> bool:
     """
     Determine whether q in the upper part of the (hyper)sphere. This will be true if the first non-zero element of
@@ -193,3 +394,66 @@ def q_in_upper_sphere(q: NDArray) -> bool:
         if np.allclose(q[:i], 0) and q[i] > 0:
             return True
     return False
+
+
+# is_tested
+def find_inverse_quaternion(q: NDArray) -> NDArray:
+    """
+    Inverse quaternion -q = (-q0, -q1, -q2, -q3) is the quaternion that represents the same rotation as q.
+
+    Args:
+        q: a quaternion of shape (4,) whose inverse is needed
+
+    Returns:
+        another quaternion of shape (4,) with all coordinates inversed
+    """
+    assert q.shape == (4,)
+    return -q
+
+# is_tested
+def quaternion_in_array(quat: NDArray, quat_array: NDArray) -> bool:
+    """
+    Check if a quaternion q or its equivalent complement -q is present in the quaternion array quat_array.
+    """
+    quat1 = quat[np.newaxis, :]
+    for quat2 in quat_array:
+        if two_sets_of_quaternions_equal(quat1, quat2[np.newaxis, :]):
+            return True
+    return False
+
+# is_tested
+def two_sets_of_quaternions_equal(quat1: NDArray, quat2: NDArray) -> bool:
+    """
+    This test is necessary because for quaternions, q and -q represent the same rotation. You therefore cannot simply
+    use np.allclose to check if two sets of rotations represented with quaternions are the same. This function checks
+    if all rows of two arrays are the same up to a flipped sign.
+    """
+    assert quat1.shape == quat2.shape
+    assert quat1.shape[1] == 4
+    # quaternions are the same if they are equal up to a +- sign
+    # I have checked this fact and it is mathematically correct
+    for q1, q2 in zip(quat1, quat2):
+        if not (np.allclose(q1, q2) or np.allclose(q1, find_inverse_quaternion(q2))):
+            return False
+    return True
+
+
+def random_quaternions(n: int = 1000) -> NDArray:
+    """
+    Create n random quaternions
+
+    Args:
+        n: number of points
+
+    Returns:
+        an array of grid points, shape (n, 4)
+    """
+    result = np.zeros((n, 4))
+    random_num = np.random.random((n, 3))
+    result[:, 0] = np.sqrt(1 - random_num[:, 0]) * np.sin(2 * pi * random_num[:, 1])
+    result[:, 1] = np.sqrt(1 - random_num[:, 0]) * np.cos(2 * pi * random_num[:, 1])
+    result[:, 2] = np.sqrt(random_num[:, 0]) * np.sin(2 * pi * random_num[:, 2])
+    result[:, 3] = np.sqrt(random_num[:, 0]) * np.cos(2 * pi * random_num[:, 2])
+    assert result.shape[1] == 4
+    return result
+
