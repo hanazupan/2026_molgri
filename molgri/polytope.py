@@ -15,6 +15,7 @@ import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi, golden
 from scipy.sparse import coo_array
+from scipy.spatial import geometric_slerp
 import plotly.graph_objects as go
 
 from molgri.utils import (normalise_vectors, which_row_is_k, q_in_upper_sphere)
@@ -83,29 +84,45 @@ class NewPolytope(ABC):
         indices = self.get_nodes(projection=False, indices=True)
         adjacencies = nx.adjacency_matrix(self.G)
         if show_nodes:
+            # potentially show numbers next to polygon nodes
             if show_node_numbers:
                 fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], text=indices, mode="text+markers", marker=dict(
                     color='black')))
             else:
                 fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], mode="markers", marker=dict(
                     color='black')))
+
+            # potentially show straight-line edges
+            if show_vertices:
+                rows, columns = adjacencies.nonzero()
+
+                for row, col in zip(rows, columns):
+                    start = nodes[row]
+                    end = nodes[col]
+                    fig.add_trace(go.Scatter3d(x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
+                                               mode="lines", line=dict(color='black')))
+
         if show_projected_nodes:
+            # potentially show numbers next to projected polygon nodes
             if show_node_numbers:
                 fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], text=indices, mode="text+markers", marker=dict(
                     color='green')))
             else:
                 fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], mode="markers", marker=dict(
                     color='green')))
-        if show_vertices:
-            rows, columns = adjacencies.nonzero()
 
-            for row, col in zip(rows, columns):
-                start = nodes[row]
-                end = nodes[col]
-                fig.add_trace(go.Scatter3d(x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
-                                           mode="lines",
-                                           line=dict(
-                    color='black')))
+            # potentially show curved-line edges
+            if show_vertices:
+                rows, columns = adjacencies.nonzero()
+                for row, col in zip(rows, columns):
+                    curve_start = projected_nodes[row]
+                    curve_end = projected_nodes[col]
+                    norm = np.linalg.norm(curve_start)
+                    interpolate_points = np.linspace(0, 1, 2000)
+                    curve = geometric_slerp(normalise_vectors(curve_start), normalise_vectors(curve_end), interpolate_points)
+                    fig.add_trace(go.Scatter3d(x=norm * curve[..., 0], y=norm * curve[..., 1], z=norm * curve[..., 2],
+                                               mode="lines", line=dict(color='green')))
+
 
         fig.show()
 
@@ -623,7 +640,7 @@ if __name__ == "__main__":
 
     #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
     #my_ico.create_exactly_N_points(14)
-    my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True, show_node_numbers=True)
+    my_ico.plot(show_nodes=True, show_projected_nodes=True, show_vertices=True, show_node_numbers=True)
 
 
     #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)
