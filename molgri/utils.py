@@ -3,7 +3,7 @@ import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi
 
-UNIQUE_TOL = 5
+from molgri.constants import UNIQUE_TOL
 
 # ========================= VERY GENERAL ARRAY STUFF ================================
 
@@ -57,15 +57,6 @@ def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
     my_unique = np.unique(my_array.round(tol), axis=0)
     difference = np.abs(len(my_array) - len(my_unique))
     assert len(my_array) == len(my_unique), f"{difference} elements of an array are not unique up to tolerance."
-
-
-def all_row_norms_equal_k(my_array: NDArray, k: float, atol: float = None, rtol: float = None) -> NDArray:
-    """
-    Same as all_row_norms_similar, but also test that the norm equals k.
-    """
-    my_norms = all_row_norms_similar(my_array=my_array, atol=atol, rtol=rtol)
-    assert check_equality(my_norms, np.array(k), atol=atol, rtol=rtol), "The norms are not equal to k"
-    return my_norms
 
 
 def k_argmin_in_array(my_array: NDArray, k: int):
@@ -123,6 +114,14 @@ def norm_per_axis(array: NDArray, axis: int = None) -> NDArray:
     my_norm = np.linalg.norm(array, axis=axis, keepdims=True)
     return np.repeat(my_norm, array.shape[axis], axis=axis)
 
+def all_row_norms_equal_k(my_array: NDArray, k: float, atol: float = None, rtol: float = None) -> NDArray:
+    """
+    Same as all_row_norms_similar, but also test that the norm equals k.
+    """
+    my_norms = all_row_norms_similar(my_array=my_array, atol=atol, rtol=rtol)
+    assert check_equality(my_norms, np.array(k), atol=atol, rtol=rtol), "The norms are not equal to k"
+    return my_norms
+
 
 # is_tested
 def all_row_norms_similar(my_array: NDArray, atol: float = None, rtol: float = None) -> NDArray:
@@ -161,6 +160,7 @@ def normalise_vectors(array: NDArray, axis: int = None, length: float = 1) -> ND
     return length * np.divide(array, my_norm)
 
 # ========================= NORMAL SPHERES ================================
+
 
 # is_tested
 def angle_between_vectors(central_vec: np.ndarray, side_vector: np.ndarray) -> np.array:

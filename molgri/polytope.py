@@ -127,6 +127,7 @@ class NewPolytope(ABC):
         fig.show()
 
 
+
 ########################################################################################################################
 #
 #               CREATION & SUBDIVISION METHODS
@@ -634,13 +635,20 @@ def find_opposing_q(node, G):
 
 
 if __name__ == "__main__":
+    import time
+
+    t1 = time.time()
     my_ico = IcosahedronPolytope()
-    my_ico.divide_edges()
-    #my_ico.divide_edges()
+    my_ico.create_exactly_N_points(55)
+    my_nodes = my_ico.get_nodes()
+    my_p_nodes = my_ico.get_nodes(projection=True)
+    t2 = time.time()
+
+    print(f"Time: {t2-t1} s")
 
     #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
     #my_ico.create_exactly_N_points(14)
-    my_ico.plot(show_nodes=True, show_projected_nodes=True, show_vertices=True, show_node_numbers=True)
+    #my_ico.plot(show_nodes=True, show_projected_nodes=True, show_vertices=True, show_node_numbers=True)
 
 
     #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)

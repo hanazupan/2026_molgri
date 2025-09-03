@@ -1,6 +1,7 @@
+import numpy as np
 
 from molgri.polytope import IcosahedronPolytope
-from molgri.utils import all_rows_unique
+from molgri.utils import all_rows_unique, all_row_norms_equal_k
 
 def test_full_division_ico():
     """
@@ -23,11 +24,27 @@ def test_full_division_ico():
 
         assert ico.G.number_of_edges() == expected_num_of_edges[i], f"At level {i} ico should have {expected_num_of_edges[i]} edges, not {ico.G.number_of_edges()}"
 
-def test_number_of_neigbours():
-    pass
 
-def test_removing_points():
-    pass
+def test_removing_points_ico():
+
+    for wished_num_points in [5, 12, 33, 59]:
+        ico = IcosahedronPolytope()
+        ico.create_exactly_N_points(wished_num_points)
+        my_nodes = ico.get_nodes()
+        my_projected_points = ico.get_nodes(projection=True)
+
+        # you get the expected number of points
+        assert len(my_nodes) == wished_num_points
+        assert len(my_projected_points) == wished_num_points
+
+        # these points are on unit sphere
+        all_row_norms_equal_k(my_projected_points, 1)
+
+        # these points are unique
+        all_rows_unique(my_nodes)
+        all_rows_unique(my_projected_points)
+
 
 if __name__ == "__main__":
     test_full_division_ico()
+    test_removing_points_ico()
