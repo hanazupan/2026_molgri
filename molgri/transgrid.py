@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 from molgri.polytope import IcosahedronPolytope
 from molgri.constants import UNIQUE_TOL
 from molgri.utils import angle_between_vectors, dist_on_sphere, sort_points_on_sphere_ccw
-from molgri.plotting import draw_curve
+from molgri.plotting import draw_curve, draw_spherical_polygon
 
 
 class TranslationObject():
@@ -68,7 +68,8 @@ class TranslationObject():
         self.saved_grid = result
         return self.saved_grid
 
-    def plot(self, show_node_numbers: bool = False, show_distances: bool = False, show_vertices: bool = False):
+    def plot(self, show_node_numbers: bool = False, show_distances: bool = False, show_vertices: bool = False,
+             show_hulls_of_cells: list = None):
         points = self.get_grid()
         fig = go.Figure()
         text = list(range(self.get_number_of_points()))
@@ -81,29 +82,50 @@ class TranslationObject():
             fig.add_trace(
                 go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], mode="markers", marker=dict(
                     color='black')))
-        if show_vertices:
-            vertices = self.get_hulls()
+        if show_distances:
             neighbour_types = self.get_type_of_neighbourhood()
-            for el in vertices:
+            for row, col, value in zip(neighbour_types.row, neighbour_types.col, neighbour_types.data):
+                if value == 1:
+                    # spherical arch connects the points
+                    draw_curve(fig, points[row], points[col], color="blue")
+                elif value == 2:
+                    # straight line connects the points
+                    fig.add_trace(
+                        go.Scatter3d(x=[points[row][0], points[col][0]],
+                                     y=[points[row][1], points[col][1]],
+                                     z=[points[row][2], points[col][2]],
+                                     mode="lines",
+                                     marker=dict(color='blue')))
+
+        if show_vertices or show_hulls_of_cells:
+            vertices = self.get_hulls()
+            if show_hulls_of_cells:
+                selected_vertices = [el for i, el in enumerate(vertices) if i in show_hulls_of_cells]
+            else:
+                selected_vertices = vertices
+            for el in selected_vertices:
+                vertices_color="green"
                 lower_bond, upper_bond = el
-                print(lower_bond, upper_bond)
+                # plot the vertex points
                 fig.add_trace(
                     go.Scatter3d(x=lower_bond.T[0], y=lower_bond.T[1], z=lower_bond.T[2], mode="markers",
-                                 marker=dict(
-                                     color='green')))
+                                 marker=dict(color=vertices_color)))
                 fig.add_trace(
                     go.Scatter3d(x=upper_bond.T[0], y=upper_bond.T[1], z=upper_bond.T[2], mode="markers",
-                                 marker=dict(
-                                     color='green')))
-                # sort and plot spherical curves
-                sorted_upper_bond = sort_points_on_sphere_ccw(upper_bond)
-                for point1, point2 in zip(sorted_upper_bond, sorted_upper_bond[1:]):
-                    draw_curve(fig, point1, point2, color="green")
-                # plot straight lines
+                                 marker=dict(color=vertices_color)))
+                # draw curves
+                draw_spherical_polygon(fig, upper_bond, color=vertices_color)
+                draw_spherical_polygon(fig, lower_bond, color=vertices_color)
+
+                # draw straight lines
+                smaller_radius = np.linalg.norm(lower_bond[0])
+                larger_radius = np.linalg.norm(upper_bond[0])
                 for direction in upper_bond:
                     fig.add_trace(
-                        go.Scatter3d(x=[0, direction[0]], y=[0, direction[1]], z=[0, direction[2]], mode="lines",
-                                     marker=dict(color='green')))
+                        go.Scatter3d(x=[smaller_radius/larger_radius*direction[0], direction[0]],
+                                     y=[smaller_radius/larger_radius*direction[1], direction[1]],
+                                     z=[smaller_radius/larger_radius*direction[2], direction[2]],
+                                     mode="lines", marker=dict(color=vertices_color)))
 
 
 
@@ -333,7 +355,7 @@ if __name__ == "__main__":
     np.random.seed(1)
     to = TranslationObject(20, 2, 7, 3)
     print(to.get_surfaces())
-    fig = px.imshow(to.get_surfaces().toarray())
+    #fig = px.imshow(to.get_surfaces().toarray())
     #fig = px.imshow(to.get_adjacencies().toarray())
-    #to.plot(show_node_numbers=True, show_vertices=True)
-    fig.show()
+    to.plot(show_node_numbers=True, show_vertices=False, show_distances=False, show_hulls_of_cells=[1, 33])
+    #fig.show()

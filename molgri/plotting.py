@@ -2,7 +2,7 @@ import numpy as np
 from scipy.spatial import geometric_slerp
 import plotly.graph_objects as go
 
-from molgri.utils import normalise_vectors
+from molgri.utils import normalise_vectors, sort_points_on_sphere_ccw
 
 
 def draw_curve(fig, start_point, end_point, color="black"):
@@ -11,3 +11,15 @@ def draw_curve(fig, start_point, end_point, color="black"):
     curve = geometric_slerp(normalise_vectors(start_point), normalise_vectors(end_point), interpolate_points)
     fig.add_trace(go.Scatter3d(x=norm * curve[..., 0], y=norm * curve[..., 1], z=norm * curve[..., 2],
                                mode="lines", line=dict(color=color)))
+
+
+def draw_spherical_polygon(fig, points, color="black"):
+    if len(points) < 3:
+        # no poligon, quietly exit
+        return
+    sorted_points = sort_points_on_sphere_ccw(points)
+    # duplicate first point as last point to draw a closed curve
+    sorted_points = np.vstack([sorted_points, sorted_points[0]])
+    # draw all the arches
+    for point1, point2 in zip(sorted_points, sorted_points[1:]):
+        draw_curve(fig, point1, point2, color=color)
