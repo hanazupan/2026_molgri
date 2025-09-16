@@ -37,10 +37,10 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest --cov=molgri test/ --durations=10
-        coverage lcov
+        pytest --cov=molgri test/ --durations=10 --cov-report=lcov:".github/coverage/coverage.lcov"
+        coverage lcov -o .github/coverage/coverage.lcov --data_file=.github/coverage/.coverage
     - name: Coveralls GitHub Action
       uses: coverallsapp/github-action@1.1.3
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: coverage.lcov
+        path-to-lcov: .github/coverage/coverage.lcov
