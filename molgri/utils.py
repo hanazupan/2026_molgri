@@ -1,3 +1,8 @@
+"""
+Small util functions, mostly related to norms across arrays, points on spheres, quaternion comparison, angles and
+distances.
+"""
+
 
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
@@ -135,7 +140,8 @@ def all_row_norms_similar(my_array: NDArray, atol: float = None, rtol: float = N
     axis = 1
     all_norms = norm_per_axis(my_array, axis=axis)
     average_norm = np.average(all_norms)
-    assert check_equality(all_norms, average_norm, atol=atol, rtol=rtol), "The norms of all rows are not equal"
+    assert check_equality(all_norms, np.array(average_norm), atol=atol, rtol=rtol), ("The norms of all rows are not "
+    "equal")
     return all_norms
 
 
@@ -163,7 +169,7 @@ def normalise_vectors(array: NDArray, axis: int = None, length: float = 1) -> ND
 
 
 # is_tested
-def angle_between_vectors(central_vec: np.ndarray, side_vector: np.ndarray) -> np.array:
+def angle_between_vectors(central_vec: np.ndarray, side_vector: np.ndarray) -> NDArray:
     """
     Having two vectors or two arrays in which each row is a vector, calculate all angles between vectors.
     For arrays, returns an array giving results like those:
@@ -243,9 +249,20 @@ def sort_points_on_sphere_ccw(points: NDArray) -> NDArray:
         the same array of points, but sorted in a counter-clockwise manner. The first point remains in first position.
     """
 
-    def is_ccw(v_0, v_c, v_i):
-        # checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW (counter-clockwise)
-        return (np.dot(np.cross(v_c - v_0, v_i - v_c), v_i) < 0)
+    def is_ccw(v_0: NDArray, v_c: NDArray, v_i: NDArray) -> bool:
+        """
+        Checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW (counter-clockwise)
+
+        Args:
+            v_0 (NDArray): 3D coordinate of the first point
+            v_c (NDArray): 3D coordinate of the center
+            v_i (NDArray): 3D coordinate of the i-th point
+
+        Returns:
+            True if the sorting is counter-clockwise
+        """
+        #
+        return np.dot(np.cross(v_c - v_0, v_i - v_c), v_i) < 0
 
     #all_row_norms_equal_k(points, 1), "Not points on a unit sphere"
     vector_center = normalise_vectors(np.average(points, axis=0), length=np.linalg.norm(points, axis=1)[0])
@@ -296,9 +313,10 @@ def exact_area_of_spherical_polygon(vertices: NDArray, r: float = 1) -> float:
     Args:
         vertices (NDArray): A (m, 3) array of points on a unit 2-sphere. Points must be ordered counter-clockwise and
         unique.
+        r (float): radius of the sphere
 
     Returns:
-
+        the area of the spherical polygon
     """
     n = len(vertices)
     thetas = []
