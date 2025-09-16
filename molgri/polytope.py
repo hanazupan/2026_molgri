@@ -40,6 +40,8 @@ class NewPolytope(ABC):
     The function plot() is very useful for visualization
     """
 
+    np.random.seed(1)
+
     def __init__(self, d: int = 3):
         self.G = nx.Graph()
         self.current_level = 0
@@ -648,7 +650,7 @@ if __name__ == "__main__":
 
     #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
     #my_ico.create_exactly_N_points(14)
-    #my_ico.plot(show_nodes=True, show_projected_nodes=True, show_vertices=True, show_node_numbers=True)
+    #my_ico.plot(show_nodes=True, show_projected_nodes=True, show_hulls=True, show_node_numbers=True)
 
 
-    #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_vertices=True)
+    #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_hulls=True)

@@ -1,5 +1,6 @@
 import numpy as np
 
+from molgri.constants import ICO_PERFECT_NUM
 from molgri.polytope import IcosahedronPolytope
 from molgri.utils import all_rows_unique, all_row_norms_equal_k
 
@@ -9,7 +10,7 @@ def test_full_division_ico():
     points is as expected.
     """
     # ico tests
-    expected_num_of_points = [12, 42, 162]
+
     # the first 12 nodes have 5 edges, the rest 6; divide by two since you count each edge twice
     expected_num_of_edges = [12*5/2, (12*5+(42-12)*6)/2, (12*5+(162-12)*6)/2]
 
@@ -18,7 +19,7 @@ def test_full_division_ico():
     for i in range(3):
         if i != 0:
             ico.divide_edges()
-        assert ico.G.number_of_nodes() == expected_num_of_points[i], f"At level {i} ico should have {expected_num_of_points[i]} nodes, not {ico.G.number_of_nodes()}"
+        assert ico.G.number_of_nodes() == ICO_PERFECT_NUM[i], f"At level {i} ico should have {ICO_PERFECT_NUM[i]} nodes, not {ico.G.number_of_nodes()}"
         # those points are unique
         all_rows_unique(ico.get_nodes(projection=True))
 
