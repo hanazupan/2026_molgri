@@ -38,7 +38,6 @@ jobs:
     - name: Test with pytest
       run: |
         pytest --cov=molgri test/ --durations=10 --cov-report=lcov:".github/coverage/coverage.lcov"
-        coverage lcov -o .github/coverage/coverage.lcov --data_file=.github/coverage/.coverage
     - name: Coveralls GitHub Action
       uses: coverallsapp/github-action@1.1.3
       with:
