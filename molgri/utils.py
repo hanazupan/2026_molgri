@@ -54,6 +54,12 @@ def which_row_is_k(my_array: NDArray, k: NDArray) -> ArrayLike:
     """
     return np.nonzero(np.all(np.isclose(k, my_array), axis=1))[0]
 
+def find_shared_rows(array_1: NDArray, array_2: NDArray) -> ArrayLike:
+    shared_vertices = []
+    for row in array_1:
+        if which_row_is_k(array_2, row).size > 0:
+            shared_vertices.append(row)
+    return np.array(shared_vertices)
 
 def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
     """
@@ -319,10 +325,13 @@ def exact_area_of_spherical_polygon(vertices: NDArray, r: float = 1) -> float:
         the area of the spherical polygon
     """
     n = len(vertices)
+
+    sorted_vertices = sort_points_on_sphere_ccw(vertices)
+
     thetas = []
     for i in range(n):
         # using cosine law on spheres:
-        theta = _get_alpha_with_spherical_cosine_law(vertices[i], vertices[i-1], vertices[(i + 1) % n])
+        theta = _get_alpha_with_spherical_cosine_law(sorted_vertices[i], sorted_vertices[i-1], sorted_vertices[(i + 1) % n])
         thetas.append(theta)
     area = (np.sum(thetas) - (n-2)*pi) * r**2
     # chose the smaller of two possible spherical polygons described by these vertices
@@ -474,4 +483,36 @@ def random_quaternions(n: int = 1000) -> NDArray:
     result[:, 3] = np.sqrt(random_num[:, 0]) * np.cos(2 * pi * random_num[:, 2])
     assert result.shape[1] == 4
     return result
+
+
+# def points4D_2_8cells(point_array:NDArray) -> tuple:
+#     """
+#     Take one array of shape (N, 4) where every row is (q_i0, q_i1, q_i2, q_i3) as input and return a list of 8
+#     sublists, each sublist containing a (possibly zero) number of 3D coordinates and arranged so:
+#     - sublist 0 has all points with q_i0 <= 0
+#     - sublist 1 has all points with q_i1 <= 0
+#     ...
+#     - sublist 6 has all points with q_i2 >= 0
+#     - sublist 7 has all points with q_i3 >= 0
+#
+#     The sublist-defining coordinate is removed so that contents of sublists are 3-dimensional.
+#     Args:
+#         point_array ():
+#
+#     Returns:
+#
+#     """
+#     assert is_array_with_d_dim_r_rows_c_columns(point_array, d=2, c=4)
+#     output = [[] for _ in range(8)]
+#     output_indices = [[] for _ in range(8)] # needs to be created since we delete one component
+#     for coo in range(4):
+#         # skipping the coo column in each row
+#         without_coo = np.concatenate((point_array[:, :coo], point_array[:, coo+1:]), axis=1)
+#         neg_rows = np.nonzero(point_array[:, coo]<0)[0]
+#         output_indices[coo].extend(neg_rows)
+#         output[coo].extend(without_coo[neg_rows].tolist())
+#         pos_rows = np.nonzero(point_array[:, coo] >= 0)[0]
+#         output[coo+4].extend(without_coo[pos_rows].tolist())
+#         output_indices[coo+4].extend(pos_rows)
+#     return output, output_indices
 

@@ -26,23 +26,24 @@ def draw_spherical_polygon(fig, points, color="black"):
         draw_curve(fig, point1, point2, color=color)
 
 
-def draw_points(fig, points, label_by_index: bool = False, color="black"):
-    if label_by_index:
-        text = list(range(len(points)))
-        fig.add_trace(go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], text=text, mode="text+markers",
-                         marker=dict(color=color)))
+def draw_points(fig, points, label_by_index: bool = False, custom_labels=None, color="black", **kwargs):
+    if label_by_index or custom_labels is not None:
+        if custom_labels is None:
+            custom_labels = list(range(len(points)))
+        fig.add_trace(go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], text=custom_labels, mode="text+markers",
+                         marker=dict(color=color)), **kwargs)
     else:
         fig.add_trace(go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], mode="markers",
-                                   marker=dict(color=color)))
+                                   marker=dict(color=color)), **kwargs)
 
 
-def draw_line_between(fig, point1, point2, color="black"):
+def draw_line_between(fig, point1, point2, color="black", **kwargs):
     fig.add_trace(
         go.Scatter3d(x=[point1[0], point2[0]],
                      y=[point1[1], point2[1]],
                      z=[point1[2], point2[2]],
                      mode="lines",
-                     marker=dict(color=color)))
+                     marker=dict(color=color)), **kwargs)
 
 
 def show_array(my_array, title: str = ""):
@@ -56,3 +57,4 @@ def show_array(my_array, title: str = ""):
             'xanchor': 'center',
             'yanchor': 'top'})
     fig.show()
+

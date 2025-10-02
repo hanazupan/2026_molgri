@@ -414,19 +414,22 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
     """
 
     def __init__(self, points, radius=1.0, threshold=10 ** -UNIQUE_TOL):
+        self.num_dimensions = points.shape[1]
         num_points = len(points)
         if num_points == 1:
             # this is mocked
             self.vertices = np.array([[0, 0, 1]])
             self.regions = [[0]]
             # each point is assigned proportional areas
-            self.areas = np.array([4*np.pi])
+            if self.num_dimensions == 3:
+                self.areas = np.array([4*np.pi])
         elif 1 < num_points <= 4:
-            raise ValueError(f"For technical reasons, the number of direction can be either 1 or >=4, your choice of "
+            raise ValueError(f"For technical reasons, the number of direction can be either 1 or >4, your choice of "
                              f"{num_points} is not supported.")
         else:
             super().__init__(points, radius=radius, threshold=threshold)
-            self.areas = super().calculate_areas()
+            if self.num_dimensions == 3:
+                self.areas = super().calculate_areas()
             self._purge_redundant_voronoi_vertices()
             # make sure no repeated vertices now
             all_rows_unique(self.vertices)
@@ -439,6 +442,31 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
             an array of areas the same length as the number of points
         """
         return self.areas
+
+    def get_adjacency_matrix(self) -> coo_array:
+        """
+        Adjacent points share at least dimension-1 vertices.
+        """
+        num_points = len(self.points)
+        rows = []
+        columns = []
+        elements = []
+
+        # neighbours have at least two spherical Voronoi vertices in common
+        for index_tuple in combinations(list(range(num_points)), 2):
+            set_1 = set(self.regions[index_tuple[0]])
+            set_2 = set(self.regions[index_tuple[1]])
+
+            if len(set_1.intersection(set_2)) >= self.num_dimensions - 1:
+                rows.extend([index_tuple[0], index_tuple[1]])
+                columns.extend([index_tuple[1], index_tuple[0]])
+                elements.extend([True, True])
+
+        adj_matrix = coo_array((elements, (rows, columns)), shape=(num_points, num_points))
+        return adj_matrix
+
+    def get_hulls(self):
+        return [self.vertices[region] for region in self.regions]
 
     def _purge_redundant_voronoi_vertices(self):
         original_vertices = copy(self.vertices)

@@ -7,17 +7,18 @@ nodes should be removed first.
 """
 
 from abc import ABC, abstractmethod
-from itertools import product, combinations
-from typing import Hashable, Iterable, Type, List
+from itertools import product
+from typing import Hashable, Iterable, List
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi, golden
 from scipy.sparse import coo_array
-from scipy.spatial import geometric_slerp
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
+from molgri.plotting import draw_curve, draw_line_between, draw_points
 from molgri.utils import (normalise_vectors, which_row_is_k, q_in_upper_sphere)
 
 
@@ -56,21 +57,36 @@ class NewPolytope(ABC):
         return f"Polytope up to level {self.current_level}"
 
     def get_nodes(self, projection: bool = False, indices: bool = False) -> NDArray:
+        """
+        The default option returns an array of polygon node coordinates. The only getter to use for nodes,
+        don't access self.G.nodes directly.
+
+
+        Args:
+            projection (bool): if True, return projected node coordinates instead
+            indices (bool): if True, return node indices instead
+
+        Returns:
+            a) all polygon node coordinates as a (N, 3)-dimensional numpy array OR
+            b) all projected node coordinates as a (N, 3)-dimensional numpy array OR
+            c) all indices of nodes as a (N,)-dimensional numpy array
+        """
         if indices:
-            # just in case after nodes have been removed node names aren't consecutive integers anymore
+            # node indices are mostly consecutive integers, but this is helpful in case some have been removed
             return np.array([key for key, value in sorted(self.G.nodes.items())])
         if projection:
             attribute_name = "projection"
         else:
             attribute_name = "node"
 
+        # we always use this function as a getter to make sure nodes are always sorted in the same manner
         sorted_nodes = [value[attribute_name] for key, value in sorted(self.G.nodes.items())]
         return np.array(sorted_nodes)
 
-    def create_exactly_N_points(self, N: int):
+    def create_exactly_N_points(self, N: int) -> None:
         """
-        Start the initial distribution, keep dividing the edges until you have more points than N, then remove and
-        reconnect until you have exactly N points.
+        Start the initial distribution, keep dividing the edges until you have more points than N, then remove points and
+        reconnect edges until you have exactly N points.
         """
         while self.G.number_of_nodes() < N:
             self.divide_edges()
@@ -80,54 +96,31 @@ class NewPolytope(ABC):
 
     def plot(self, show_nodes: bool = True, show_projected_nodes: bool = True,
              show_vertices: bool = True, show_node_numbers: bool = False):
+        """
+       The general-use plotting function showing polygon- and/or projected node coordinates and straight or curved
+       edges between them.
+        """
         fig = go.Figure()
         nodes = self.get_nodes(projection=False)
         projected_nodes = self.get_nodes(projection=True)
         indices = self.get_nodes(projection=False, indices=True)
         adjacencies = nx.adjacency_matrix(self.G)
         if show_nodes:
-            # potentially show numbers next to polygon nodes
-            if show_node_numbers:
-                fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], text=indices, mode="text+markers", marker=dict(
-                    color='black')))
-            else:
-                fig.add_trace(go.Scatter3d(x=nodes.T[0], y=nodes.T[1], z=nodes.T[2], mode="markers", marker=dict(
-                    color='black')))
-
+            draw_points(fig, nodes, label_by_index=show_node_numbers, custom_labels=indices)
             # potentially show straight-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
-
                 for row, col in zip(rows, columns):
-                    start = nodes[row]
-                    end = nodes[col]
-                    fig.add_trace(go.Scatter3d(x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
-                                               mode="lines", line=dict(color='black')))
+                    draw_line_between(fig, nodes[row], nodes[col])
 
         if show_projected_nodes:
-            # potentially show numbers next to projected polygon nodes
-            if show_node_numbers:
-                fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], text=indices, mode="text+markers", marker=dict(
-                    color='green')))
-            else:
-                fig.add_trace(go.Scatter3d(x=projected_nodes.T[0], y=projected_nodes.T[1], z=projected_nodes.T[2], mode="markers", marker=dict(
-                    color='green')))
-
+            draw_points(fig, projected_nodes, label_by_index=show_node_numbers, custom_labels=indices, color="green")
             # potentially show curved-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
                 for row, col in zip(rows, columns):
-                    curve_start = projected_nodes[row]
-                    curve_end = projected_nodes[col]
-                    norm = np.linalg.norm(curve_start)
-                    interpolate_points = np.linspace(0, 1, 2000)
-                    curve = geometric_slerp(normalise_vectors(curve_start), normalise_vectors(curve_end), interpolate_points)
-                    fig.add_trace(go.Scatter3d(x=norm * curve[..., 0], y=norm * curve[..., 1], z=norm * curve[..., 2],
-                                               mode="lines", line=dict(color='green')))
-
-
+                    draw_curve(fig, projected_nodes[row], projected_nodes[col], color="green")
         fig.show()
-
 
 
 ########################################################################################################################
@@ -145,8 +138,6 @@ class NewPolytope(ABC):
         """
         Subdivide once by putting a new point at mid-point of each existing edge and replacing this sub-edge with
         two edges from the two old to the new point.
-
-        In sub-modules, additional edges may be added before and/or after performing divisions.
         """
         self._add_mid_edge_nodes()
         self._end_of_divison()
@@ -154,11 +145,9 @@ class NewPolytope(ABC):
 
     def _end_of_divison(self):
         """
-        Use at the end of _create_level0 or divide edges. Two functions:
-        1) increase the level, decrease side length
+        Use at the end of _create_level0 or divide edges. This automatically insreases the attribute level (of
+        division) of novel nodes and halves the side legth.
         """
-
-        # adapt current level and side_len
         self.current_level += 1
         self.side_len = self.side_len / 2
 
@@ -235,6 +224,12 @@ class NewPolytope(ABC):
         if face is None:
             face = self._find_face(face_neighbours_indices)
 
+        # make sure that this node doesn't exist yet
+        all_existing_coordinates = self.get_nodes()
+        # don't add the point if it is there already
+        if len(all_existing_coordinates) > 0 and len(which_row_is_k(all_existing_coordinates, polytope_point)) > 0:
+            return
+
         node_value = self.G.number_of_nodes()
         self.G.add_node(node_value, level=self.current_level, node=polytope_point,
                         face=face, projection=normalise_vectors(polytope_point))
@@ -242,7 +237,7 @@ class NewPolytope(ABC):
 
     def _add_average_point_and_edges(self, list_old_indices: list, add_edges=True):
         """
-        A helper function to _add_square_diagonal_nodes, _add_cube_diagonal_nodes and _add_mid_edge_nodes.
+        A helper function to _add_mid_edge_nodes.
         Given a list in which every item is a set of nodes, add a new point that is the average of them and also add
         new edges between the newly created points and all of the old ones.
 
@@ -263,7 +258,7 @@ class NewPolytope(ABC):
 
             node_value = self._add_polytope_point(new_coordinate, face_neighbours_indices=old_points)
 
-            if add_edges:
+            if add_edges and node_value is not None:
                 for old_point in old_points:
                     self.G.add_edge(node_value, old_point)
 
@@ -322,6 +317,40 @@ class Cube4DPolytope(NewPolytope):
     def __init__(self):
         super().__init__(d=4)
 
+    def plot(self, show_nodes: bool = True, show_projected_points: bool = False, show_vertices: bool = True,
+             show_node_numbers: bool = False):
+        """
+        The plot of a 4D object must be a bit special. We show the 8 cubes of the hypercube like we would show the
+        six faces of a cube separately. Of course this means that the same edge vertices and edges are repeated!
+
+        - the 8 cube vertices repeat on 4 different cubes
+        - the points on the edges of cubes repeat on 3 cubes
+        - the points on the faces repeat on 2 cubes
+        - the points inside the faces do not repeat
+        """
+        if show_projected_points:
+            print("Cannot display projected points in 3D.")
+
+        individual_cells = self.get_all_cells()
+
+        fig = make_subplots(rows=2, cols=4, specs=[[{'type': 'scene'}]*4,[{'type': 'scene'}]*4])
+
+        if show_nodes:
+            for i, cell in enumerate(individual_cells):
+                row = 1 if i < 4 else 2
+                col = i + 1 if i < 4 else i + 1 - 4
+                draw_points(fig, cell.get_nodes(), label_by_index=show_node_numbers, custom_labels=cell.get_nodes(
+                    indices=True), row=row, col =col)
+
+                if show_vertices:
+                    adjacency = nx.adjacency_matrix(cell.G).astype(bool).tocoo()
+                    for i, j in zip(adjacency.row, adjacency.col):
+                        coo_1 = cell.get_nodes()[i]
+                        coo_2 = cell.get_nodes()[j]
+                        draw_line_between(fig, coo_1, coo_2, row=row, col=col)
+        fig.show()
+
+
     def __str__(self):
         return f"Cube4D up to level {self.current_level}"
 
@@ -353,14 +382,18 @@ class Cube4DPolytope(NewPolytope):
         """Before or after dividing edges, make sure all relevant connections are present. Then perform a division of
         all connections (point in the middle, connection split in two), increase the level and halve the side_len."""
         super().divide_edges()
+        print("BEFORE EDGES", self.G.number_of_edges())
         self._add_edges_of_len(2*self.side_len, wished_levels=[self.current_level - 1, self.current_level - 1],
                                only_seconds=False)
+        print("BEFORE FACE DIAGONALS", self.G.number_of_edges())
         len_square_diagonals = 2*self.side_len*np.sqrt(2)
         self._add_edges_of_len(len_square_diagonals, wished_levels=[self.current_level-1, self.current_level-1],
                               only_seconds=False)
+        print("BEFORE BODY DIAGONALS", self.G.number_of_edges())
         len_cube_diagonals = 2 * self.side_len * np.sqrt(3)
         self._add_edges_of_len(len_cube_diagonals, wished_levels=[self.current_level - 1, self.current_level - 1],
                                only_seconds=False)
+        print("AFTER ALL", self.G.number_of_edges())
 
 ########################################################################################################################
 #
@@ -417,27 +450,24 @@ class Cube4DPolytope(NewPolytope):
         """
         all_subpoly = []
         if include_only is None:
-            include_only = list(self.G.nodes)
-        else:
-            include_only = [tuple(x) for x in include_only]
+            include_only = self.get_nodes(indices=True)
         for cell_index in range(8):
-            nodes = (
-                node
-                for node, data
-                in self.G.nodes(data=True)
-                if cell_index in data.get('face')
-                and node in include_only
-            )
+            nodes = [node_i for node_i, data in self.G.nodes(data=True) if cell_index in data["face"] and node_i in
+                       include_only]
             subgraph = self.G.subgraph(nodes).copy()
             # find the component corresponding to the constant 4th dimension
             if subgraph.number_of_nodes() > 0:
-                arr_nodes = np.array(subgraph.nodes)
-                num_dim = len(arr_nodes[0])
+                arr_nodes = np.array([data["node"] for node, data in subgraph.nodes(data=True)])
+                num_dim = 4
                 dim_to_keep = list(np.where(~np.all(arr_nodes == arr_nodes[0, :], axis=0))[0])
                 removed_dim = max(set(range(num_dim)).difference(set(dim_to_keep)))
-                new_nodes = {old: tuple(old[d] for d in range(num_dim) if d != removed_dim) for old in
-                             subgraph.nodes}
-                subgraph = nx.relabel_nodes(subgraph, new_nodes)
+                # change the node property in the data
+                dict_changes = {}
+                for node_i, data in subgraph.nodes(data=True):
+                    old_node = data["node"]
+                    new_node = np.array([old_node[d] for d in range(num_dim) if d != removed_dim])
+                    dict_changes[node_i] = {"node": new_node}
+                nx.set_node_attributes(subgraph, dict_changes)
             # create a 3D polyhedron and use its plotting functions
             sub_polyhedron = PolyhedronFromG(subgraph)
             all_subpoly.append(sub_polyhedron)
@@ -638,19 +668,30 @@ def find_opposing_q(node, G):
 
 if __name__ == "__main__":
     import time
+    from molgri.utils import all_rows_unique
 
+    # VISUALIZE AN ICOSAHEDRON
+    # t1 = time.time()
+    # my_ico = IcosahedronPolytope()
+    # my_ico.create_exactly_N_points(39)
+    # my_nodes = my_ico.get_nodes()
+    # my_p_nodes = my_ico.get_nodes(projection=True)
+    # t2 = time.time()
+    #
+    # print(f"Time: {t2-t1} s")
+    #
+    # my_ico.plot(show_nodes=True, show_projected_nodes=True, show_vertices=True, show_node_numbers=True)
+
+    # VISUALIZE A HYPERCUBE
     t1 = time.time()
-    my_ico = IcosahedronPolytope()
-    my_ico.create_exactly_N_points(55)
-    my_nodes = my_ico.get_nodes()
-    my_p_nodes = my_ico.get_nodes(projection=True)
+    my_hypercube = Cube4DPolytope()
+    my_hypercube.divide_edges()
+    #my_hypercube.create_exactly_N_points(88)
     t2 = time.time()
+    print(f"Time: {t2 - t1} s")
 
-    print(f"Time: {t2-t1} s")
-
-    #remove_and_reconnect(my_ico.G, np.random.choice(my_ico.G.nodes()))
-    #my_ico.create_exactly_N_points(14)
-    #my_ico.plot(show_nodes=True, show_projected_nodes=True, show_hulls=True, show_node_numbers=True)
+    nodes = my_hypercube.get_nodes()
+    print(len(my_hypercube.get_nodes()))
+    my_hypercube.plot(show_nodes=True, show_node_numbers=False, show_vertices=True)
 
 
-    #my_ico.plot(show_nodes=True, show_projected_nodes=False, show_hulls=True)
