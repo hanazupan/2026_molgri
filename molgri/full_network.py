@@ -1,132 +1,269 @@
-"""
-A FullNetwork consists of
-- StructureNodes that carry at least a global index but can also have the attributes of: position grid index,
-orientation grid index, energy, volume, radius
-- StructureEdges that carry information on: edge distance, surface area, diffusion, calculated rates.
-"""
 from functools import cached_property
 
-from numpy.typing import NDArray
 import numpy as np
+from matplotlib import pyplot as plt
+from numpy.typing import NDArray
+import networkx as nx
+from scipy.spatial import ConvexHull, geometric_slerp
 
-from molgri.transgrid import circular_sector_area
-from molgri.utils import dist_on_sphere,  distance_between_quaternions
+from molgri.transgrid import ReducedSphericalVoronoi
+from molgri.grid_geometry import calculate_new_edge_attribute
 
-# todo: structure node saves the PositionGridNode and the RotationGridNode and only accesses their properties
-class StructureNode:
-    def __init__(self, node_index: int, coordinate_7D: NDArray, node_type: str):
-        assert node_type in ["position_grid", "rotation_grid"]
-        self.node_index = node_index
-        self.node_type = node_type
+class MolgriGraph(nx.Graph):
 
-        self.coordinate_7D = coordinate_7D
-        self.position_3d = coordinate_7D[:3]
-        self.quaternion = coordinate_7D[3:]
+    def get_7d_coordinates(self):
+        return np.array([node.get_7d_coordinate() for node in sorted(self.nodes)])
 
-        self.radius = np.linalg.norm(self.position_3d)
+    def get_three_indices(self):
+        return np.array([node.get_three_indices() for node in sorted(self.nodes)])
+
+
+    def volumes(self):
+        return np.array([node.volume() for node in sorted(self.nodes)])
+
+    @cached_property
+    def adjacency_matrix(self):
+        return nx.adjacency_matrix(self, dtype=bool)
+
+    @cached_property
+    def adjacency_type_matrix(self):
+        return nx.adjacency_matrix(self, dtype=int, weight="edge_type")
+
+    @cached_property
+    def distance_matrix(self):
+        calculate_new_edge_attribute(self, "distance")
+        return nx.adjacency_matrix(self, dtype=float, weight="distance")
+
+    @cached_property
+    def surface_matrix(self):
+        calculate_new_edge_attribute(self, "surface")
+        return nx.adjacency_matrix(self, dtype=float, weight="surface")
+
+    def show_graph(self, node_property: str = "total_index", edge_property: str = "edge_type"):
+        labels = {node: node_i for node_i, node in enumerate(sorted(self.nodes))}
+
+        if edge_property == "edge_type":
+            edge_labels = {(u,v): edge_data[edge_property] for u, v, edge_data in self.edges(data=True)}
+        else:
+            calculate_new_edge_attribute(self, edge_property)
+            edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in self.edges(data=True)}
+
+
+        type_to_color = {"radial": "red", "spherical": "blue", "rotational": "yellow"}
+
+        calculate_new_edge_attribute(self, "numerical_edge_type")
+
+        edge_colors = [type_to_color[edge_data["edge_type"]] for u, v, edge_data in self.edges(data=True)]
+
+
+        pos = nx.kamada_kawai_layout(self, weight="numerical_edge_type")
+        nx.draw(self, pos, labels=labels)
+        nx.draw_networkx_edges(self, pos, edge_color=edge_colors)
+        nx.draw_networkx_edge_labels(self, pos, edge_labels=edge_labels)
+        plt.show()
+
+class FullNode:
+
+    def __init__(self, spherical_node, radial_node, rotation_node = None):
+        self.spherical_node = spherical_node
+        self.radial_node = radial_node
+        self.rotation_node = rotation_node
+
+    def __str__(self):
+        return f'({str(self.spherical_node)}, {str(self.radial_node)}, {str(self.rotation_node)})'
+
+    def __lt__(self, other):
+        """
+        How do we know a node is "larger" (should come later in sorting)
+        - first we compare the radial index
+        - if both are the same, we compare the spherical index
+        - if both are the same, we compare the rotation index
+        """
+        return self.get_three_indices() < other.get_three_indices()
+
+    def get_7d_coordinate(self):
+        coo_3d = normalise_vectors(self.spherical_node.unit_vector, length=self.radial_node.radius)
+        return np.concat((coo_3d, self.rotation_node.quaternion))
+
+    def get_three_indices(self):
+        return [self.radial_node.radial_index, self.spherical_node.spherical_index, self.rotation_node.rotation_index]
+
+    def volume(self):
+        radius_smaller = self.radial_node.hull[0]
+        radius_larger = self.radial_node.hull[1]
+        # how much of the unit surface is this spherical surface
+        percentage = self.spherical_node.unit_voronoi_area / (4 * np.pi)
+        # the same percentage of the volume is this cell
+        position_volume = 4 / 3 * np.pi * (radius_larger ** 3 - radius_smaller ** 3) * percentage
+        return position_volume * self.rotation_node.volume
+
+    @cached_property
+    def position_grid_hull(self):
+        """
+        Returns a list with two elements: first is an array of all hull vertices at the radius smaller than position,
+        second an array of all hull vertices at the radius larger than position.
+        Returns:
+
+        """
+        spherical_hull = self.spherical_node.hull
+        radial_hull = self.radial_node.hull
+
+        vertices = []
+        # add bottom vertices
+        if np.isclose(radial_hull[0], 0.0):
+            vertices.append(np.zeros((1, 3)))
+        else:
+            vertices.append(spherical_hull * np.linalg.norm(radial_hull[0]))
+        # add upper vertices
+        vertices.append(spherical_hull * np.linalg.norm(radial_hull[1]))
+        return vertices
+
+
+class SphericalNode:
+
+    def __init__(self, spherical_index: int, unit_vector: NDArray, unit_hull = None):
+        self.spherical_index = spherical_index
+        self.unit_vector = unit_vector
+        self.hull = unit_hull
+
+    def __str__(self):
+        return f'dir={self.spherical_index}'
+
+    @cached_property
+    def unit_voronoi_area(self):
+        return exact_area_of_spherical_polygon(self.hull)
+
+
+class RadialNode:
+
+    def __init__(self, radial_index: int, radius: float, radial_hull = None):
+        self.radial_index = radial_index
+        self.radius = radius
+        self.hull = radial_hull
+
+    def __str__(self):
+        return f'rad={self.radial_index}'
+
+
+class RotationNode:
+
+    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull = None):
+        self.rotation_index = rotation_index
+        self.quaternion = quaternion
+        self.hull = hypersphere_hull
+
+    def __str__(self):
+        return f'quat={self.rotation_index}'
 
     @cached_property
     def volume(self):
-        pass
+        # numerically estimate the volume
+        level_of_detail = 20 # higher = more detail (interpolation points)
 
-class PositionGridNode:
-
-    def __init__(self, node_index: int, coordinate_3d: NDArray, node_type: str):
-        self.coordinate_3d = coordinate_3d
-        self.position_index = node_index
-        self.radius = np.linalg.norm(self.coordinate_3d)
-        self.hull
-        self.unit_voronoi_area
-
-    @cached_property
-    def volume(self) -> float:
-        """
-        Get the volume of the hull for each grid point.
-
-        Returns:
-            An array of volumes of shape (N_points,) in Angstrom^3
-
-        """
-
-        hull_smaller, hull_larger = self.hull
-        radius_smaller = np.linalg.norm(hull_smaller[0])
-        radius_larger = np.linalg.norm(hull_larger[0])
-
-        # how much of the unit surface is this spherical surface
-        if self.num_directions > 1:
-            percentage = self.unit_voronoi_area / (4 * np.pi)
-        else:
-            percentage = 1.0
-        # the same percentage of the volume is this cell
-        volume = 4 / 3 * np.pi * (radius_larger ** 3 - radius_smaller ** 3) * percentage
-        return volume
+        # additional points are slerps between hull points
+        additional_points = []
+        for index_1, point1 in enumerate(self.hull):
+            for point2 in self.hull[index_1+1:]:
+                points = geometric_slerp(point1, point2, t=np.linspace(0, 1, level_of_detail))
+                additional_points.append(points)
+        all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
+        my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
+        return my_convex_hull.area / 2.0
 
 
-    def change_radius(self, new_radius):
-        assert not np.isclose(new_radius, 0.0), "The radius of zero makes no sense"
-        # change the radius
-        self.radius = new_radius
+def create_unit_radius_network(spherical_points):
+    unit_spherical_voronoi = ReducedSphericalVoronoi(spherical_points)
+    layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
+    hulls = unit_spherical_voronoi.get_hulls()
 
-        # rescale the coordinate
-        self.coordinate = self.coordinate / np.linalg.norm(self.coordinate) * new_radius
-
-        # adapt the hull
-
-
-class RotationGridNode(StructureNode):
-
-    def __init__(self, node_index: int, coordinate: NDArray, node_type: str):
-        self.quaternion
-        self.hull
-        self.rotation_index
+    G = MolgriGraph()
+    all_layer_nodes = [SphericalNode(direction_i, coo_3d, hulls[direction_i]) for direction_i, coo_3d in enumerate(spherical_points)]
+    G.add_nodes_from(all_layer_nodes)
+    for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
+        node1 = all_layer_nodes[node_i_1]
+        node2 = all_layer_nodes[node_i_2]
+        G.add_edge(node1, node2, edge_type="spherical")
+    return G
 
 
-class StructureEdge:
-    def __init__(self, node1: StructureNode, node2: StructureNode, edge_type: str):
-        assert edge_type in ["radial", "directional", "orientational"]
-        self.edge_type = edge_type
-        self.node1 = node1
-        self.node2 = node2
+def _get_between_radii(radial_grid) -> NDArray:
+    """
+    If your radial points are [R_1, R_1+dR, R_1+2dR ... R_1+NdR], the in-between radii are
+    [0, R_1+1/2 dR, R_1+3/2 dR ... R_1+(N+1/2)dR]
 
-    @cached_property
-    def edge_distance(self):
-        if self.edge_type == "radial":
-            # these are straight edges between layers of points in translational grid
-            return np.linalg.norm(self.node1.position_3d - self.node2.position_3d)
-        elif self.edge_type == "directional":
-            return dist_on_sphere(self.node1.position_3d, self.node2.position_3d)
-        else:
-            return distance_between_quaternions(self.node1.quaternion, self.node2.quaternion)
+    Returns:
+        a 1D array of in-berween radii (in Angstrom)
+    """
+    if len(radial_grid) == 1:
+        increment = radial_grid[0]
+    else:
+        increment = radial_grid[1] - radial_grid[0]
 
-    @cached_property
-    def surface_area(self):
-        if self.edge_type == "radial":
-            # radial neighbours, surfaces are spherical polygons
-            current_spherical_index = row % self.num_directions
-            unit_area = spherical_voronoi_areas[current_spherical_index]
-            # scale to a radius between both layers
-            two_points = np.array([self.node1.position_3d, self.node2.position_3d])
-            radius = np.mean(np.linalg.norm(two_points, axis=1))
-            return radius ** 2 * unit_area
-        elif self.edge_type == "directional":
-            shared_upper = find_shared_vertices(all_hulls[row][1], all_hulls[col][1])
-            shared_lower = find_shared_vertices(all_hulls[row][0], all_hulls[col][0])
-            return circular_sector_area(shared_upper, shared_lower)
-        else:
-            # quaternion surface ares obtained as spherical polygons
-            pass
+    between_radii = radial_grid + increment / 2
+    between_radii = np.concatenate([[0, ], between_radii])
+    return between_radii
 
 
-    @cached_property
-    def diffusion_coefficient(self):
-        pass
+def create_radial_network(radial_points):
+    G = MolgriGraph()
 
-    def calculate_rate_matrix_element(self):
-        pass
+    in_between_points = _get_between_radii(radial_points)
+    radial_hull = [np.array([in_between_points[i], in_between_points[i+1]]) for i, _ in enumerate(radial_points)]
+    all_layer_nodes = [RadialNode(radial_i, radius, radial_hull[radial_i]) for radial_i, radius in enumerate(radial_points)]
 
-def create_position_network(spherical_points, radial_points):
-    pass
+    # first create just the first layer
+    for node in all_layer_nodes:
+        G.add_node(node)
+    # add edges for all neighbouring levels
+    for node_1, node_2 in zip(all_layer_nodes[:-1], all_layer_nodes[1:]):
+        G.add_edge(node_1, node_2, edge_type="radial")
+    return G
+
+def create_rotational_network(quaternions):
+    # todo: need adjacency matrix for quaternions (check double coverage!)
+    unit_spherical_voronoi = ReducedSphericalVoronoi(quaternions)
+    layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
+    hulls = unit_spherical_voronoi.get_hulls()
+
+    G = MolgriGraph()
+
+    all_layer_nodes = [RotationNode(rot_i, quat, hulls[rot_i]) for rot_i, quat in enumerate(quaternions)]
+    G.add_nodes_from(all_layer_nodes)
+    for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
+        node1 = all_layer_nodes[node_i_1]
+        node2 = all_layer_nodes[node_i_2]
+        G.add_edge(node1, node2, edge_type="rotational")
+    return G
 
 
-def create_full_network(network_of_one_layer, radial_distances):
-    # you need to repeat the network_of_one_layer at different radii and introduce radial eges between them
+def create_full_network(spherical_points, radial_distances, quaternions):
+    base_layer_network = create_unit_radius_network(spherical_points)
+    rad_network = create_radial_network(radial_distances)
+    rotation_network = create_rotational_network(quaternions)
+
+    position_network = nx.cartesian_product(base_layer_network, rad_network)
+    full_network = nx.cartesian_product(position_network, rotation_network)
+
+    mapping = { ((a, b), c): FullNode(a, b, c) for ((a, b), c) in full_network.nodes }
+    full_network = nx.relabel_nodes(full_network, mapping)
+    full_network = MolgriGraph(full_network)
+
+    return full_network
+
+
+if __name__ == '__main__':
+    from molgri.plotting import show_array
+    from molgri.utils import all_row_norms_equal_k, dist_on_sphere, distance_between_quaternions, \
+    exact_area_of_spherical_polygon, normalise_vectors, \
+    random_sphere_points, \
+    random_quaternions
+    radial_points = np.linspace(1.5, 4.5, num=3)
+    spherical_points = random_sphere_points(6)
+    quaternions = random_quaternions(5)
+
+    full_network = create_full_network(spherical_points, radial_points, quaternions)
+    full_network.show_graph(edge_property="surface")
+
+    #show_array(full_network.distance_matrix.toarray(), "Distance")
+    #show_array(full_network.surface_matrix.toarray(), "Surface")
+    #print(full_network.volumes())

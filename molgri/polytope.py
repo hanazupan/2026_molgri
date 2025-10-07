@@ -317,6 +317,30 @@ class Cube4DPolytope(NewPolytope):
     def __init__(self):
         super().__init__(d=4)
 
+    def create_exactly_N_points(self, N: int) -> None:
+        """
+        Start the initial distribution, keep dividing the edges until you have more points than N, then remove points and
+        reconnect edges until you have exactly N points.
+        """
+
+        half_grid = self.grid
+        N = self.N
+        full_hypersphere_grid = np.zeros((2 * N, 4))
+        full_hypersphere_grid[:N] = half_grid
+        for i in range(N):
+            inverse_q = find_inverse_quaternion(half_grid[i])
+            full_hypersphere_grid[N + i] = inverse_q
+        self.grid = full_hypersphere_grid
+        return self.grid
+
+        # first create a grid with exactly 2N nodes
+        while self.G.number_of_nodes() < N:
+            self.divide_edges()
+        while self.G.number_of_nodes() > N:
+            node_to_remove = select_a_node_to_delete(self.G)
+            remove_and_reconnect(self.G, node_to_remove)
+        # now only
+
     def plot(self, show_nodes: bool = True, show_projected_points: bool = False, show_vertices: bool = True,
              show_node_numbers: bool = False):
         """

@@ -198,3 +198,4 @@ workflow/*.csv
 *.mpg
 monomer.gro
 
+outputs

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from molgri.playground import FullNode
+    from molgri.full_network import FullNode
 
 import numpy as np
 import networkx as nx
@@ -20,6 +20,8 @@ def calculate_new_edge_attribute(G, attribute: str):
         function = distance_between_nodes
     elif attribute == "surface":
         function = surface_between_nodes
+    elif attribute == "numerical_edge_type":
+        function = numerical_edge_type
     else:
         raise ValueError(f"Attribute {attribute} unknown; must be 'distance' or 'surface'.")
 
@@ -32,7 +34,9 @@ def calculate_new_edge_attribute(G, attribute: str):
     nx.set_edge_attributes(G, df_edges.set_index(["source", "target"])[attribute].to_dict(), name=attribute)
 
 
-
+def numerical_edge_type(node1: FullNode, node2: FullNode, edge_attributes: dict):
+    type_to_num = {"radial": 3, "spherical": 2, "rotational": 1}
+    return type_to_num[edge_attributes["edge_type"]]
 
 def distance_between_nodes(node1: FullNode, node2: FullNode, edge_attributes: dict):
     if "edge_type" not in edge_attributes.keys():
