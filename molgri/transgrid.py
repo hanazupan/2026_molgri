@@ -282,7 +282,7 @@ class TranslationObject():
         points = self.grid
         fig = go.Figure()
         # grid points
-        draw_points(fig, points, label_by_index=show_node_numbers)
+        draw_points(points, fig, label_by_index=show_node_numbers)
 
         if show_distances:
             color_distances = "blue"
@@ -306,8 +306,8 @@ class TranslationObject():
             for el in selected_vertices:
                 lower_bond, upper_bond = el
                 # plot the vertex points
-                draw_points(fig, lower_bond, color=vertices_color)
-                draw_points(fig, upper_bond, color=vertices_color)
+                draw_points(lower_bond, fig, color=vertices_color)
+                draw_points(upper_bond, fig, color=vertices_color)
 
                 # draw curves
                 draw_spherical_polygon(fig, upper_bond, color=vertices_color)
@@ -414,10 +414,12 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
     """
 
     def __init__(self, points, radius=1.0, threshold=10 ** -UNIQUE_TOL):
+        assert len(points.shape) == 2, "Must provide a 2D array of points"
         self.num_dimensions = points.shape[1]
         num_points = len(points)
         if num_points == 1:
             # this is mocked
+            self.points = points
             self.vertices = np.array([[0, 0, 1]])
             self.regions = [[0]]
             # each point is assigned proportional areas
@@ -447,6 +449,9 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
         """
         Adjacent points share at least dimension-1 vertices.
         """
+        if len(self.points) == 1:
+            return coo_array(np.zeros((1,1)))
+
         num_points = len(self.points)
         rows = []
         columns = []

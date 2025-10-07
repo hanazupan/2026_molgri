@@ -19,7 +19,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from molgri.plotting import draw_curve, draw_line_between, draw_points
-from molgri.utils import (normalise_vectors, which_row_is_k, q_in_upper_sphere)
+from molgri.utils import (find_inverse_quaternion, normalise_vectors, remove_bottom_half_quaternions, which_row_is_k,
+                          q_in_upper_sphere)
 
 
 class NewPolytope(ABC):
@@ -106,7 +107,7 @@ class NewPolytope(ABC):
         indices = self.get_nodes(projection=False, indices=True)
         adjacencies = nx.adjacency_matrix(self.G)
         if show_nodes:
-            draw_points(fig, nodes, label_by_index=show_node_numbers, custom_labels=indices)
+            draw_points(nodes, fig, label_by_index=show_node_numbers, custom_labels=indices)
             # potentially show straight-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
@@ -114,7 +115,7 @@ class NewPolytope(ABC):
                     draw_line_between(fig, nodes[row], nodes[col])
 
         if show_projected_nodes:
-            draw_points(fig, projected_nodes, label_by_index=show_node_numbers, custom_labels=indices, color="green")
+            draw_points(projected_nodes, fig, label_by_index=show_node_numbers, custom_labels=indices, color="green")
             # potentially show curved-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
@@ -317,29 +318,39 @@ class Cube4DPolytope(NewPolytope):
     def __init__(self):
         super().__init__(d=4)
 
-    def create_exactly_N_points(self, N: int) -> None:
+    def create_exactly_N_points(self, N: int) -> NDArray:
         """
         Start the initial distribution, keep dividing the edges until you have more points than N, then remove points and
         reconnect edges until you have exactly N points.
         """
-
-        half_grid = self.grid
-        N = self.N
-        full_hypersphere_grid = np.zeros((2 * N, 4))
-        full_hypersphere_grid[:N] = half_grid
-        for i in range(N):
-            inverse_q = find_inverse_quaternion(half_grid[i])
-            full_hypersphere_grid[N + i] = inverse_q
-        self.grid = full_hypersphere_grid
-        return self.grid
-
-        # first create a grid with exactly 2N nodes
-        while self.G.number_of_nodes() < N:
+        all_in_upper_sphere = []
+        while len(all_in_upper_sphere) < N:
             self.divide_edges()
-        while self.G.number_of_nodes() > N:
+            current_nodes = self.get_nodes(projection=True)
+            all_in_upper_sphere = remove_bottom_half_quaternions(current_nodes)
+        while len(all_in_upper_sphere) > N:
             node_to_remove = select_a_node_to_delete(self.G)
             remove_and_reconnect(self.G, node_to_remove)
-        # now only
+            current_nodes = self.get_nodes(projection=True)
+            all_in_upper_sphere = remove_bottom_half_quaternions(current_nodes)
+        return np.array(all_in_upper_sphere)
+
+    def get_nodes(self, projection: bool = False, indices: bool = False, only_upper: bool = True) -> NDArray:
+        result = super().get_nodes(projection=projection, indices=indices)
+        if only_upper and projection:
+            return remove_bottom_half_quaternions(result)
+        if not only_upper and projection:
+            # first remove, then add exact copies to the bottom
+            remaining_nodes = remove_bottom_half_quaternions(result)
+            N = len(remaining_nodes)
+            all_points = np.zeros((2 * N, 4))
+            all_points[:N] = remaining_nodes
+            for i in range(N):
+                inverse_q = find_inverse_quaternion(remaining_nodes[i])
+                all_points[N + i] = inverse_q
+            return all_points
+        return result
+
 
     def plot(self, show_nodes: bool = True, show_projected_points: bool = False, show_vertices: bool = True,
              show_node_numbers: bool = False):
@@ -363,8 +374,8 @@ class Cube4DPolytope(NewPolytope):
             for i, cell in enumerate(individual_cells):
                 row = 1 if i < 4 else 2
                 col = i + 1 if i < 4 else i + 1 - 4
-                draw_points(fig, cell.get_nodes(), label_by_index=show_node_numbers, custom_labels=cell.get_nodes(
-                    indices=True), row=row, col =col)
+                draw_points(cell.get_nodes(), fig, label_by_index=show_node_numbers, custom_labels=cell.get_nodes(
+                    indices=True), row=row, col=col)
 
                 if show_vertices:
                     adjacency = nx.adjacency_matrix(cell.G).astype(bool).tocoo()
@@ -709,13 +720,13 @@ if __name__ == "__main__":
     # VISUALIZE A HYPERCUBE
     t1 = time.time()
     my_hypercube = Cube4DPolytope()
-    my_hypercube.divide_edges()
-    #my_hypercube.create_exactly_N_points(88)
+    #my_hypercube.divide_edges()
+    my_hypercube.create_exactly_N_points(8)
     t2 = time.time()
     print(f"Time: {t2 - t1} s")
 
     nodes = my_hypercube.get_nodes()
-    print(len(my_hypercube.get_nodes()))
+    print(my_hypercube.get_nodes(projection=True, only_upper=True))
     my_hypercube.plot(show_nodes=True, show_node_numbers=False, show_vertices=True)
 
 

@@ -1,0 +1,41 @@
+"""
+Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
+"""
+import numpy as np
+
+
+ROTATION_ALGORITHM = "hypercube"
+N_ROTATION =  25
+
+TRANSLATION_ALGORITHM = "cartesian"
+N_TRANSLATION_EACH_SUBGRID = (10, 10, 10)
+
+
+rule display_rotation_properties:
+    run:
+        import plotly.graph_objects as go
+
+        from molgri.rotgrid import create_rotation_object
+        from molgri.plotting import draw_points, show_array, show_graph
+        rotation_object = create_rotation_object(N_ROTATION,ROTATION_ALGORITHM)
+
+        # draw the points of the grid and optionally their hulls
+        fig = go.Figure()
+        draw_points(rotation_object.grid,fig,label_by_index=True)
+        hull = rotation_object.hulls[0]
+        draw_points(hull,fig,color="green")
+        fig.show()
+
+        # show adjacency array
+        show_array(rotation_object.adjacency.toarray())
+
+        # plot the graph
+        graph_of_ro = rotation_object.get_rotation_network()
+        show_graph(graph_of_ro, edge_property="distance")
+        show_graph(graph_of_ro,edge_property="surface")
+
+
+rule create_full_network:
+    run:
+        from molgri.rotgrid import create_rotation_object
+        rotation_network = create_rotation_object(N_ROTATION, ROTATION_ALGORITHM).get_rotation_network()

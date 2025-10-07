@@ -402,6 +402,29 @@ def hemisphere_quaternion_set(quaternions: NDArray, upper=True) -> NDArray:
     return np.array(non_repeating_quaternions)
 
 
+def remove_bottom_half_quaternions(quaternions: NDArray) -> NDArray:
+    """
+    Here we immediately remove (don't project to the other side) any quaternions in the bottom half.
+
+    Args:
+        quaternions: array (N, 4), each row a quaternion
+
+    Returns:
+        quaternions: array (M <= N, 4), each row a quaternion different from all other ones
+    """
+    is_array_with_d_dim_r_rows_c_columns(quaternions, d=2, c=4)
+
+    non_repeating_quaternions = []
+    for projected_point in quaternions:
+        for i in range(4):
+            # if this if-sentence is True, the point is in the upper hemisphere
+            if np.allclose(projected_point[:i], 0) and projected_point[i] > 0:
+                # the point is selected
+                non_repeating_quaternions.append(projected_point)
+
+    return np.array(non_repeating_quaternions)
+
+
 # is_tested
 def q_in_upper_sphere(q: NDArray) -> bool:
     """
@@ -464,8 +487,15 @@ def two_sets_of_quaternions_equal(quat1: NDArray, quat2: NDArray) -> bool:
             return False
     return True
 
+def find_shared_quaternions(array_1: NDArray, array_2: NDArray) -> ArrayLike:
+    shared_vertices = []
+    for row in array_1:
+        if quaternion_in_array(row, array_2):
+            shared_vertices.append(row)
+    return np.array(shared_vertices)
 
-def random_quaternions(n: int = 1000) -> NDArray:
+
+def random_quaternions(n: int = 1000, only_upper=False) -> NDArray:
     """
     Create n random quaternions
 
@@ -482,6 +512,9 @@ def random_quaternions(n: int = 1000) -> NDArray:
     result[:, 2] = np.sqrt(random_num[:, 0]) * np.sin(2 * pi * random_num[:, 2])
     result[:, 3] = np.sqrt(random_num[:, 0]) * np.cos(2 * pi * random_num[:, 2])
     assert result.shape[1] == 4
+
+    if only_upper:
+        return hemisphere_quaternion_set(result, upper=True)
     return result
 
 

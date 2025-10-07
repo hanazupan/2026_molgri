@@ -23,44 +23,44 @@ class MolgriGraph(nx.Graph):
 
     @cached_property
     def adjacency_matrix(self):
-        return nx.adjacency_matrix(self, dtype=bool)
+        return nx.adjacency_matrix(self, nodelist=sorted(self.nodes), dtype=bool)
 
     @cached_property
     def adjacency_type_matrix(self):
-        return nx.adjacency_matrix(self, dtype=int, weight="edge_type")
+        return nx.adjacency_matrix(self, nodelist=sorted(self.nodes), dtype=int, weight="edge_type")
 
     @cached_property
     def distance_matrix(self):
         calculate_new_edge_attribute(self, "distance")
-        return nx.adjacency_matrix(self, dtype=float, weight="distance")
+        return nx.adjacency_matrix(self, nodelist=sorted(self.nodes), dtype=float, weight="distance")
 
     @cached_property
     def surface_matrix(self):
         calculate_new_edge_attribute(self, "surface")
-        return nx.adjacency_matrix(self, dtype=float, weight="surface")
+        return nx.adjacency_matrix(self, nodelist=sorted(self.nodes), dtype=float, weight="surface")
 
-    def show_graph(self, node_property: str = "total_index", edge_property: str = "edge_type"):
-        labels = {node: node_i for node_i, node in enumerate(sorted(self.nodes))}
-
-        if edge_property == "edge_type":
-            edge_labels = {(u,v): edge_data[edge_property] for u, v, edge_data in self.edges(data=True)}
-        else:
-            calculate_new_edge_attribute(self, edge_property)
-            edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in self.edges(data=True)}
-
-
-        type_to_color = {"radial": "red", "spherical": "blue", "rotational": "yellow"}
-
-        calculate_new_edge_attribute(self, "numerical_edge_type")
-
-        edge_colors = [type_to_color[edge_data["edge_type"]] for u, v, edge_data in self.edges(data=True)]
-
-
-        pos = nx.kamada_kawai_layout(self, weight="numerical_edge_type")
-        nx.draw(self, pos, labels=labels)
-        nx.draw_networkx_edges(self, pos, edge_color=edge_colors)
-        nx.draw_networkx_edge_labels(self, pos, edge_labels=edge_labels)
-        plt.show()
+    # def show_graph(self, node_property: str = "total_index", edge_property: str = "edge_type"):
+    #     labels = {node: node_i for node_i, node in enumerate(sorted(self.nodes))}
+    #
+    #     if edge_property == "edge_type":
+    #         edge_labels = {(u,v): edge_data[edge_property] for u, v, edge_data in self.edges(data=True)}
+    #     else:
+    #         calculate_new_edge_attribute(self, edge_property)
+    #         edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in self.edges(data=True)}
+    #
+    #
+    #     type_to_color = {"radial": "red", "spherical": "blue", "rotational": "yellow"}
+    #
+    #     calculate_new_edge_attribute(self, "numerical_edge_type")
+    #
+    #     edge_colors = [type_to_color[edge_data["edge_type"]] for u, v, edge_data in self.edges(data=True)]
+    #
+    #
+    #     pos = nx.kamada_kawai_layout(self, weight="numerical_edge_type")
+    #     nx.draw(self, pos, labels=labels)
+    #     nx.draw_networkx_edges(self, pos, edge_color=edge_colors)
+    #     nx.draw_networkx_edge_labels(self, pos, edge_labels=edge_labels)
+    #     plt.show()
 
 class FullNode:
 
@@ -68,6 +68,12 @@ class FullNode:
         self.spherical_node = spherical_node
         self.radial_node = radial_node
         self.rotation_node = rotation_node
+
+    def __getattr__(self, name):
+        for obj in (self.spherical_node, self.radial_node, self.rotation_node):
+            if hasattr(obj, name):
+                return getattr(obj, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __str__(self):
         return f'({str(self.spherical_node)}, {str(self.radial_node)}, {str(self.rotation_node)})'
@@ -145,30 +151,7 @@ class RadialNode:
         return f'rad={self.radial_index}'
 
 
-class RotationNode:
 
-    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull = None):
-        self.rotation_index = rotation_index
-        self.quaternion = quaternion
-        self.hull = hypersphere_hull
-
-    def __str__(self):
-        return f'quat={self.rotation_index}'
-
-    @cached_property
-    def volume(self):
-        # numerically estimate the volume
-        level_of_detail = 20 # higher = more detail (interpolation points)
-
-        # additional points are slerps between hull points
-        additional_points = []
-        for index_1, point1 in enumerate(self.hull):
-            for point2 in self.hull[index_1+1:]:
-                points = geometric_slerp(point1, point2, t=np.linspace(0, 1, level_of_detail))
-                additional_points.append(points)
-        all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
-        my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
-        return my_convex_hull.area / 2.0
 
 
 def create_unit_radius_network(spherical_points):
@@ -219,21 +202,21 @@ def create_radial_network(radial_points):
         G.add_edge(node_1, node_2, edge_type="radial")
     return G
 
-def create_rotational_network(quaternions):
-    # todo: need adjacency matrix for quaternions (check double coverage!)
-    unit_spherical_voronoi = ReducedSphericalVoronoi(quaternions)
-    layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
-    hulls = unit_spherical_voronoi.get_hulls()
-
-    G = MolgriGraph()
-
-    all_layer_nodes = [RotationNode(rot_i, quat, hulls[rot_i]) for rot_i, quat in enumerate(quaternions)]
-    G.add_nodes_from(all_layer_nodes)
-    for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
-        node1 = all_layer_nodes[node_i_1]
-        node2 = all_layer_nodes[node_i_2]
-        G.add_edge(node1, node2, edge_type="rotational")
-    return G
+# def create_rotational_network(quaternions):
+#     # todo: need adjacency matrix for quaternions (check double coverage!)
+#     unit_spherical_voronoi = ReducedSphericalVoronoi(quaternions)
+#     layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
+#     hulls = unit_spherical_voronoi.get_hulls()
+#
+#     G = MolgriGraph()
+#
+#     all_layer_nodes = [RotationNode(rot_i, quat, hulls[rot_i]) for rot_i, quat in enumerate(quaternions)]
+#     G.add_nodes_from(all_layer_nodes)
+#     for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
+#         node1 = all_layer_nodes[node_i_1]
+#         node2 = all_layer_nodes[node_i_2]
+#         G.add_edge(node1, node2, edge_type="rotational")
+#     return G
 
 
 def create_full_network(spherical_points, radial_distances, quaternions):
@@ -253,17 +236,37 @@ def create_full_network(spherical_points, radial_distances, quaternions):
 
 if __name__ == '__main__':
     from molgri.plotting import show_array
+    from molgri.polytope import IcosahedronPolytope, Cube4DPolytope
     from molgri.utils import all_row_norms_equal_k, dist_on_sphere, distance_between_quaternions, \
-    exact_area_of_spherical_polygon, normalise_vectors, \
-    random_sphere_points, \
-    random_quaternions
+    exact_area_of_spherical_polygon, normalise_vectors, random_sphere_points, random_quaternions
+
+
     radial_points = np.linspace(1.5, 4.5, num=3)
-    spherical_points = random_sphere_points(6)
-    quaternions = random_quaternions(5)
+    print("radial_points", radial_points)
+
+    # TWO OPTIONS to create spherical points
+
+    spherical_points = random_sphere_points(1)
+    # ico = IcosahedronPolytope()
+    # ico.divide_edges()
+    # spherical_points = ico.get_nodes(projection=True)
+
+
+    # TWO OPTIONS to create quaternions
+
+    #quaternions = random_quaternions(15)
+
+    cube = Cube4DPolytope()
+    cube.create_exactly_N_points(N=16)
+    quaternions = cube.get_nodes(projection=True)
+    print("quaternions", quaternions)
 
     full_network = create_full_network(spherical_points, radial_points, quaternions)
-    full_network.show_graph(edge_property="surface")
+    #full_network.show_graph(edge_property="distance")
 
-    #show_array(full_network.distance_matrix.toarray(), "Distance")
-    #show_array(full_network.surface_matrix.toarray(), "Surface")
+
+
+    # show_array(full_network.adjacency_matrix.toarray(), "Adjacency")
+    # show_array(full_network.distance_matrix.toarray(), "Distance")
+    # show_array(full_network.surface_matrix.toarray(), "Surface")
     #print(full_network.volumes())

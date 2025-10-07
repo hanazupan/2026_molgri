@@ -1,5 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
+
+
 if TYPE_CHECKING:
     from molgri.full_network import FullNode
 
@@ -48,7 +51,7 @@ def distance_between_nodes(node1: FullNode, node2: FullNode, edge_attributes: di
     elif edge_type == "spherical":
         return _spherical_distance_between_nodes(node1, node2)
     elif edge_type == "rotational":
-        return _rotation_distance_between_nodes(node1, node2)
+        return _rotation_distance_between_nodes(node1.rotation_node, node2.rotation_node)
     else:
         raise ValueError(f"Unknown edge type: {edge_type}, possible types: 'radial', 'spherical', 'rotational'")
 
@@ -64,8 +67,7 @@ def _spherical_distance_between_nodes(node1: FullNode, node2: FullNode):
     shared_lower = find_shared_vertices(position_hull_node_1[0], position_hull_node_2[0])
     return circular_sector_area(shared_upper, shared_lower)
 
-def _rotation_distance_between_nodes(node1: FullNode, node2: FullNode):
-    return distance_between_quaternions(node1.rotation_node.quaternion, node2.rotation_node.quaternion)
+
 
 
 def surface_between_nodes(node1: FullNode, node2: FullNode, edge_attributes: dict):
@@ -79,7 +81,7 @@ def surface_between_nodes(node1: FullNode, node2: FullNode, edge_attributes: dic
     elif edge_type == "spherical":
         return _spherical_surface_between_nodes(node1, node2)
     elif edge_type == "rotational":
-        return _rotation_surface_between_nodes(node1, node2)
+        return _rotation_surface_between_nodes(node1.rotation_node, node2.rotation_node)
     else:
         raise ValueError(f"Unknown edge type: {edge_type}, possible types: 'radial', 'spherical', 'rotational'")
 
@@ -102,14 +104,3 @@ def _spherical_surface_between_nodes(node1: FullNode, node2: FullNode):
     return circular_sector_area(shared_upper, shared_lower)
 
 
-def _rotation_surface_between_nodes(node1: FullNode, node2: FullNode):
-    shared_vertices = find_shared_rows(node1.rotation_node.hull, node2.rotation_node.hull)
-
-    # matrix rank of shared_vertices should be one less than the dimensionality of space, because it's a
-    # normal sphere (well, some points on a sphere) hidden inside 4D coordinates, or a part of a planar circle
-    # expressed with 3D coordinates
-    u, s, vh = svd(shared_vertices)
-    # rotate till last dimension is only zeros, then cut off the redundant dimension. Now we can correctly
-    # calculate borders using lower-dimensional tools
-    border_full_rank_points = np.dot(shared_vertices, vh.T)[:, :-1]
-    return exact_area_of_spherical_polygon(border_full_rank_points)
