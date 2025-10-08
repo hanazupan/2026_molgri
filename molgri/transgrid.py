@@ -25,6 +25,7 @@ from molgri.utils import all_rows_unique, angle_between_vectors, dist_on_sphere,
 from molgri.plotting import draw_curve, draw_line_between, draw_points, draw_spherical_polygon
 
 
+
 class TranslationObject():
     """
     This object gives you access to the purely translational part of the grid (directions from ico algorithm and
