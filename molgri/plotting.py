@@ -87,9 +87,9 @@ def show_graph(G, node_property: str = "total_index", edge_property: str = "edge
         edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in G.edges(data=True)}
 
 
-    type_to_color = {"radial": "red", "spherical": "blue", "rotational": "yellow"}
+    type_to_color = {"radial": "red", "spherical": "blue", "rotational": "yellow",
+                     "x": "black", "y": "violet", "z": "orange"}
     edge_colors = [type_to_color[edge_data["edge_type"]] for u, v, edge_data in G.edges(data=True)]
-
 
     pos = nx.kamada_kawai_layout(G, weight="numerical_edge_type")
     nx.draw(G, pos, labels=labels)

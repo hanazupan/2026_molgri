@@ -46,7 +46,7 @@ class TranslationObject():
         # make sure input data is sensible
         if N_radial == 1: assert np.isclose(R_min, R_max)
 
-        # create radial and directional grids separately
+        # create radial and directional grids.smk separately
         self.radial_grid = np.linspace(R_min, R_max, num=N_radial, endpoint=True)
         self.num_radial_points = N_radial
 
@@ -91,7 +91,7 @@ class TranslationObject():
         method calculate_areas().
 
         Returns:
-            a spherical Voronoi from scipy or a mock object for tiny grids
+            a spherical Voronoi from scipy or a mock object for tiny grids.smk
         """
         unit_voronoi = ReducedSphericalVoronoi(self.unit_sphere_grid)
         return unit_voronoi

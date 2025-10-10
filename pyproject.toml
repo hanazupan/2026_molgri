@@ -1,0 +1,55 @@
+[tool.poetry]
+name = "molgri"
+version = "3.0.0"
+description = "Systematically generate structures of two molecules based on discretisation of translational and rotational space."
+authors = ["Hana Zupan <hana.zupan@fu-berlin.de>"]
+license = "LICENSE"
+readme = "README.md"
+keywords = ["pseudotrajectory", "molecular grids", "association", "state space discretisation"]
+packages = [
+    { include = "molgri" },
+]
+repository = "https://github.com/bkellerlab/molecularRotationalGrids"
+homepage = "https://www.bcp.fu-berlin.de/en/chemie/chemie/forschung/PhysTheoChem/agkeller/index.html"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+matplotlib = "^3.9.2"
+numpy = ">=1.22.3,<2.0"
+networkx = "^3.4.2"
+mdanalysis = "^2.7.0"
+scipy = "^1.14.1"
+pandas = "^2.2.3"
+seaborn = "^0.13.2"
+tqdm = "^4.66.5"
+plotly = "5.3.1"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.3"
+pytest-cov = "^5.0.0"
+flake8 = "^7.1.1"
+coverage = "^7.6.4"
+
+
+[tool.poetry.group.notebooks.dependencies]
+ipywidgets = "^8.1.5"
+ipython = "^8.28.0"
+jupyter = "^1.1.1"
+nglview = "^3.1.2"
+
+
+[tool.poetry.group.workflows.dependencies]
+snakemake = "^8.24.1"
+
+
+[tool.poetry.group.docs.dependencies]
+sphinx = {version = "^8.1.3", optional = true}
+sphinx-autobuild = {version = "^2024.10.3", optional = true}
+sphinx-rtd-theme = {version = "^3.0.1", optional = true}
+myst-parser = {version = "^4.0.0", optional = true}
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+#requires = {file = "requirements.txt"}#["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -7,27 +7,29 @@ import numpy as np
 ROTATION_ALGORITHM = "hypercube"
 N_ROTATION =  25
 
-TRANSLATION_ALGORITHM = "cartesian"
-N_TRANSLATION_EACH_SUBGRID = (10, 20, 10)
+TRANSLATION_ALGORITHM = "cartesian_periodic"
+DEFINE_TRANSLATION_EACH_SUBGRID = ((0, 1, 5), (-1, 3, 3), (1, 2, 7))
 
 
 rule display_translation_properties:
     run:
         import plotly.graph_objects as go
-        from molgri.playground import CartesianTranslationObject
+        from molgri.translation_network import create_translation_network
         from molgri.plotting import draw_points, show_array, show_graph
 
-        x_grid = np.linspace(0, 1, N_TRANSLATION_EACH_SUBGRID[0])
-        y_grid = np.linspace(-2, -1, N_TRANSLATION_EACH_SUBGRID[1])
-        z_grid = np.linspace(1,3,N_TRANSLATION_EACH_SUBGRID[2])
+        to_network = create_translation_network(TRANSLATION_ALGORITHM, *DEFINE_TRANSLATION_EACH_SUBGRID)
 
-        to = CartesianTranslationObject(x_grid, y_grid, z_grid)
 
         fig = go.Figure()
-        draw_points(to.grid,fig,label_by_index=True)
-        hull = to.hulls[0]
+        draw_points(to_network.grid,fig,label_by_index=True)
+        hull = to_network.hulls[0]
         draw_points(hull,fig,color="green")
         fig.show()
+
+        show_graph(to_network, edge_property="distance")
+        show_graph(to_network,edge_property="surface")
+
+
 
 rule display_rotation_properties:
     run:
@@ -57,3 +59,4 @@ rule create_full_network:
     run:
         from molgri.rotgrid import create_rotation_object
         rotation_network = create_rotation_object(N_ROTATION, ROTATION_ALGORITHM).get_rotation_network()
+        translation_network = create_translation_network(TRANSLATION_ALGORITHM,*DEFINE_TRANSLATION_EACH_SUBGRID)

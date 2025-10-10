@@ -7,6 +7,8 @@ distances.
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi
+from scipy.linalg import svd
+from scipy.spatial.transform import Rotation
 
 from molgri.constants import UNIQUE_TOL
 
@@ -69,6 +71,36 @@ def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
     difference = np.abs(len(my_array) - len(my_unique))
     assert len(my_array) == len(my_unique), f"{difference} elements of an array are not unique up to tolerance."
 
+def cut_off_constant_dimension(my_array: NDArray):
+    """
+    I have an array of M N-dimensional points but know that the true dimensionality of this array is lower. I want to
+    rotate all points so that the last dimension is constant and then I cut off that dimension.
+
+    This is useful for QHulls because they refuse to calculate e.g. the "volume" (surface) of a flat object if it is
+    given using 3D coordinates.
+    """
+    centered = my_array - my_array.mean(axis=0)
+    u, s, vh = svd(centered)
+    normal_vector = vh[-1]
+    target_normal_vector = np.array([0, 0, 1])
+
+    # Cross product gives axis of rotation, dot gives angle
+    axis = np.cross(normal_vector, target_normal_vector)
+    axis_norm = np.linalg.norm(axis)
+    if axis_norm < 1e-8:
+        # already aligned
+        rot = Rotation.from_quat([1, 0, 0, 0], scalar_first=True)
+    else:
+        axis /= axis_norm
+        angle = angle_between_vectors(normal_vector, target_normal_vector)
+        rot = Rotation.from_rotvec(axis * angle)
+
+    rotated_points = rot.apply(centered)
+
+    assert np.allclose(rotated_points[:, -1], 0.0, atol=UNIQUE_TOL)
+
+    cut_off_points = rotated_points[:, :-1]
+    return cut_off_points
 
 def k_argmin_in_array(my_array: NDArray, k: int):
     """

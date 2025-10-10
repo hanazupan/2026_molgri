@@ -5,9 +5,6 @@ import networkx as nx
 import numpy as np
 from scipy.spatial import ConvexHull
 
-from molgri.utils import find_shared_rows, cut_off_constant_dimension
-
-
 class OneDimTranslationNode:
 
     def __init__(self, direction: str, index: int, coordinate: float, hull: tuple) -> None:
@@ -53,10 +50,7 @@ class TranslationNode:
 
     def __lt__(self, other):
         """
-        How do we know a node is "larger" (should come later in sorting)
-        - first we compare the radial index
-        - if both are the same, we compare the spherical index
-        - if both are the same, we compare the rotation index
+        How do we know a node is "larger" (should come later in sorting): we compare first x, then y, then z
         """
         return self.get_three_indices() < other.get_three_indices()
 
@@ -95,46 +89,41 @@ class TranslationNetwork(nx.Graph):
         hulls = [node.hull for node in self.sorted_nodes]
         return hulls
 
+    @cached_property
+    def delta_x(self) -> float:
+        first_node = self.sorted_nodes[0]
+        return first_node.x.hull[1] - first_node.x.hull[0]
+
+    @cached_property
+    def delta_y(self) -> float:
+        first_node = self.sorted_nodes[0]
+        return first_node.y.hull[1] - first_node.y.hull[0]
+
+    @cached_property
+    def delta_z(self) -> float:
+        first_node = self.sorted_nodes[0]
+        return first_node.z.hull[1] - first_node.z.hull[0]
+
+    def _distances(self) -> dict:
+        return {"x": self.delta_x, "y": self.delta_y, "z": self.delta_z}
+
+    def _surfaces(self) -> dict:
+        return {"x": self.delta_y*self.delta_z, "y": self.delta_x*self.delta_z, "z": self.delta_x*self.delta_y}
+
+    def _numerical_edge_type(self) -> dict:
+        return {"x": 1, "y": 2, "z": 3}
+
     def calculate_all_edge_properties(self):
         df_edges = nx.to_pandas_edgelist(self)
-        df_edges["object"] = df_edges.apply(
-            lambda row: CartesianEdge(row.to_dict()), axis=1)
         # now list all properties to be calculated
         df_edges["numerical_edge_type"] = df_edges.apply(
-            lambda row: row["object"].numerical_edge_type, axis=1)
+            lambda row: self._numerical_edge_type()[row["edge_type"]], axis=1)
         df_edges["distance"] = df_edges.apply(
-            lambda row: row["object"].distance, axis=1)
+            lambda row: self._distances()[row["edge_type"]], axis=1)
         df_edges["surface"] = df_edges.apply(
-            lambda row: row["object"].surface, axis=1)
-
-        for attribute in ["object", "distance", "surface", "numerical_edge_type"]:
+            lambda row: self._surfaces()[row["edge_type"]], axis=1)
+        for attribute in ["distance", "surface", "numerical_edge_type"]:
             nx.set_edge_attributes(self, df_edges.set_index(["source", "target"])[attribute].to_dict(), name=attribute)
-
-
-class CartesianEdge:
-
-    def __init__(self, edge_properties: dict):
-        self.source = edge_properties["source"]
-        self.target = edge_properties["target"]
-        self.edge_properties = edge_properties
-
-    @cached_property
-    def distance(self):
-        return np.linalg.norm(self.source.coordinate_3d - self.target.coordinate_3d)
-
-    @cached_property
-    def surface(self):
-        shared_vertices = find_shared_rows(self.source.hull, self.target.hull)
-        shared_vertices_2d = cut_off_constant_dimension(shared_vertices)
-        return ConvexHull(shared_vertices_2d).volume
-
-    @cached_property
-    def numerical_edge_type(self):
-        type2num = {"x": 1, "y": 2, "z": 3}
-        if "edge_type" in self.edge_properties.keys():
-            return type2num[self.edge_properties["edge_type"]]
-        else:
-            raise ValueError("Edge type not defined")
 
 
 def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic", *args, **kwargs) -> TranslationNetwork:

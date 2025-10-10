@@ -1,0 +1,5 @@
+include: "rules/grids.smk"
+
+rule all:
+    input:
+        pass
