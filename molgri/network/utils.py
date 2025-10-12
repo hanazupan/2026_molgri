@@ -12,12 +12,10 @@ class AbstractNode(ABC):
         pass
 
     @abstractmethod
-    @cached_property
     def hull(self) -> NDArray:
         pass
 
     @abstractmethod
-    @cached_property
     def volume(self) -> float:
         pass
 
@@ -32,8 +30,8 @@ class AbstractNetwork(nx.Graph, ABC):
          and surface
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.calculate_all_edge_properties()
 
     @cached_property
@@ -52,7 +50,6 @@ class AbstractNetwork(nx.Graph, ABC):
         return hulls
 
     @abstractmethod
-    @cached_property
     def grid(self) -> NDArray:
         pass
 
@@ -64,6 +61,7 @@ class AbstractNetwork(nx.Graph, ABC):
         """
         pass
 
+    @abstractmethod
     def _surfaces(self, *edge_dict) -> dict:
         """
         Must return a dict in which for every edge type a method to calculate surface is returned. Edge properties
@@ -71,6 +69,7 @@ class AbstractNetwork(nx.Graph, ABC):
         """
         pass
 
+    @abstractmethod
     def _numerical_edge_type(self) -> dict:
         """
         Must return a dict in which for every edge type a number is returned.
@@ -79,6 +78,7 @@ class AbstractNetwork(nx.Graph, ABC):
 
     def calculate_all_edge_properties(self):
         df_edges = nx.to_pandas_edgelist(self)
+        print(df_edges)
         # now list all properties to be calculated
         df_edges["numerical_edge_type"] = df_edges.apply(
             lambda row: self._numerical_edge_type()[row["edge_type"]], axis=1)
@@ -95,7 +95,7 @@ class AbstractNetwork(nx.Graph, ABC):
 
     @cached_property
     def adjacency_type_matrix(self):
-        return nx.adjacency_matrix(self, nodelist=self.sorted_nodes, dtype=int, weight="numeric_edge_type")
+        return nx.adjacency_matrix(self, nodelist=self.sorted_nodes, dtype=bool, weight="numerical_edge_type")
 
     @cached_property
     def distance_matrix(self):

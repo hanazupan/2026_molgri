@@ -71,14 +71,24 @@ def all_rows_unique(my_array: NDArray, tol: int = UNIQUE_TOL):
     difference = np.abs(len(my_array) - len(my_unique))
     assert len(my_array) == len(my_unique), f"{difference} elements of an array are not unique up to tolerance."
 
+def cut_off_constant_dimension_quat(my_array: NDArray):
+    u, s, vh = svd(my_array)
+    # rotate till last dimension is only zeros, then cut off the redundant dimension. Now we can correctly
+    # calculate borders using lower-dimensional tools
+    rotated_points = np.dot(my_array, vh.T)
+    assert np.allclose(rotated_points[:, -1], 0.0)
+    return rotated_points[:, :-1]
+
 def cut_off_constant_dimension(my_array: NDArray):
     """
-    I have an array of M N-dimensional points but know that the true dimensionality of this array is lower. I want to
+    I have an array of M 3-dimensional points but know that the true dimensionality of this array is lower (2D). I want to
     rotate all points so that the last dimension is constant and then I cut off that dimension.
 
     This is useful for QHulls because they refuse to calculate e.g. the "volume" (surface) of a flat object if it is
     given using 3D coordinates.
     """
+    if my_array.shape[1] == 4:
+        return cut_off_constant_dimension_quat(my_array)
     centered = my_array - my_array.mean(axis=0)
     u, s, vh = svd(centered)
     normal_vector = vh[-1]
@@ -456,6 +466,18 @@ def remove_bottom_half_quaternions(quaternions: NDArray) -> NDArray:
 
     return np.array(non_repeating_quaternions)
 
+
+def double_coverage_from_upper_quaternions(quaternions: NDArray) -> NDArray:
+    """
+    For each q in quaternions also get -q so that the resulting list is twice as long.
+    """
+    N_points = quaternions.shape[0]
+    all_points = np.zeros((2 * N_points, 4))
+    all_points[:N_points] = quaternions
+    for i in range(N_points):
+        inverse_q = find_inverse_quaternion(quaternions[i])
+        all_points[N_points + i] = inverse_q
+    return all_points
 
 # is_tested
 def q_in_upper_sphere(q: NDArray) -> bool:

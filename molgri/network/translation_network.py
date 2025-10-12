@@ -5,6 +5,8 @@ import networkx as nx
 import numpy as np
 from scipy.spatial import ConvexHull
 
+from molgri.network.utils import AbstractNetwork, AbstractNode
+
 class OneDimTranslationNode:
 
     def __init__(self, direction: str, index: int, coordinate: float, hull: tuple) -> None:
@@ -29,7 +31,7 @@ class OneDimTranslationNode:
         return self.index < other.index
 
 
-class TranslationNode:
+class TranslationNode(AbstractNode):
 
     """
     This class is a single container node with sub-nodes x, y and z, representing one particular
@@ -67,27 +69,12 @@ class TranslationNode:
         my_convex_hull = ConvexHull(self.hull, qhull_options='QJ')
         return my_convex_hull.volume
 
-class TranslationNetwork(nx.Graph):
-
-    @cached_property
-    def sorted_nodes(self):
-        nodes = [node for node in sorted(self.nodes)]
-        return nodes
+class TranslationNetwork(AbstractNetwork):
 
     @cached_property
     def grid(self):
         coordinates = [node.coordinate_3d for node in self.sorted_nodes]
         return np.array(coordinates)
-
-    @cached_property
-    def volumes(self):
-        volumes = [node.volume for node in self.sorted_nodes]
-        return np.array(volumes)
-
-    @cached_property
-    def hulls(self):
-        hulls = [node.hull for node in self.sorted_nodes]
-        return hulls
 
     @cached_property
     def delta_x(self) -> float:
@@ -104,27 +91,14 @@ class TranslationNetwork(nx.Graph):
         first_node = self.sorted_nodes[0]
         return first_node.z.hull[1] - first_node.z.hull[0]
 
-    def _distances(self) -> dict:
+    def _distances(self, *edge_dict) -> dict:
         return {"x": self.delta_x, "y": self.delta_y, "z": self.delta_z}
 
-    def _surfaces(self) -> dict:
+    def _surfaces(self, *edge_dict) -> dict:
         return {"x": self.delta_y*self.delta_z, "y": self.delta_x*self.delta_z, "z": self.delta_x*self.delta_y}
 
     def _numerical_edge_type(self) -> dict:
         return {"x": 1, "y": 2, "z": 3}
-
-    def calculate_all_edge_properties(self):
-        df_edges = nx.to_pandas_edgelist(self)
-        # now list all properties to be calculated
-        df_edges["numerical_edge_type"] = df_edges.apply(
-            lambda row: self._numerical_edge_type()[row["edge_type"]], axis=1)
-        df_edges["distance"] = df_edges.apply(
-            lambda row: self._distances()[row["edge_type"]], axis=1)
-        df_edges["surface"] = df_edges.apply(
-            lambda row: self._surfaces()[row["edge_type"]], axis=1)
-        for attribute in ["distance", "surface", "numerical_edge_type"]:
-            nx.set_edge_attributes(self, df_edges.set_index(["source", "target"])[attribute].to_dict(), name=attribute)
-
 
 def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic", *args, **kwargs) -> TranslationNetwork:
     match algorithm_keyword:
@@ -138,7 +112,7 @@ def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic",
             # todo
             pass
         case _:
-            raise KeyError(f"{algorithm_keyword} is not a valid rotation algorithm keyword")
+            raise KeyError(f"{algorithm_keyword} is not a valid translation algorithm keyword")
 
 def _create_cartesian_network(periodic_in_dimensions,
                               x_linspace_params, y_linspace_params, z_linspace_params):
@@ -172,7 +146,5 @@ def _create_cartesian_network(periodic_in_dimensions,
     mapping = {((a, b), c): TranslationNode(a, b, c) for ((a, b), c) in full_network.nodes}
     full_network = nx.relabel_nodes(full_network, mapping)
     full_network = TranslationNetwork(full_network)
-    # # all the properties we want to calculate
-    full_network.calculate_all_edge_properties()
     return full_network
 

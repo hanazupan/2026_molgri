@@ -15,14 +15,14 @@ homepage = "https://www.bcp.fu-berlin.de/en/chemie/chemie/forschung/PhysTheoChem
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
 matplotlib = "^3.9.2"
-numpy = ">=1.22.3,<2.0"
+numpy = ">=1.26,<2.0"
 networkx = "^3.4.2"
 mdanalysis = "^2.7.0"
 scipy = "^1.14.1"
 pandas = "^2.2.3"
 seaborn = "^0.13.2"
 tqdm = "^4.66.5"
-plotly = "5.3.1"
+plotly = "6.3.1"
 
 
 [tool.poetry.group.test.dependencies]
