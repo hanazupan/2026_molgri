@@ -32,7 +32,7 @@ class FullNode(AbstractNode):
         return self.get_indices() < other.get_indices()
 
     def get_7d_coordinate(self):
-        return np.concat((self.translation_node.coordinate_3d, self.rotation_node.quaternion))
+        return np.concat((self.translation_node.coordinate, self.rotation_node.coordinate))
 
     def get_indices(self):
         return [self.translation_node, self.rotation_node]
@@ -44,13 +44,14 @@ class FullNode(AbstractNode):
         return (self.translation_node.hull, self.rotation_node.hull)
 
     def _apply_to_universe(self, moving_molecule: md.Universe) -> md.Universe:
+        copy_moving = moving_molecule.copy()
         full_coord = self.get_7d_coordinate()
         position = full_coord[:3]
         orientation = full_coord[3:]
         rotation_body = Rotation.from_quat(orientation, scalar_first=True)
-        moving_molecule.atoms.rotate(rotation_body.as_matrix(), point=moving_molecule.atoms.center_of_mass())
-        moving_molecule.atoms.translate(position)
-        return moving_molecule
+        copy_moving.atoms.rotate(rotation_body.as_matrix(), point=copy_moving.atoms.center_of_mass())
+        copy_moving.atoms.translate(position)
+        return copy_moving
 
     def get_transformed_bimolecular_structure(self, static_molecule: md.Universe, moving_molecule: md.Universe) -> (md.Universe):
         transformed_moving_molecule = self._apply_to_universe(moving_molecule)

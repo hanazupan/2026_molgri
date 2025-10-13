@@ -109,7 +109,7 @@ class TranslationObject():
     @cached_property
     def distances(self) -> coo_array:
         """
-        Get distances between neighbouring points calculated either as straight line distances (in radial direction) or
+        Get distances between neighbouring points calculated either as straight line distances (in radial name) or
         curved lines (on the sphere)
 
         Returns:
@@ -134,7 +134,7 @@ class TranslationObject():
     def surfaces(self) -> coo_array:
         """
         Get surfaces between neighbouring points calculated either as spherical polygons (stacked neighbours one
-        above the other in radial direction) or circular sectors (side-by-side neighbours on the sphere).
+        above the other in radial name) or circular sectors (side-by-side neighbours on the sphere).
 
         Returns:
             a float sparse array with value S_ij at position (i, j) if i and j are neighbours and their dividing
@@ -200,7 +200,7 @@ class TranslationObject():
         Return a sparse matrix where:
         - 0 means elements are not neighbours
         - 1 means elements are neighbours on a sphere
-        - 2 means elements are neighbours in radial direction
+        - 2 means elements are neighbours in radial name
 
         Returns:
             an integer sparse array with True at (i, j) if i and j are neighbours; i and j between 0 and
@@ -216,7 +216,7 @@ class TranslationObject():
         # always be neighbours, so we need the off-diagonals by n_o and -n_o
         # Most points have two neighbours this way, first and last layer have only one
 
-        # the off-diagonals are True because they are the neighbours in radial direction
+        # the off-diagonals are True because they are the neighbours in radial name
         # points i and i+num_directions are always neighbours
         same_ray_neighbours = diags((2,), offsets=self.num_directions, shape=(n_points, n_points), dtype=int,
                                     format="coo")
@@ -427,7 +427,7 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
             if self.num_dimensions == 3:
                 self.areas = np.array([4*np.pi])
         elif 1 < num_points <= 4:
-            raise ValueError(f"For technical reasons, the number of direction can be either 1 or >4, your choice of "
+            raise ValueError(f"For technical reasons, the number of name can be either 1 or >4, your choice of "
                              f"{num_points} is not supported.")
         else:
             super().__init__(points, radius=radius, threshold=threshold)

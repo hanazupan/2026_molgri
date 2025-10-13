@@ -199,3 +199,4 @@ workflow/*.csv
 monomer.gro
 
 outputs
+inputs

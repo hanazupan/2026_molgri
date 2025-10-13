@@ -38,7 +38,7 @@ def test_normalising():
     assert normalised4.shape == my_array4.shape
     assert np.allclose(np.linalg.norm(normalised4, axis=1), length4)
 
-    # 2D other direction
+    # 2D other name
     my_array5 = np.random.random((3, 5))
     length5 = 1.99
     normalised5 = normalise_vectors(my_array5, axis=0, length=length5)

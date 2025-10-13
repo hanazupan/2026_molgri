@@ -1,5 +1,5 @@
 """
-Small util functions, mostly related to norms across arrays, points on spheres, quaternion comparison, angles and
+Small util functions, mostly related to norms across arrays, points on spheres, coordinate comparison, angles and
 distances.
 """
 
@@ -414,11 +414,11 @@ def hemisphere_quaternion_set(quaternions: NDArray, upper=True) -> NDArray:
     for all points select either q or -q, depending which is in the right hemisphere
 
     Args:
-        quaternions: array (N, 4), each row a quaternion
+        quaternions: array (N, 4), each row a coordinate
         upper: if True, select the upper hemisphere, that is, demand that the first non-zero coordinate is positive
 
     Returns:
-        quaternions: array (M <= N, 4), each row a quaternion different from all other ones
+        quaternions: array (M <= N, 4), each row a coordinate different from all other ones
     """
     # test input
     is_array_with_d_dim_r_rows_c_columns(quaternions, d=2, c=4)
@@ -449,10 +449,10 @@ def remove_bottom_half_quaternions(quaternions: NDArray) -> NDArray:
     Here we immediately remove (don't project to the other side) any quaternions in the bottom half.
 
     Args:
-        quaternions: array (N, 4), each row a quaternion
+        quaternions: array (N, 4), each row a coordinate
 
     Returns:
-        quaternions: array (M <= N, 4), each row a quaternion different from all other ones
+        quaternions: array (M <= N, 4), each row a coordinate different from all other ones
     """
     is_array_with_d_dim_r_rows_c_columns(quaternions, d=2, c=4)
 
@@ -483,12 +483,12 @@ def double_coverage_from_upper_quaternions(quaternions: NDArray) -> NDArray:
 def q_in_upper_sphere(q: NDArray) -> bool:
     """
     Determine whether q in the upper part of the (hyper)sphere. This will be true if the first non-zero element of
-    the vector/quaternion is positive.
+    the vector/coordinate is positive.
 
     The point of all zeros is defined to be in the bottom hemisphere.
 
     Args:
-        q: a vector/quaternion to be tested
+        q: a vector/coordinate to be tested
 
     Returns:
 
@@ -503,13 +503,13 @@ def q_in_upper_sphere(q: NDArray) -> bool:
 # is_tested
 def find_inverse_quaternion(q: NDArray) -> NDArray:
     """
-    Inverse quaternion -q = (-q0, -q1, -q2, -q3) is the quaternion that represents the same rotation as q.
+    Inverse coordinate -q = (-q0, -q1, -q2, -q3) is the coordinate that represents the same rotation as q.
 
     Args:
-        q: a quaternion of shape (4,) whose inverse is needed
+        q: a coordinate of shape (4,) whose inverse is needed
 
     Returns:
-        another quaternion of shape (4,) with all coordinates inversed
+        another coordinate of shape (4,) with all coordinates inversed
     """
     assert q.shape == (4,)
     return -q
@@ -517,7 +517,7 @@ def find_inverse_quaternion(q: NDArray) -> NDArray:
 # is_tested
 def quaternion_in_array(quat: NDArray, quat_array: NDArray) -> bool:
     """
-    Check if a quaternion q or its equivalent complement -q is present in the quaternion array quat_array.
+    Check if a coordinate q or its equivalent complement -q is present in the coordinate array quat_array.
     """
     quat1 = quat[np.newaxis, :]
     for quat2 in quat_array:

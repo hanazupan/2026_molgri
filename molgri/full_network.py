@@ -89,10 +89,10 @@ class FullNode:
 
     def get_7d_coordinate(self):
         coo_3d = normalise_vectors(self.spherical_node.unit_vector, length=self.radial_node.radius)
-        return np.concat((coo_3d, self.rotation_node.quaternion))
+        return np.concat((coo_3d, self.rotation_node.coordinate))
 
     def get_three_indices(self):
-        return [self.radial_node.radial_index, self.spherical_node.spherical_index, self.rotation_node.rotation_index]
+        return [self.radial_node.radial_index, self.spherical_node.spherical_index, self.rotation_node.index]
 
     def volume(self):
         radius_smaller = self.radial_node.hull[0]

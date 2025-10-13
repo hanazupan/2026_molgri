@@ -11,12 +11,12 @@ class OneDimTranslationNode:
 
     def __init__(self, direction: str, index: int, coordinate: float, hull: tuple) -> None:
         self.index = index
-        self.direction = direction
+        self.name = direction
         self.coordinate = coordinate
         self.hull = hull
 
     def __str__(self) -> str:
-        return f"{self.direction} grid, index: {self.index}, coordinate: {self.coordinate}"
+        return f"{self.name} grid, index: {self.index}, coordinate: {self.coordinate}"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -42,7 +42,7 @@ class TranslationNode(AbstractNode):
         self.x = x
         self.y = y
         self.z = z
-        self.coordinate_3d = np.array([self.x.coordinate, self.y.coordinate, self.z.coordinate])
+        self.coordinate = np.array([self.x.coordinate, self.y.coordinate, self.z.coordinate])
 
     def __str__(self):
         return f'({self.x.index}, {self.y.index}, {self.z.index})'
@@ -73,7 +73,7 @@ class TranslationNetwork(AbstractNetwork):
 
     @cached_property
     def grid(self):
-        coordinates = [node.coordinate_3d for node in self.sorted_nodes]
+        coordinates = [node.coordinate for node in self.sorted_nodes]
         return np.array(coordinates)
 
     @cached_property

@@ -85,7 +85,7 @@ def test_single_direction():
                           [0, 0, 1, 0, 1],
                           [0, 0, 0, 1, 0]]
 
-    # the only adjacency is in radial direction
+    # the only adjacency is in radial name
     assert np.allclose(expected_adjacency, my_translations.adjacency.toarray())
 
     # todo test one grid visually

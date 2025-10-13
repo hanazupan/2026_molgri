@@ -1,14 +1,24 @@
 """
 Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
 """
+import pickle
 
 ROTATION_ALGORITHM = "hypercube"
 N_ROTATION =  25
 
 TRANSLATION_ALGORITHM = "cartesian_nonperiodic"
-DEFINE_TRANSLATION_EACH_SUBGRID = ((0, 1, 5), (-1, 3, 3), (1, 2, 7))
+DEFINE_TRANSLATION_EACH_SUBGRID = ((0, 10, 5), (0, 20, 3), (0, 10, 7))
+
+UNIQUE_GRID_NAME = f"{ROTATION_ALGORITHM}-{N_ROTATION}-{TRANSLATION_ALGORITHM}-test"
+
+
+rule all:
+    input:
+        full_network = f"output/networks/{UNIQUE_GRID_NAME}/full_network.pkl"
 
 rule create_full_network:
+    output:
+        network_file = "{some_path}/full_network.pkl"
     run:
         from molgri.network.rotation_network import create_rotation_network
         from molgri.network.translation_network import create_translation_network
@@ -20,8 +30,8 @@ rule create_full_network:
 
         full_network = create_full_network(translation_network, rotation_network)
 
-        print(full_network.volumes)
-        print(full_network.grid)
+        with open(output.network_file,"wb") as f:
+            pickle.dump(full_network, f)
 
 
 rule display_rotation_properties:

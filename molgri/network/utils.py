@@ -7,6 +7,20 @@ from numpy.typing import NDArray
 
 class AbstractNode(ABC):
 
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "index": self.index,
+            "coordinate": self.coordinate,
+            "volume": self.volume,
+            "hull": self.hull,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(d["index"], d["coordinate"], d["volume"], d["hull"], d["name"])
+
     @abstractmethod
     def __lt__(self, other: "AbstractNode") -> bool:
         pass

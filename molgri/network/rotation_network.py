@@ -22,15 +22,15 @@ class RotationNode(AbstractNode):
     """
 
     def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull = None):
-        self.rotation_index = rotation_index
-        self.quaternion = quaternion
+        self.index = rotation_index
+        self.coordinate = quaternion
         self.hull = hypersphere_hull
 
     def hull(self) -> NDArray:
         return self.hull
 
     def __str__(self):
-        return f'quat={self.rotation_index}'
+        return f'quat={self.index}'
 
     def __lt__(self, other):
         """
@@ -39,7 +39,7 @@ class RotationNode(AbstractNode):
         - if both are the same, we compare the spherical index
         - if both are the same, we compare the rotation index
         """
-        return self.rotation_index < other.rotation_index
+        return self.index < other.index
 
     @cached_property
     def volume(self):
@@ -60,13 +60,13 @@ class RotationNetwork(AbstractNetwork):
 
     @cached_property
     def grid(self):
-        coordinates = [node.quaternion for node in self.sorted_nodes]
+        coordinates = [node.coordinate for node in self.sorted_nodes]
         return np.array(coordinates)
 
     def _distances(self, edge_dict) -> dict:
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
-        return {"rotational": distance_between_quaternions(node1.quaternion, node2.quaternion)}
+        return {"rotational": distance_between_quaternions(node1.coordinate, node2.coordinate)}
 
     def _surfaces(self, edge_dict) -> dict:
         node1 = edge_dict["source"]
