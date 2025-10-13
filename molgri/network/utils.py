@@ -41,8 +41,9 @@ class AbstractNetwork(nx.Graph, ABC):
 
     @cached_property
     def volumes(self) -> NDArray:
-        volumes = [node.volume for node in self.sorted_nodes]
-        return np.array(volumes)
+        volumes = [node.volume() for node in self.sorted_nodes]
+        volumes = np.array(volumes)
+        return volumes
 
     @cached_property
     def hulls(self):
@@ -81,7 +82,7 @@ class AbstractNetwork(nx.Graph, ABC):
         print(df_edges)
         # now list all properties to be calculated
         df_edges["numerical_edge_type"] = df_edges.apply(
-            lambda row: self._numerical_edge_type()[row["edge_type"]], axis=1)
+            lambda row: self._numerical_edge_type(row.to_dict())[row["edge_type"]], axis=1)
         df_edges["distance"] = df_edges.apply(
             lambda row: self._distances(row.to_dict())[row["edge_type"]], axis=1)
         df_edges["surface"] = df_edges.apply(

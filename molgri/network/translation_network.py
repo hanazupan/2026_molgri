@@ -91,13 +91,13 @@ class TranslationNetwork(AbstractNetwork):
         first_node = self.sorted_nodes[0]
         return first_node.z.hull[1] - first_node.z.hull[0]
 
-    def _distances(self, *edge_dict) -> dict:
+    def _distances(self, edge_dict) -> dict:
         return {"x": self.delta_x, "y": self.delta_y, "z": self.delta_z}
 
-    def _surfaces(self, *edge_dict) -> dict:
+    def _surfaces(self, edge_dict) -> dict:
         return {"x": self.delta_y*self.delta_z, "y": self.delta_x*self.delta_z, "z": self.delta_x*self.delta_y}
 
-    def _numerical_edge_type(self) -> dict:
+    def _numerical_edge_type(self, edge_dict) -> dict:
         return {"x": 1, "y": 2, "z": 3}
 
 def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic", *args, **kwargs) -> TranslationNetwork:

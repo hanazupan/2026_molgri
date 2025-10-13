@@ -8,6 +8,20 @@ N_ROTATION =  25
 TRANSLATION_ALGORITHM = "cartesian_nonperiodic"
 DEFINE_TRANSLATION_EACH_SUBGRID = ((0, 1, 5), (-1, 3, 3), (1, 2, 7))
 
+rule create_full_network:
+    run:
+        from molgri.network.rotation_network import create_rotation_network
+        from molgri.network.translation_network import create_translation_network
+        from molgri.network.full_network import create_full_network
+        import networkx as nx
+
+        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION)
+        translation_network = create_translation_network(TRANSLATION_ALGORITHM,*DEFINE_TRANSLATION_EACH_SUBGRID)
+
+        full_network = create_full_network(translation_network, rotation_network)
+
+        print(full_network.volumes)
+        print(full_network.grid)
 
 
 rule display_rotation_properties:
@@ -57,8 +71,3 @@ rule display_translation_properties:
         show_array(to_network.surface_matrix.toarray(), "Surface_matrix")
 
 
-rule create_full_network:
-    run:
-        from molgri.rotgrid import create_rotation_object
-        rotation_network = create_rotation_object(N_ROTATION, ROTATION_ALGORITHM).get_rotation_network()
-        translation_network = create_translation_network(TRANSLATION_ALGORITHM,*DEFINE_TRANSLATION_EACH_SUBGRID)

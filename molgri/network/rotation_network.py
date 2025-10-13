@@ -75,7 +75,7 @@ class RotationNetwork(AbstractNetwork):
         lower_dim_points = cut_off_constant_dimension(shared_vertices)
         return  {"rotational": exact_area_of_spherical_polygon(lower_dim_points)}
 
-    def _numerical_edge_type(self) -> dict:
+    def _numerical_edge_type(self, edge_dict) -> dict:
         return  {"rotational": 4}
 
 def create_rotation_network(algorithm_keyword: str = "hypercube", *args, **kwargs) -> RotationNetwork:
