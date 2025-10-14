@@ -32,13 +32,13 @@ class FullNode(AbstractNode):
         return self.get_indices() < other.get_indices()
 
     def get_7d_coordinate(self):
-        return np.concat((self.translation_node.coordinate, self.rotation_node.coordinate))
+        return np.concatenate((self.translation_node.coordinate, self.rotation_node.coordinate))
 
     def get_indices(self):
         return [self.translation_node, self.rotation_node]
 
     def volume(self):
-        return self.translation_node.volume * self.rotation_node.volume
+        return self.translation_node.volume() * self.rotation_node.volume()
 
     def hull(self) -> NDArray:
         return (self.translation_node.hull, self.rotation_node.hull)

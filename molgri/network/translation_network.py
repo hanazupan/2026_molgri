@@ -64,10 +64,12 @@ class TranslationNode(AbstractNode):
         all_vertices = list(product(x_hull, y_hull, z_hull))
         return np.array(all_vertices)
 
-    @cached_property
+
     def volume(self):
-        my_convex_hull = ConvexHull(self.hull, qhull_options='QJ')
-        return my_convex_hull.volume
+        side_1 = self.x.hull[1] - self.x.hull[0]
+        side_2 = self.y.hull[1] - self.y.hull[0]
+        side_3 = self.z.hull[1] - self.z.hull[0]
+        return side_1 * side_2 * side_3
 
 class TranslationNetwork(AbstractNetwork):
 
@@ -101,6 +103,7 @@ class TranslationNetwork(AbstractNetwork):
         return {"x": 1, "y": 2, "z": 3}
 
 def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic", *args, **kwargs) -> TranslationNetwork:
+    print(args, kwargs)
     match algorithm_keyword:
         case "cartesian_nonperiodic":
             return _create_cartesian_network("none", *args, **kwargs)

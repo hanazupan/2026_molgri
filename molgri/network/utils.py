@@ -7,20 +7,6 @@ from numpy.typing import NDArray
 
 class AbstractNode(ABC):
 
-
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "index": self.index,
-            "coordinate": self.coordinate,
-            "volume": self.volume,
-            "hull": self.hull,
-        }
-
-    @classmethod
-    def from_dict(cls, d):
-        return cls(d["index"], d["coordinate"], d["volume"], d["hull"], d["name"])
-
     @abstractmethod
     def __lt__(self, other: "AbstractNode") -> bool:
         pass
@@ -56,7 +42,7 @@ class AbstractNetwork(nx.Graph, ABC):
     @cached_property
     def volumes(self) -> NDArray:
         volumes = [node.volume() for node in self.sorted_nodes]
-        volumes = np.array(volumes)
+        volumes = np.array(volumes, dtype=float)
         return volumes
 
     @cached_property

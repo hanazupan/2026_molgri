@@ -41,7 +41,7 @@ class RotationNode(AbstractNode):
         """
         return self.index < other.index
 
-    @cached_property
+
     def volume(self):
         # numerically estimate the volume
         level_of_detail = 20 # higher = more detail (interpolation points)
