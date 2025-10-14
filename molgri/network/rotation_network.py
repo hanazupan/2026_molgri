@@ -1,5 +1,4 @@
 from functools import cached_property
-from itertools import product
 from typing import Tuple
 
 import networkx as nx
@@ -9,9 +8,8 @@ from scipy.sparse import coo_array
 from scipy.spatial import ConvexHull, geometric_slerp
 from scipy.spatial.transform import Rotation
 
-from molgri.network.utils import AbstractNetwork, AbstractNode
-from molgri.polytope import Cube4DPolytope
-from molgri.transgrid import ReducedSphericalVoronoi
+from molgri.network.utils import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi
+from molgri.network.polytope import Cube4DPolytope
 from molgri.utils import random_quaternions, distance_between_quaternions, exact_area_of_spherical_polygon, find_shared_quaternions, cut_off_constant_dimension, double_coverage_from_upper_quaternions
 
 

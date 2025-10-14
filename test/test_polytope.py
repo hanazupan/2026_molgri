@@ -1,7 +1,5 @@
-import numpy as np
-
 from molgri.constants import CUBE_4D_PERFECT_NUM, ICO_PERFECT_NUM
-from molgri.polytope import Cube4DPolytope, IcosahedronPolytope
+from molgri.network.polytope import Cube4DPolytope, IcosahedronPolytope
 from molgri.utils import all_rows_unique, all_row_norms_equal_k
 
 def test_full_division_ico():

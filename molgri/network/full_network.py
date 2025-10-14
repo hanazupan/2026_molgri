@@ -1,12 +1,8 @@
 from functools import cached_property
 
 import networkx as nx
-import numpy
 import numpy as np
-import MDAnalysis as md
-from MDAnalysis import Merge
 from numpy.typing import NDArray
-from scipy.spatial.transform import Rotation
 
 from molgri.network.rotation_network import RotationNode, RotationNetwork
 from molgri.network.translation_network import TranslationNode, TranslationNetwork
@@ -62,9 +58,6 @@ class FullNode(AbstractNode):
 
 
 class FullNetwork(AbstractNetwork):
-
-    def get_psudotrajectory(self, static_molecule: md.Universe, moving_molecule: md.Universe):
-        return [node.get_transformed_bimolecular_structure(static_molecule, moving_molecule) for node in self.sorted_nodes]
 
     @cached_property
     def grid(self):
