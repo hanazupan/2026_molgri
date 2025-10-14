@@ -1,10 +1,14 @@
+from workflows.helpers.io import read_object, write_object
+from workflows.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT_PTS, PATH_OUTPUT_NETWORKS
 
-SOME_FOLDER = "outputs/pseudotrajectories/H2O_H2O/first_experiment/"
 
-MOLECULE_1_NAME = "water"
-MOLECULE_2_NAME = "water"
-STRUCTURE_ENDING = "gro"
-TRAJECTORY_ENDING = "xtc"
+MOLECULE_1_NAME = config["molecule_1"]
+MOLECULE_2_NAME = config["molecule_2"]
+STRUCTURE_ENDING = config["structure_ending"]
+TRAJECTORY_ENDING = config["trajectory_ending"]
+NETWORK_NAME = config["unique_network_name"]
+SOME_FOLDER = f"{PATH_OUTPUT_PTS}/{MOLECULE_1_NAME}_{MOLECULE_2_NAME}/{NETWORK_NAME}/"
+
 
 rule all:
     input:
@@ -13,8 +17,8 @@ rule all:
 
 rule copy_molecular_files_from_input:
     input:
-        molecule_1 = f"inputs/one_molecule_structures/{MOLECULE_1_NAME}.{STRUCTURE_ENDING}",
-        molecule_2 = f"inputs/one_molecule_structures/{MOLECULE_2_NAME}.{STRUCTURE_ENDING}",
+        molecule_1 = f"{PATH_INPUT_MOLECULES}{MOLECULE_1_NAME}.{STRUCTURE_ENDING}",
+        molecule_2 = f"{PATH_INPUT_MOLECULES}{MOLECULE_2_NAME}.{STRUCTURE_ENDING}",
     output:
         molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
         molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",
@@ -29,25 +33,20 @@ rule create_pseudotrajectory:
     input:
         molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
         molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",
-        network = "output/networks/hypercube-25-cartesian_nonperiodic-test/full_network.pkl"
+        network = f"{PATH_OUTPUT_NETWORKS}{NETWORK_NAME}/full_network/network.pkl"
     output:
         structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
         trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}"
     run:
-        import MDAnalysis as md
-        import pickle
+        from molgri.molecules.pseudotrajectory import create_pseudotrajectory
 
-        m1 = md.Universe(input.molecule_1)
-        m2 = md.Universe(input.molecule_2)
+        m1 = read_object(input.molecule_1)
+        m2 = read_object(input.molecule_2)
+        network = read_object(input.network)
 
-        with open(input.network, "rb") as f:
-            network = pickle.load(f)
+        pt = create_pseudotrajectory(m1, m2, network)
 
-        frames = network.get_psudotrajectory(m1, m2)
+        write_object(pt, output.structure)
+        write_object(pt, output.trajectory)
 
-        with md.Writer(output.structure,m1.atoms.n_atoms+m2.atoms.n_atoms) as W:
-            W.write(frames[0])
 
-        with md.Writer(output.trajectory,m1.atoms.n_atoms+m2.atoms.n_atoms) as W:
-            for frame in frames:
-                W.write(frame)

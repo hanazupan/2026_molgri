@@ -19,6 +19,15 @@ class AbstractNode(ABC):
     def volume(self) -> float:
         pass
 
+    @abstractmethod
+    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+        pass
+
+    def get_transformed_bimolecular_structure(self, static_coordinates: NDArray, moving_coordinates: NDArray) -> NDArray:
+        transformed_moving_molecule = self.apply_transform_on(moving_coordinates)
+        merged_coordinates = np.vstack([static_coordinates, transformed_moving_molecule])
+        return merged_coordinates
+
 class AbstractNetwork(nx.Graph, ABC):
 
     """
@@ -33,6 +42,10 @@ class AbstractNetwork(nx.Graph, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.calculate_all_edge_properties()
+
+    def create_pseudotrajectory_coordinates_from(self, static_coordinates: NDArray, moving_coordinates: NDArray):
+        nodes = [node.get_transformed_bimolecular_structure(static_coordinates, moving_coordinates) for node in sorted(self.nodes)]
+        return nodes
 
     @cached_property
     def sorted_nodes(self):
@@ -71,7 +84,7 @@ class AbstractNetwork(nx.Graph, ABC):
         pass
 
     @abstractmethod
-    def _numerical_edge_type(self) -> dict:
+    def _numerical_edge_type(self, *edge_dict) -> dict:
         """
         Must return a dict in which for every edge type a number is returned.
         """

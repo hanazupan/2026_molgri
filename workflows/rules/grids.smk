@@ -9,9 +9,11 @@ ROTATION_ALGORITHM = config["rotation_algorithm"]
 N_ROTATION =  config["N_rotations"]
 TRANSLATION_ALGORITHM = config["translation_algorithm"]
 DEFINE_TRANSLATION_EACH_SUBGRID = config["translation_subgrids_A"]
+NETWORK_ID = config["unique_network_name"]
 
-NETWORK_ID = f"{ROTATION_ALGORITHM}-{N_ROTATION}-{TRANSLATION_ALGORITHM}-test"
 
+import matplotlib
+matplotlib.use('Agg')
 
 rule all:
     input:
@@ -76,7 +78,6 @@ rule save_network_properties:
         surfaces = "{some_path}/surfaces.npz",
         volumes = "{some_path}/volumes.npy",
     run:
-
         full_network = read_object(input.network_file)
 
         write_object(full_network.grid, output.grid)
@@ -142,30 +143,7 @@ rule display_network_node_attributes:
         grid = read_object(input.grid)
         draw_points(grid, save_as=output.grid, save_interactive_as=output.interactive_grid, show=False)
         volumes = read_object(input.volumes)
-        draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes, save_interactive_as=output.interactive_volumes,show=False)
-
-
-rule display_translation_properties:
-    run:
-        import plotly.graph_objects as go
-        from molgri.network.translation_network import create_translation_network
-        from molgri.plotting import draw_points, show_graph, show_array
-
-        to_network = create_translation_network(TRANSLATION_ALGORITHM, *DEFINE_TRANSLATION_EACH_SUBGRID)
-
-
-        fig = go.Figure()
-        draw_points(to_network.grid,fig,label_by_index=True)
-        hull = to_network.hulls[0]
-        draw_points(hull,fig,color="green")
-        fig.show()
-
-        show_graph(to_network, edge_property="distance")
-        show_graph(to_network,edge_property="surface")
-
-
-        show_array(to_network.adjacency_type_matrix.toarray(), "Adjacency_type")
-        show_array(to_network.distance_matrix.toarray(), "Distance_matrix")
-        show_array(to_network.surface_matrix.toarray(), "Surface_matrix")
+        draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes,
+            save_interactive_as=output.interactive_volumes,show=False)
 
 

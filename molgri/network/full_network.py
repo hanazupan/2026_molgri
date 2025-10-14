@@ -1,6 +1,7 @@
 from functools import cached_property
 
 import networkx as nx
+import numpy
 import numpy as np
 import MDAnalysis as md
 from MDAnalysis import Merge
@@ -43,20 +44,21 @@ class FullNode(AbstractNode):
     def hull(self) -> NDArray:
         return (self.translation_node.hull, self.rotation_node.hull)
 
-    def _apply_to_universe(self, moving_molecule: md.Universe) -> md.Universe:
-        copy_moving = moving_molecule.copy()
-        full_coord = self.get_7d_coordinate()
-        position = full_coord[:3]
-        orientation = full_coord[3:]
-        rotation_body = Rotation.from_quat(orientation, scalar_first=True)
-        copy_moving.atoms.rotate(rotation_body.as_matrix(), point=copy_moving.atoms.center_of_mass())
-        copy_moving.atoms.translate(position)
-        return copy_moving
+    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+        # first the rotation
+        rotated_points = self.rotation_node.apply_transform_on(molecular_coordinates)
+        # afterwards the translation
+        translated_points = self.translation_node.apply_transform_on(rotated_points)
+        return translated_points
+        # copy_moving = moving_molecule.copy()
+        # full_coord = self.get_7d_coordinate()
+        # position = full_coord[:3]
+        # orientation = full_coord[3:]
+        # rotation_body = Rotation.from_quat(orientation, scalar_first=True)
+        # copy_moving.atoms.rotate(rotation_body.as_matrix(), point=copy_moving.atoms.center_of_mass())
+        # copy_moving.atoms.translate(position)
+        # return copy_moving
 
-    def get_transformed_bimolecular_structure(self, static_molecule: md.Universe, moving_molecule: md.Universe) -> (md.Universe):
-        transformed_moving_molecule = self._apply_to_universe(moving_molecule)
-        merged_universe = Merge(static_molecule.atoms, transformed_moving_molecule.atoms)
-        return merged_universe
 
 
 class FullNetwork(AbstractNetwork):

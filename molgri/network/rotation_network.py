@@ -7,6 +7,7 @@ import numpy as np
 from numpy._typing import NDArray
 from scipy.sparse import coo_array
 from scipy.spatial import ConvexHull, geometric_slerp
+from scipy.spatial.transform import Rotation
 
 from molgri.network.utils import AbstractNetwork, AbstractNode
 from molgri.polytope import Cube4DPolytope
@@ -54,6 +55,15 @@ class RotationNode(AbstractNode):
         all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
         my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
         return my_convex_hull.area / 2.0
+
+    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+        # todo: important to consider center of mass?
+        center_of_geometry = molecular_coordinates.mean(axis=0)
+        shifted_points = molecular_coordinates - center_of_geometry
+        rot = Rotation.from_quat(self.coordinate, scalar_first=True)
+        rotated_points = rot.apply(shifted_points)
+        rotated_points += center_of_geometry
+        return rotated_points
 
 
 class RotationNetwork(AbstractNetwork):

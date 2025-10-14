@@ -1,0 +1,5 @@
+molecule_1: "H2O"
+molecule_2: "NH3"
+unique_network_name: "cartesian_periodic_test"
+structure_ending: "gro"
+trajectory_ending: "xtc"

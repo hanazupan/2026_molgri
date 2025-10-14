@@ -1,4 +1,6 @@
+unique_network_name: "cartesian_periodic_test"
+
 rotation_algorithm: "hypercube"
 N_rotations: 25
-translation_algorithm: "cartesian_nonperiodic"
-translation_subgrids_A: [[-10, 10, 5], [-20, 20, 3], [-10, 10, 7]]
+translation_algorithm: "cartesian_periodic"
+translation_subgrids_A: [[-10, 10, 4], [-20, 20, 4], [-10, 10, 8]]

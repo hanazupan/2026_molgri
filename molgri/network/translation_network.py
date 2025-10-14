@@ -3,6 +3,7 @@ from itertools import product
 
 import networkx as nx
 import numpy as np
+from numpy._typing import NDArray
 from scipy.spatial import ConvexHull
 
 from molgri.network.utils import AbstractNetwork, AbstractNode
@@ -70,6 +71,9 @@ class TranslationNode(AbstractNode):
         side_2 = self.y.hull[1] - self.y.hull[0]
         side_3 = self.z.hull[1] - self.z.hull[0]
         return side_1 * side_2 * side_3
+
+    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+        return molecular_coordinates + self.coordinate
 
 class TranslationNetwork(AbstractNetwork):
 
