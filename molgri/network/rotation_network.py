@@ -10,7 +10,11 @@ from scipy.spatial.transform import Rotation
 
 from molgri.network.utils import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi
 from molgri.network.polytope import Cube4DPolytope
-from molgri.utils import random_quaternions, distance_between_quaternions, exact_area_of_spherical_polygon, find_shared_quaternions, cut_off_constant_dimension, double_coverage_from_upper_quaternions
+from molgri.utils import all_rows_unique, hemisphere_quaternion_set, q_in_upper_sphere, quaternion_in_array, \
+    random_quaternions, \
+    distance_between_quaternions, \
+    exact_area_of_spherical_polygon, find_shared_quaternions, cut_off_constant_dimension, \
+    double_coverage_from_upper_quaternions, two_sets_of_quaternions_equal
 
 
 class RotationNode(AbstractNode):
@@ -42,6 +46,7 @@ class RotationNode(AbstractNode):
 
 
     def volume(self):
+        print(self.coordinate, self.index)
         # numerically estimate the volume
         level_of_detail = 20 # higher = more detail (interpolation points)
         # additional points are slerps between hull points
@@ -80,6 +85,7 @@ class RotationNetwork(AbstractNetwork):
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         shared_vertices = find_shared_quaternions(node1.hull, node2.hull)
+        print(node1.coordinate, node2.coordinate, "\n", np.round(shared_vertices, 3))
         lower_dim_points = cut_off_constant_dimension(shared_vertices)
         return  {"rotational": exact_area_of_spherical_polygon(lower_dim_points)}
 
@@ -93,8 +99,11 @@ def create_rotation_network(algorithm_keyword: str = "hypercube", *args, **kwarg
         case "hypercube":
             polytope = Cube4DPolytope()
             quaternions = polytope.create_exactly_N_points(*args, **kwargs)
+            print("generated quat are", quaternions)
         case _:
             raise KeyError(f"{algorithm_keyword} is not a valid rotation algorithm keyword")
+    assert len(quaternions) == args[0]
+    all_rows_unique(quaternions)
     return _create_network_from_upper_quaternions(quaternions)
 
 
@@ -103,25 +112,35 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
     double_coverage_points = double_coverage_from_upper_quaternions(upper_quaternions)
     unit_spherical_voronoi = ReducedSphericalVoronoi(double_coverage_points)
     hulls = unit_spherical_voronoi.get_hulls()
+
+    # why can we just use the hulls of half the points? We only use the hulls to calculate lengths/areas/volumes, so
+    # we need a set of points that are in the proximity of q or in the proximity of -q, but we don't really care if
+    # these points are in the upper or lower hemisphere. If we combine vertices from both q and -q then we no longer
+    # have only one sregion but two and so calculating its volume just gets more complex.
     single_coverage_hulls = hulls[:N_upper_points]
 
     # this is the matrix double the size of what we need
     adjacency_double_coverage = unit_spherical_voronoi.get_adjacency_matrix().toarray()
 
     # include the adjacency of opposing neighbours
-    upper_index2lower_index = {i: N_upper_points + i for i in range(N_upper_points)}
-    for i, line in enumerate(adjacency_double_coverage):
-        for j, el in enumerate(line):
-            if el and j in upper_index2lower_index.keys():
-                adjacency_double_coverage[i][upper_index2lower_index[j]] = adjacency_double_coverage[i][j]
+
+    # what is happening here: the adjacency_double_coverage matrix has four quadrants. The upper left and the bottom
+    # right are the same, so the upper points that are neighbours to other upper points or the lower points that are
+    # neighbours to other lower points. What is of interest now are the other two sub-matrices that show when an
+    # upper point is a neighbour to a lower point or vice versa.
+    # Therefore, here we are copying the positions of the True values from the upper right matrix to the upper left
+    # matrix to account for additional neighbourhood relations.
+    upper_left = adjacency_double_coverage[:N_upper_points, :N_upper_points]
+    upper_right = adjacency_double_coverage[:N_upper_points, N_upper_points:]
+    upper_left += upper_right
 
     # now return only upper left quadrant
-    adj_matrix = adjacency_double_coverage[:N_upper_points, :N_upper_points]
-    return coo_array(adj_matrix), single_coverage_hulls
+    return coo_array(upper_left), single_coverage_hulls
 
 def _create_network_from_upper_quaternions(upper_quaternions: NDArray) -> RotationNetwork:
     G = nx.Graph()
     adj_matrix, all_hulls = _adjacency_hulls_from_upper_quaternions(upper_quaternions)
+    print(adj_matrix.shape)
 
     all_layer_nodes = [RotationNode(rot_i, quat, all_hulls[rot_i]) for rot_i, quat in enumerate(upper_quaternions)]
     G.add_nodes_from(all_layer_nodes)

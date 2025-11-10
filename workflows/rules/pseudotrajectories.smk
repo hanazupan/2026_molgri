@@ -43,6 +43,7 @@ rule create_pseudotrajectory:
         m1 = read_object(input.molecule_1)
         m2 = read_object(input.molecule_2)
         network = read_object(input.network)
+        network.create_pseudotrajectory_coordinates_from(m1.atoms, m2.atoms)
 
         pt = create_pseudotrajectory(m1, m2, network)
 

@@ -17,15 +17,17 @@ matplotlib.use('Agg')
 
 rule all:
     input:
-        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
-            network_type = ["full", "rotation", "translation"],
-               to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
+        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/rotation_network/network.pkl",
+
+        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
+        #     network_type = ["full", "rotation", "translation"],
+        #        to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
-        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
-            ending = ["png"],
-            network_type = ["full", "rotation", "translation"],
-               to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network"])
+        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
+        #     ending = ["png"],
+        #     network_type = ["full", "rotation", "translation"],
+        #        to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network"])
 
 rule create_rotation_network:
     benchmark:

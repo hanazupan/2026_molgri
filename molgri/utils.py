@@ -76,6 +76,7 @@ def cut_off_constant_dimension_quat(my_array: NDArray):
     # rotate till last dimension is only zeros, then cut off the redundant dimension. Now we can correctly
     # calculate borders using lower-dimensional tools
     rotated_points = np.dot(my_array, vh.T)
+    print(np.round(rotated_points, 3))
     assert np.allclose(rotated_points[:, -1], 0.0)
     return rotated_points[:, :-1]
 

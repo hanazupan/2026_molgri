@@ -52,7 +52,9 @@ class AbstractNetwork(nx.Graph, ABC):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.calculate_all_edge_properties()
+        # if there is only one node there are no edges and therefore no edge properties
+        if self.number_of_nodes() > 1:
+            self.calculate_all_edge_properties()
 
     def create_pseudotrajectory_coordinates_from(self, static_coordinates: NDArray, moving_coordinates: NDArray):
         nodes = [node.get_transformed_bimolecular_structure(static_coordinates, moving_coordinates) for node in sorted(self.nodes)]
@@ -103,12 +105,13 @@ class AbstractNetwork(nx.Graph, ABC):
 
     def calculate_all_edge_properties(self):
         df_edges = nx.to_pandas_edgelist(self)
-        print(df_edges)
+        #print(df_edges)
         # now list all properties to be calculated
         df_edges["numerical_edge_type"] = df_edges.apply(
             lambda row: self._numerical_edge_type(row.to_dict())[row["edge_type"]], axis=1)
         df_edges["distance"] = df_edges.apply(
             lambda row: self._distances(row.to_dict())[row["edge_type"]], axis=1)
+        # there is some problem with surfaces, investigate
         df_edges["surface"] = df_edges.apply(
             lambda row: self._surfaces(row.to_dict())[row["edge_type"]], axis=1)
         for attribute in ["distance", "surface", "numerical_edge_type"]:
@@ -142,15 +145,21 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
         assert len(points.shape) == 2, "Must provide a 2D array of points"
         self.num_dimensions = points.shape[1]
         num_points = len(points)
-        if num_points == 1:
+        if self.num_dimensions  == 3 and num_points == 1:
             # this is mocked
             self.points = points
             self.vertices = np.array([[0, 0, 1]])
             self.regions = [[0]]
             # each point is assigned proportional areas
-            if self.num_dimensions == 3:
-                self.areas = np.array([4*np.pi])
-        elif 1 < num_points <= 4:
+            self.areas = np.array([4*np.pi])
+        elif self.num_dimensions == 4 and num_points <= 2:
+            # this is also mocked
+            self.points = points
+            self.vertices = np.array([[1, 0, 0, 0], [-1, 0, 0, 0]])
+            self.regions = [[0], [1]]
+            # each point is assigned proportional areas
+            self.areas = np.array([np.pi**2, np.pi**2])
+        elif 2 < num_points <= 4:
             raise ValueError(f"For technical reasons, the number of name can be either 1 or >4, your choice of "
                              f"{num_points} is not supported.")
         else:
