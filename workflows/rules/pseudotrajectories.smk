@@ -7,12 +7,13 @@ MOLECULE_2_NAME = config["molecule_2"]
 STRUCTURE_ENDING = config["structure_ending"]
 TRAJECTORY_ENDING = config["trajectory_ending"]
 NETWORK_NAME = config["unique_network_name"]
-SOME_FOLDER = f"{PATH_OUTPUT_PTS}/{MOLECULE_1_NAME}_{MOLECULE_2_NAME}/{NETWORK_NAME}/"
+SOME_FOLDER = f"{PATH_OUTPUT_PTS}{MOLECULE_1_NAME}_{MOLECULE_2_NAME}/{NETWORK_NAME}/"
 
 
 rule all:
     input:
-        structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}"
+        structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
+        trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}",
 
 
 rule copy_molecular_files_from_input:
@@ -23,10 +24,17 @@ rule copy_molecular_files_from_input:
         molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
         molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",
     run:
-        import shutil
+        from molgri.molecules.bimolecular import move_to_center
 
-        shutil.copy(input.molecule_1, output.molecule_1)
-        shutil.copy(input.molecule_2, output.molecule_2)
+        m1 = read_object(input.molecule_1)
+        m2 = read_object(input.molecule_2)
+
+        # center molecules
+        m1 = move_to_center(m1)
+        m2 = move_to_center(m2)
+
+        write_object(m1, output.molecule_1)
+        write_object(m2, output.molecule_2)
 
 
 rule create_pseudotrajectory:
@@ -38,16 +46,17 @@ rule create_pseudotrajectory:
         structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
         trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}"
     run:
-        from molgri.molecules.pseudotrajectory import create_pseudotrajectory
-
+        from molgri.molecules.bimolecular import get_bimolecular_pseudotrajectory, get_bimolecular_structure
         m1 = read_object(input.molecule_1)
         m2 = read_object(input.molecule_2)
+
         network = read_object(input.network)
-        network.create_pseudotrajectory_coordinates_from(m1.atoms, m2.atoms)
+        coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions)
 
-        pt = create_pseudotrajectory(m1, m2, network)
+        structure = get_bimolecular_structure(m1, m2)
+        pt = get_bimolecular_pseudotrajectory(m1, m2, coordinates)
 
-        write_object(pt, output.structure)
+        write_object(structure, output.structure)
         write_object(pt, output.trajectory)
 
 

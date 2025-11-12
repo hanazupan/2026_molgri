@@ -62,6 +62,7 @@ def _read_sparse_array(filename: str) -> sparray:
     return load_npz(filename)
 
 def _write_structure(universe, filename: str) -> None:
+    print(universe.atoms[-1].mass, filename)
     universe.atoms.write(filename)
 
 def _write_trajectory(universe, filename: str) -> None:

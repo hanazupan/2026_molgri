@@ -55,9 +55,14 @@ class RotationNode(AbstractNode):
             for point2 in self.hull[index_1+1:]:
                 points = geometric_slerp(point1, point2, t=np.linspace(0, 1, level_of_detail))
                 additional_points.append(points)
-        all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
-        my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
-        return my_convex_hull.area / 2.0
+        if additional_points:
+            all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
+            my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
+            return my_convex_hull.area / 2.0
+        else:
+            all_hull_points = self.hull
+            return 0.0
+
 
     def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
         # todo: important to consider center of mass?
@@ -85,7 +90,6 @@ class RotationNetwork(AbstractNetwork):
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         shared_vertices = find_shared_quaternions(node1.hull, node2.hull)
-        print(node1.coordinate, node2.coordinate, "\n", np.round(shared_vertices, 3))
         lower_dim_points = cut_off_constant_dimension(shared_vertices)
         return  {"rotational": exact_area_of_spherical_polygon(lower_dim_points)}
 
@@ -99,7 +103,6 @@ def create_rotation_network(algorithm_keyword: str = "hypercube", *args, **kwarg
         case "hypercube":
             polytope = Cube4DPolytope()
             quaternions = polytope.create_exactly_N_points(*args, **kwargs)
-            print("generated quat are", quaternions)
         case _:
             raise KeyError(f"{algorithm_keyword} is not a valid rotation algorithm keyword")
     assert len(quaternions) == args[0]
@@ -140,7 +143,6 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
 def _create_network_from_upper_quaternions(upper_quaternions: NDArray) -> RotationNetwork:
     G = nx.Graph()
     adj_matrix, all_hulls = _adjacency_hulls_from_upper_quaternions(upper_quaternions)
-    print(adj_matrix.shape)
 
     all_layer_nodes = [RotationNode(rot_i, quat, all_hulls[rot_i]) for rot_i, quat in enumerate(upper_quaternions)]
     G.add_nodes_from(all_layer_nodes)

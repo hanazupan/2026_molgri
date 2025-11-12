@@ -46,14 +46,6 @@ class FullNode(AbstractNode):
         # afterwards the translation
         translated_points = self.translation_node.apply_transform_on(rotated_points)
         return translated_points
-        # copy_moving = moving_molecule.copy()
-        # full_coord = self.get_7d_coordinate()
-        # position = full_coord[:3]
-        # orientation = full_coord[3:]
-        # rotation_body = Rotation.from_quat(orientation, scalar_first=True)
-        # copy_moving.atoms.rotate(rotation_body.as_matrix(), point=copy_moving.atoms.center_of_mass())
-        # copy_moving.atoms.translate(position)
-        # return copy_moving
 
 
 

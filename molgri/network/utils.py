@@ -34,10 +34,9 @@ class AbstractNode(ABC):
     def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
         pass
 
-    def get_transformed_bimolecular_structure(self, static_coordinates: NDArray, moving_coordinates: NDArray) -> NDArray:
+    def get_transformed_bimolecular_structure(self, moving_coordinates: NDArray) -> NDArray:
         transformed_moving_molecule = self.apply_transform_on(moving_coordinates)
-        merged_coordinates = np.vstack([static_coordinates, transformed_moving_molecule])
-        return merged_coordinates
+        return transformed_moving_molecule
 
 class AbstractNetwork(nx.Graph, ABC):
 
@@ -53,11 +52,11 @@ class AbstractNetwork(nx.Graph, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # if there is only one node there are no edges and therefore no edge properties
-        if self.number_of_nodes() > 1:
-            self.calculate_all_edge_properties()
+        #if self.number_of_nodes() > 1:
+        #    self.calculate_all_edge_properties()
 
-    def create_pseudotrajectory_coordinates_from(self, static_coordinates: NDArray, moving_coordinates: NDArray):
-        nodes = [node.get_transformed_bimolecular_structure(static_coordinates, moving_coordinates) for node in sorted(self.nodes)]
+    def create_pseudotrajectory_coordinates_from(self, moving_coordinates: NDArray):
+        nodes = [node.get_transformed_bimolecular_structure(moving_coordinates) for node in sorted(self.nodes)]
         return nodes
 
     @cached_property

@@ -17,11 +17,9 @@ matplotlib.use('Agg')
 
 rule all:
     input:
-        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/rotation_network/network.pkl",
-
-        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
-        #     network_type = ["full", "rotation", "translation"],
-        #        to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
+        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
+            network_type = ["full", "rotation", "translation"],
+               to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
         # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",

@@ -1,5 +1,5 @@
 molecule_1: "graphene"
-molecule_2: "methane"
-unique_network_name: "cartesian_periodic_test"
+molecule_2: "carbon_dioxide"
+unique_network_name: "cartesian_xy_8"
 structure_ending: "gro"
 trajectory_ending: "xtc"
