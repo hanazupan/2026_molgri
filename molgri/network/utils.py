@@ -144,30 +144,16 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
         assert len(points.shape) == 2, "Must provide a 2D array of points"
         self.num_dimensions = points.shape[1]
         num_points = len(points)
-        if self.num_dimensions  == 3 and num_points == 1:
-            # this is mocked
-            self.points = points
-            self.vertices = np.array([[0, 0, 1]])
-            self.regions = [[0]]
-            # each point is assigned proportional areas
-            self.areas = np.array([4*np.pi])
-        elif self.num_dimensions == 4 and num_points <= 2:
-            # this is also mocked
-            self.points = points
-            self.vertices = np.array([[1, 0, 0, 0], [-1, 0, 0, 0]])
-            self.regions = [[0], [1]]
-            # each point is assigned proportional areas
-            self.areas = np.array([np.pi**2, np.pi**2])
-        elif 2 < num_points <= 4:
-            raise ValueError(f"For technical reasons, the number of name can be either 1 or >4, your choice of "
-                             f"{num_points} is not supported.")
-        else:
-            super().__init__(points, radius=radius, threshold=threshold)
-            if self.num_dimensions == 3:
-                self.areas = super().calculate_areas()
-            self._purge_redundant_voronoi_vertices()
-            # make sure no repeated vertices now
-            all_rows_unique(self.vertices)
+
+        if num_points <= 4:
+            raise ValueError(f"You are using ReducedSphericalVoronoi for < 5 points, where you should be using MikroVoronoi.")
+
+        super().__init__(points, radius=radius, threshold=threshold)
+        if self.num_dimensions == 3:
+            self.areas = super().calculate_areas()
+        self._purge_redundant_voronoi_vertices()
+        # make sure no repeated vertices now
+        all_rows_unique(self.vertices)
 
     def calculate_areas(self) -> NDArray:
         """
@@ -226,6 +212,56 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
         # now we can overwrite
         self.vertices = new_vertices
         self.regions = new_regions
+
+class MikroVoronoi(ReducedSphericalVoronoi):
+    """
+    This is a class mocking spherical voronoi cells for very small numbers of points (when it's impossible to
+    actually get voronoi cells).
+    """
+
+    def __init__(self, points, **kwargs):
+        assert len(points.shape) == 2, "Must provide a 2D array of points"
+        self.num_dimensions = points.shape[1]
+        assert self.num_dimensions in [3, 4]
+        self.N_points = len(points)
+        assert self.N_points <= 4, ("You are using MikroVoronoi for >= 5 points, where you should be using "
+                        "ReducedSphericalVoronoi.")
+        self.points = points
+
+        if self.num_dimensions  == 3:
+            self.vertices = None #np.array([[0, 0, 1]])
+            self.regions = None #[[0]]
+            # area of unit sphere divided into  N parts
+            self.areas = np.array([4 * np.pi / self.N_points] * self.N_points)
+        else:
+            self.points = points
+            self.vertices = None #np.array([[1, 0, 0, 0], [-1, 0, 0, 0]])
+            self.regions = None #[[0], [1]]
+            # hyperarea of half unit hypersphere  divided into  N parts
+            self.areas = np.array([np.pi ** 2 / self.N_points] * self.N_points)
+
+    def get_adjacency_matrix(self) -> coo_array:
+        """
+        For such a small number of points you are neighbour with everybody except yourself.
+        """
+        result = np.eye(self.N_points)
+        # invert 0s and 1s
+        result =1 - result
+        return coo_array(result)
+
+
+    def get_hulls(self):
+        return [None] * self.N_points
+        #eturn [self.vertices[region] for region in self.regions]
+
+
+
+
+def get_spherical_voronoi(points, **kwargs):
+    if len(points) <= 4:
+        return MikroVoronoi(points, **kwargs)
+    else:
+        return ReducedSphericalVoronoi(points, **kwargs)
 
 
 def find_shared_vertices(vertices1: NDArray, vertices2: NDArray) -> NDArray:

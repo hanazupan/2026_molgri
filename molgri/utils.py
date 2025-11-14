@@ -8,9 +8,11 @@ import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import pi
 from scipy.linalg import svd
+from scipy.spatial import ConvexHull, geometric_slerp
 from scipy.spatial.transform import Rotation
 
 from molgri.constants import UNIQUE_TOL
+
 
 # ========================= VERY GENERAL ARRAY STUFF ================================
 
@@ -572,6 +574,95 @@ def random_quaternions(n: int = 1000, only_upper=False) -> NDArray:
         return hemisphere_quaternion_set(result, upper=True)
     return result
 
+
+def project_quaternions_to_3D(quaternion_array: NDArray) -> NDArray:
+    """
+    This is only for visualization, it is not volume-preserving
+    Args:
+        quaternion_array ():
+
+    Returns:
+
+    """
+    three_components = quaternion_array[:, :3]
+    for i, q in enumerate(quaternion_array):
+        if not np.isclose(q[3], 1):
+            three_components[i] /= (1-q[3])
+    return three_components
+
+def additional_vertices_hyprsphere_polygons(current_vertices, n_per_line: int = 10):
+    from scipy.spatial.transform import Slerp, Rotation
+    additional_points = []
+    for index_1, point1 in enumerate(current_vertices):
+        for point2 in current_vertices[index_1 + 1:]:
+            rot = Rotation.from_quat(np.array([point1, point2]), scalar_first=True)
+            my_slerp = Slerp([0,1], rot)
+            t = np.linspace(0, 1, n_per_line)
+            interpolated_rot = my_slerp(t)
+            points = interpolated_rot.as_quat(scalar_first=True)
+            #points = geometric_slerp(point1, point2, t=np.linspace(0, 1, n_per_line))
+            additional_points.append(points)
+    all_hull_points = np.vstack([np.vstack(additional_points), current_vertices])
+    return all_hull_points
+
+def assign_closest_quaternion(points: NDArray, available_quaternions) -> NDArray:
+    """
+    TODO: i am not sure if this is correct
+    Args:
+        points ():
+        available_quaternions ():
+
+    Returns:
+
+    """
+    # dot product of each sample with each site
+    dots = points @ available_quaternions.T           # shape (N, k)
+    return np.argmax(dots, axis=1)   # closest site (max dot = smallest angle)
+
+
+def voronoi_cell_volumes(voronoi_cell_centers, N=200000):
+    """
+    This is Monte-Carlo integration on hyperspere. It doesn't rely on Voronoi cell edges, just on the central points
+    and the property of Voronoi cells that
+    Args:
+        voronoi_cell_centers ():
+        N ():
+
+    Returns:
+
+    """
+    X = random_quaternions(N)
+    idx = assign_closest_quaternion(X, voronoi_cell_centers)
+
+    k = voronoi_cell_centers.shape[0]
+    counts = np.bincount(idx, minlength=k)
+
+    vols = (2 * np.pi ** 2) * counts / N
+    return vols
+
+
+def get_volume_hypersphere_polygon(polygon_points: NDArray) -> float:
+    def spherical_tetra_volume(u4):
+        # u4: shape (4,4) unit rows = four vertices on S^3
+        # formula using det and sum of pairwise dot-products
+        G = u4 @ u4.T
+        det = np.linalg.det(u4)
+        s = G[np.triu_indices(4, 1)].sum()  # sum_{i<j} u_i.u_j
+        return 2.0 * np.arctan2(abs(det), 1.0 + s)
+
+    all_hull_points = additional_vertices_hyprsphere_polygons(polygon_points, 10)
+    my_hull = ConvexHull(all_hull_points, "QJ")
+
+    total_vol = []
+    for simplex in my_hull.simplices:
+        tetra = all_hull_points[simplex]
+        all_row_norms_similar(tetra, 1.0)
+        piece_volume = spherical_tetra_volume(tetra)
+        total_vol.append(piece_volume)
+    #print(np.sort(np.round(np.array(total_vol), 4)))
+    #print()
+    print(my_hull.area / 2)
+    return np.sum(total_vol)
 
 # def points4D_2_8cells(point_array:NDArray) -> tuple:
 #     """

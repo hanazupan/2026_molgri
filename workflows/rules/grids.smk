@@ -2,8 +2,9 @@
 Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
 """
 
-from workflows.helpers.PATHS import PATH_OUTPUT_NETWORKS
+from workflows.helpers.PATHS import PATH_OUTPUT_NETWORKS, PATH_OUTPUT_TESTS
 from workflows.helpers.io import write_object, read_object
+import numpy as np
 
 ROTATION_ALGORITHM = config["rotation_algorithm"]
 N_ROTATION =  config["N_rotations"]
@@ -17,9 +18,11 @@ matplotlib.use('Agg')
 
 rule all:
     input:
-        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
-            network_type = ["full", "rotation", "translation"],
-               to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
+        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/rotation_network/network.pkl"
+    # input:
+    #     expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
+    #         network_type = ["full", "rotation", "translation"],
+    #            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
         # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
@@ -36,7 +39,25 @@ rule create_rotation_network:
         from molgri.network.rotation_network import create_rotation_network
 
         rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION)
+        print(rotation_network.volumes)
+        print(np.mean(rotation_network.volumes), np.pi**2/N_ROTATION, np.sum(rotation_network.volumes), np.pi**2)
         write_object(rotation_network, output.network_file)
+
+rule test_rotation_volume_convergence:
+    run:
+        from molgri.network.rotation_network import create_rotation_network
+        import matplotlib.pyplot as plt
+
+        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION)
+        all_volumes = []
+        detail_levels = [1, 2, 3, 4, 5, 7, 10, 20, 50]
+        for detail_level in detail_levels:
+            all_volumes.append([node.volume(detail_level) for node in rotation_network.nodes])
+        volumes = np.array(all_volumes)
+        for volume in volumes.T:
+            plt.plot(np.array(detail_levels), volume)
+        plt.savefig(f"{PATH_OUTPUT_TESTS}volume_convergence.png", dpi=600)
+
 
 rule create_translation_network:
     benchmark:

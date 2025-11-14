@@ -1,8 +1,11 @@
+from itertools import product
+
 import numpy as np
 from scipy.constants import pi
 from scipy.spatial import SphericalVoronoi
 
-from molgri.utils import (normalise_vectors, norm_per_axis, distance_between_quaternions, dist_on_sphere,
+from molgri.utils import (get_volume_hypersphere_polygon, normalise_vectors, norm_per_axis,
+                          distance_between_quaternions, dist_on_sphere,
                           angle_between_vectors, find_inverse_quaternion, q_in_upper_sphere,
                           hemisphere_quaternion_set, is_array_with_d_dim_r_rows_c_columns, all_row_norms_similar,
                           all_row_norms_equal_k, quaternion_in_array, two_sets_of_quaternions_equal,
@@ -328,17 +331,34 @@ def test_exact_area_of_spherical_polygon():
             areas.append(exact_area_of_spherical_polygon(vertices))
         assert np.allclose(np.array(areas), expected_areas, atol=1e-5)
 
+def test_volume_hypersphere_polygon():
+    # we take hypercube coordinates to perfectly divide into 16 regions
+    example_points = list(product((-1/2, 1/2), repeat=4))
+    example_points = np.array(example_points)
+    N_points = len(example_points)
+    all_row_norms_equal_k(example_points, 1)
+    spherical_voronoi = SphericalVoronoi(example_points)
+
+
+    expected_volume_per_region = 2*pi**2 / N_points
+    print(f"Expected: {expected_volume_per_region}")
+
+    from molgri.utils import voronoi_cell_volumes
+    print(voronoi_cell_volumes(example_points))
+
+
 
 if __name__ == "__main__":
-    test_normalising()
-    test_normalising_on_arrays()
-    test_all_row_norms_similar()
-    test_is_array_with_d_dim_r_rows_c_columns()
-    test_distance_between_quaternions()
-    test_unit_dist_on_sphere()
-    test_angle_between()
-    test_find_inverse_quaternion()
-    test_quat_in_array()
-    test_quaternion_sets_equal()
-    test_sort_points_on_sphere_ccw()
-    test_exact_area_of_spherical_polygon()
+    test_volume_hypersphere_polygon()
+    # test_normalising()
+    # test_normalising_on_arrays()
+    # test_all_row_norms_similar()
+    # test_is_array_with_d_dim_r_rows_c_columns()
+    # test_distance_between_quaternions()
+    # test_unit_dist_on_sphere()
+    # test_angle_between()
+    # test_find_inverse_quaternion()
+    # test_quat_in_array()
+    # test_quaternion_sets_equal()
+    # test_sort_points_on_sphere_ccw()
+    # test_exact_area_of_spherical_polygon()

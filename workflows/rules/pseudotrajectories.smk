@@ -1,3 +1,7 @@
+"""
+Here we use existing networks and apply them to molecules.
+"""
+
 from workflows.helpers.io import read_object, write_object
 from workflows.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT_PTS, PATH_OUTPUT_NETWORKS
 
@@ -17,6 +21,9 @@ rule all:
 
 
 rule copy_molecular_files_from_input:
+    """
+    Here the goal is just to start a new directory and copy molecular files there.
+    """
     input:
         molecule_1 = f"{PATH_INPUT_MOLECULES}{MOLECULE_1_NAME}.{STRUCTURE_ENDING}",
         molecule_2 = f"{PATH_INPUT_MOLECULES}{MOLECULE_2_NAME}.{STRUCTURE_ENDING}",
@@ -38,6 +45,9 @@ rule copy_molecular_files_from_input:
 
 
 rule create_pseudotrajectory:
+    """
+    Here we are creating a pseudotrajectory from two molecules and a network.
+    """
     input:
         molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
         molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",

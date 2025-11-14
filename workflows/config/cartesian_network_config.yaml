@@ -1,6 +1,9 @@
-unique_network_name: "cartesian_xy_8"
+unique_network_name: "cartesian_nonperiodic_45"
 
 rotation_algorithm: "hypercube"
-N_rotations: 8
-translation_algorithm: "cartesian_xy_periodic"
-translation_subgrids_A: [[-3, 3, 5], [-3, 3, 5], [2, 10, 5]]
+N_rotations: 35
+translation_algorithm: "cartesian_nonperiodic"
+translation_subgrids_A: [[-20, 20, 50], [-20, 20, 3], [5, 20, 5]]
+
+
+
