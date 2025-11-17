@@ -61,7 +61,8 @@ rule create_pseudotrajectory:
         m2 = read_object(input.molecule_2)
 
         network = read_object(input.network)
-        coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions)
+        weights = m2.atoms.masses
+        coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions, weights)
 
         structure = get_bimolecular_structure(m1, m2)
         pt = get_bimolecular_pseudotrajectory(m1, m2, coordinates)

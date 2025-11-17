@@ -13,7 +13,7 @@ from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
 
 from molgri.constants import UNIQUE_TOL
-from molgri.utils import all_rows_unique, which_row_is_k, angle_between_vectors
+from molgri.utils.arrays import all_rows_unique, which_row_is_k, angle_between_vectors
 
 
 class AbstractNode(ABC):
@@ -22,21 +22,15 @@ class AbstractNode(ABC):
     def __lt__(self, other: "AbstractNode") -> bool:
         pass
 
+    @property
     @abstractmethod
     def hull(self) -> NDArray:
         pass
 
-    @abstractmethod
-    def volume(self) -> float:
-        pass
 
     @abstractmethod
-    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights: NDArray = None) -> NDArray:
         pass
-
-    def get_transformed_bimolecular_structure(self, moving_coordinates: NDArray) -> NDArray:
-        transformed_moving_molecule = self.apply_transform_on(moving_coordinates)
-        return transformed_moving_molecule
 
 class AbstractNetwork(nx.Graph, ABC):
 
@@ -55,8 +49,8 @@ class AbstractNetwork(nx.Graph, ABC):
         #if self.number_of_nodes() > 1:
         #    self.calculate_all_edge_properties()
 
-    def create_pseudotrajectory_coordinates_from(self, moving_coordinates: NDArray):
-        nodes = [node.get_transformed_bimolecular_structure(moving_coordinates) for node in sorted(self.nodes)]
+    def create_pseudotrajectory_coordinates_from(self, moving_coordinates: NDArray, weights: NDArray = None) -> list:
+        nodes = [node.apply_transform_on(moving_coordinates, weights=weights) for node in sorted(self.nodes)]
         return nodes
 
     @cached_property
@@ -66,7 +60,7 @@ class AbstractNetwork(nx.Graph, ABC):
 
     @cached_property
     def volumes(self) -> NDArray:
-        volumes = [node.volume() for node in self.sorted_nodes]
+        volumes = [node.volume for node in self.sorted_nodes]
         volumes = np.array(volumes, dtype=float)
         return volumes
 
@@ -224,8 +218,6 @@ class MikroVoronoi(ReducedSphericalVoronoi):
         self.num_dimensions = points.shape[1]
         assert self.num_dimensions in [3, 4]
         self.N_points = len(points)
-        assert self.N_points <= 4, ("You are using MikroVoronoi for >= 5 points, where you should be using "
-                        "ReducedSphericalVoronoi.")
         self.points = points
 
         if self.num_dimensions  == 3:
@@ -258,7 +250,9 @@ class MikroVoronoi(ReducedSphericalVoronoi):
 
 
 def get_spherical_voronoi(points, **kwargs):
-    if len(points) <= 4:
+    if len(points) <= 4 and points.shape[1] == 3:
+        return MikroVoronoi(points, **kwargs)
+    elif len(points) <= 8 and points.shape[1] == 4:
         return MikroVoronoi(points, **kwargs)
     else:
         return ReducedSphericalVoronoi(points, **kwargs)

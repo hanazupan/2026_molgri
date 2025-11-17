@@ -5,16 +5,16 @@ import networkx as nx
 import numpy as np
 from numpy._typing import NDArray
 from scipy.sparse import coo_array
-from scipy.spatial import ConvexHull, geometric_slerp
 from scipy.spatial.transform import Rotation
 
-from molgri.network.utils import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi, get_spherical_voronoi
+from molgri.network.abstract import AbstractNetwork, AbstractNode, get_spherical_voronoi
 from molgri.network.polytope import Cube4DPolytope
-from molgri.utils import all_rows_unique, hemisphere_quaternion_set, q_in_upper_sphere, quaternion_in_array, \
-    random_quaternions, \
-    distance_between_quaternions, \
-    exact_area_of_spherical_polygon, find_shared_quaternions, cut_off_constant_dimension, \
-    double_coverage_from_upper_quaternions, two_sets_of_quaternions_equal
+
+from molgri.utils.arrays import (all_rows_unique)
+from molgri.utils.spheres import exact_area_of_spherical_polygon
+from molgri.utils.quaternions import (double_coverage_from_upper_quaternions, find_shared_quaternions,
+                                      hypersphere_voronoi_cell_volumes, random_quaternions,
+                                      distance_between_quaternions, cut_off_constant_dimension_quat)
 
 
 class RotationNode(AbstractNode):
@@ -24,10 +24,11 @@ class RotationNode(AbstractNode):
     translation.
     """
 
-    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull = None):
+    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull=None, hull_volume=None):
         self.index = rotation_index
         self.coordinate = quaternion
         self.hull = hypersphere_hull
+        self.volume = hull_volume
 
     def hull(self) -> NDArray:
         return self.hull
@@ -45,62 +46,19 @@ class RotationNode(AbstractNode):
         return self.index < other.index
 
 
-    def volume(self, level_of_detail: int = 10):
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
         """
-        We are numerically estimating the volume of the Voronoi cell.
+        Appy the rotation of this node onto the rigid body defined by given molecular coordinates. If weights are not
+        provided,the rotation is done around geometrical center, otherwise around the center of mass.
 
         Args:
-            level_of_detail (int, optional): The number of interpolation points for volume calculation. I have tested
-            that after 10, the accuracy doesn't increase, just the calculation time does
+            molecular_coordinates (NDArray): an array of molecular coordinates of shape (N_atoms, 3)
+            weights (NDArray or None): usually given as a list of atomic weights of length N_atoms
 
+        Returns:
+            an array of molecular coordinates of shape (N_atoms, 3) after the rotation is applied
         """
-        # additional points are slerps between hull points
-        def spherical_tetra_volume(u):
-            """
-            Compute volume of spherical tetrahedron on unit S^3.
-            u: (4,4) array of 4 unit 4D vertices
-            Returns: 3-volume on unit S^3
-            """
-            G = u @ u.T  # Gram matrix (dot products)
-            det = np.linalg.det(u)
-            s = 0.0
-            for i in range(4):
-                for j in range(i + 1, 4):
-                    s += G[i, j]
-            vol = 2 * np.arctan2(abs(det), 1 + s)
-            return vol
-
-        my_hull = ConvexHull(self.hull, qhull_options='QJ')
-        total_vol = []
-        for simplex in my_hull.simplices:
-            tetra = self.hull[simplex]
-            piece_volume = spherical_tetra_volume(tetra)
-            sub_hull = ConvexHull(tetra, qhull_options='QJ')
-            print(np.round(sub_hull.area/2, 4))
-            total_vol.append(piece_volume)
-        print(np.sort(np.round(np.array(total_vol), 4)))
-        print()
-        return np.sum(total_vol)
-
-        additional_points = []
-        for index_1, point1 in enumerate(self.hull):
-
-
-            for point2 in self.hull[index_1+1:]:
-                points = geometric_slerp(point1, point2, t=np.linspace(0, 1, level_of_detail))
-                additional_points.append(points)
-        if additional_points:
-            all_hull_points = np.vstack([np.vstack(additional_points), self.hull])
-            my_convex_hull = ConvexHull(all_hull_points, qhull_options='QJ')
-            return my_convex_hull.area / 2.0
-        else:
-            all_hull_points = self.hull
-            return 0.0
-
-
-    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
-        # todo: important to consider center of mass?
-        center_of_geometry = molecular_coordinates.mean(axis=0)
+        center_of_geometry = np.average(molecular_coordinates, axis=0, weights=weights)
         shifted_points = molecular_coordinates - center_of_geometry
         rot = Rotation.from_quat(self.coordinate, scalar_first=True)
         rotated_points = rot.apply(shifted_points)
@@ -124,13 +82,14 @@ class RotationNetwork(AbstractNetwork):
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         shared_vertices = find_shared_quaternions(node1.hull, node2.hull)
-        lower_dim_points = cut_off_constant_dimension(shared_vertices)
+        lower_dim_points = cut_off_constant_dimension_quat(shared_vertices)
         return  {"rotational": exact_area_of_spherical_polygon(lower_dim_points)}
 
     def _numerical_edge_type(self, edge_dict) -> dict:
         return  {"rotational": 4}
 
-def create_rotation_network(algorithm_keyword: str, N_rotations: int, **kwargs) -> RotationNetwork:
+def create_rotation_network(algorithm_keyword: str, N_rotations: int, rotation_random_seed, **kwargs) -> (
+        RotationNetwork):
     """
     This is a high-level method that is given the algorithm name and the number of points (optionally other
     arguments) and returns a RotationNetwork which consists of Nodes and Edges between them - so as a minimum,
@@ -153,10 +112,11 @@ def create_rotation_network(algorithm_keyword: str, N_rotations: int, **kwargs) 
     else:
         match algorithm_keyword:
             case "random":
-                quaternions = random_quaternions(N_rotations, only_upper=True, **kwargs)
+                quaternions = random_quaternions(N_rotations, only_upper=True,
+                                                 rotation_random_seed=rotation_random_seed, **kwargs)
             case "hypercube":
                 polytope = Cube4DPolytope()
-                quaternions = polytope.create_exactly_N_points(N_rotations, **kwargs)
+                quaternions = polytope.create_exactly_N_points(N_rotations, rotation_random_seed=rotation_random_seed, **kwargs)
             case _:
                 raise KeyError(f"{algorithm_keyword} is not a valid rotation algorithm keyword")
         # test that we have the right number of unique quaternions
@@ -165,7 +125,7 @@ def create_rotation_network(algorithm_keyword: str, N_rotations: int, **kwargs) 
     return _create_network_from_upper_quaternions(quaternions)
 
 
-def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple[coo_array, list]:
+def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple[coo_array, NDArray, NDArray]:
     """
     In this function we deal with two properties of quaternion networks that are affected by double coverage: the
     hulls and the neighbourhood. Both must be first determined for a hypersphere that contains not only the
@@ -178,12 +138,13 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
 
     Returns:
         a tuple of adjacency matrix of shape (N_quaternions, N_quaternions) and a list of hull vectors of length
-        N_quaternions
+        N_quaternions and a list of volumes of length N_quaternions
     """
     N_upper_points = upper_quaternions.shape[0]
     double_coverage_points = double_coverage_from_upper_quaternions(upper_quaternions)
     unit_spherical_voronoi = get_spherical_voronoi(double_coverage_points)
     hulls = unit_spherical_voronoi.get_hulls()
+    volumes = hypersphere_voronoi_cell_volumes(double_coverage_points)
 
 
     # why can we just use the hulls of half the points? We only use the hulls to calculate lengths/areas/volumes, so
@@ -191,6 +152,7 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
     # these points are in the upper or lower hemisphere. If we combine vertices from both q and -q then we no longer
     # have only one sregion but two and so calculating its volume just gets more complex.
     single_coverage_hulls = hulls[:N_upper_points]
+    single_coverage_volumes = volumes[:N_upper_points]
 
     # this is the matrix double the size of what we need
     adjacency_double_coverage = unit_spherical_voronoi.get_adjacency_matrix().toarray()
@@ -208,14 +170,15 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
     upper_left += upper_right
 
     # now return only upper left quadrant
-    return coo_array(upper_left), single_coverage_hulls
+    return coo_array(upper_left), single_coverage_hulls, single_coverage_volumes
 
 def _create_network_from_upper_quaternions(upper_quaternions: NDArray) -> RotationNetwork:
     G = nx.Graph()
-    adj_matrix, all_hulls = _adjacency_hulls_from_upper_quaternions(upper_quaternions)
+    adj_matrix, all_hulls, all_volumes = _adjacency_hulls_from_upper_quaternions(upper_quaternions)
 
     # first creating nodes with their corresponding hulls
-    all_layer_nodes = [RotationNode(rot_i, quat, all_hulls[rot_i]) for rot_i, quat in enumerate(upper_quaternions)]
+    all_layer_nodes = [RotationNode(rot_i, quat, all_hulls[rot_i], all_volumes[rot_i]) for rot_i, quat in enumerate(
+        upper_quaternions)]
     G.add_nodes_from(all_layer_nodes)
     # then adding edges from the adjacency matrx
     for node_i_1, node_i_2 in zip(adj_matrix.row, adj_matrix.col):

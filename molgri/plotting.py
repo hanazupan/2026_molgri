@@ -7,7 +7,8 @@ from scipy.spatial import geometric_slerp
 import plotly.graph_objects as go
 import plotly.express as px
 
-from molgri.utils import normalise_vectors, sort_points_on_sphere_ccw
+from molgri.utils.arrays import normalise_vectors
+from molgri.utils.spheres import sort_points_on_sphere_ccw
 
 
 def normalize_marker_sizes(values, min_size=5, max_size=20):

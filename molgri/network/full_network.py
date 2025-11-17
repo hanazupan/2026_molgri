@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 from molgri.network.rotation_network import RotationNode, RotationNetwork
 from molgri.network.translation_network import TranslationNode, TranslationNetwork
-from molgri.network.utils import AbstractNetwork, AbstractNode
+from molgri.network.abstract import AbstractNetwork, AbstractNode
 
 
 class FullNode(AbstractNode):
@@ -34,13 +34,14 @@ class FullNode(AbstractNode):
     def get_indices(self):
         return [self.translation_node, self.rotation_node]
 
+    @cached_property
     def volume(self):
-        return self.translation_node.volume() * self.rotation_node.volume()
+        return self.translation_node.volume * self.rotation_node.volume
 
     def hull(self) -> NDArray:
         return (self.translation_node.hull, self.rotation_node.hull)
 
-    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
         # first the rotation
         rotated_points = self.rotation_node.apply_transform_on(molecular_coordinates)
         # afterwards the translation

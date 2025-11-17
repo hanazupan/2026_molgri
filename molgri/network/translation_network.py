@@ -6,9 +6,9 @@ import networkx as nx
 import numpy as np
 from numpy._typing import NDArray
 
-from molgri.network.utils import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi, find_shared_vertices, circular_sector_area
+from molgri.network.abstract import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi, find_shared_vertices, circular_sector_area
 from molgri.network.polytope import IcosahedronPolytope
-from molgri.utils import exact_area_of_spherical_polygon
+from molgri.utils.spheres import exact_area_of_spherical_polygon
 
 
 class OneDimTranslationNode:
@@ -91,6 +91,7 @@ class SphericalTranslationNode(AbstractNode):
         vertices.append(spherical_hull * np.linalg.norm(radial_hull[1]))
         return vertices
 
+    @cached_property
     def volume(self):
         radius_smaller = self.r.hull[0]
         radius_larger = self.r.hull[1]
@@ -100,7 +101,7 @@ class SphericalTranslationNode(AbstractNode):
         position_volume = 4 / 3 * np.pi * (radius_larger ** 3 - radius_smaller ** 3) * percentage
         return position_volume
 
-    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
         return molecular_coordinates + self.coordinate
 
 
@@ -137,14 +138,14 @@ class TranslationNode(AbstractNode):
         all_vertices = list(product(x_hull, y_hull, z_hull))
         return np.array(all_vertices)
 
-
+    @cached_property
     def volume(self):
         side_1 = self.x.hull[1] - self.x.hull[0]
         side_2 = self.y.hull[1] - self.y.hull[0]
         side_3 = self.z.hull[1] - self.z.hull[0]
         return side_1 * side_2 * side_3
 
-    def apply_transform_on(self, molecular_coordinates: NDArray) -> NDArray:
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
         return molecular_coordinates + self.coordinate
 
 class TranslationNetwork(AbstractNetwork, ABC):

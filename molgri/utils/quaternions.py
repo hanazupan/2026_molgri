@@ -194,7 +194,7 @@ def find_shared_quaternions(array_1: NDArray, array_2: NDArray) -> ArrayLike:
     return np.array(shared_vertices)
 
 
-def random_quaternions(n: int = 1000, only_upper=False) -> NDArray:
+def random_quaternions(n: int = 1000, only_upper=False, rotation_random_seed: float = None) -> NDArray:
     """
     Create n random quaternions
 
@@ -204,8 +204,13 @@ def random_quaternions(n: int = 1000, only_upper=False) -> NDArray:
     Returns:
         an array of grid points, shape (n, 4)
     """
+    if rotation_random_seed is not None:
+        rng = np.random.default_rng(rotation_random_seed)
+    else:
+        rng = np.random.default_rng()
+
     result = np.zeros((n, 4))
-    random_num = np.random.random((n, 3))
+    random_num = rng.random((n, 3))
     result[:, 0] = np.sqrt(1 - random_num[:, 0]) * np.sin(2 * pi * random_num[:, 1])
     result[:, 1] = np.sqrt(1 - random_num[:, 0]) * np.cos(2 * pi * random_num[:, 1])
     result[:, 2] = np.sqrt(random_num[:, 0]) * np.sin(2 * pi * random_num[:, 2])

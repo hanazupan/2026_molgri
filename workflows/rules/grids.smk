@@ -11,6 +11,7 @@ N_ROTATION =  config["N_rotations"]
 TRANSLATION_ALGORITHM = config["translation_algorithm"]
 DEFINE_TRANSLATION_EACH_SUBGRID = config["translation_subgrids_A"]
 NETWORK_ID = config["unique_network_name"]
+ROTATION_RANDOM_SEED = config["rotation_random_seed"]
 
 
 import matplotlib
@@ -18,11 +19,9 @@ matplotlib.use('Agg')
 
 rule all:
     input:
-        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/rotation_network/network.pkl"
-    # input:
-    #     expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
-    #         network_type = ["full", "rotation", "translation"],
-    #            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
+        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
+            network_type = ["full", "rotation", "translation"],
+            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
         # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
@@ -38,25 +37,8 @@ rule create_rotation_network:
     run:
         from molgri.network.rotation_network import create_rotation_network
 
-        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION)
-        print(rotation_network.volumes)
-        print(np.mean(rotation_network.volumes), np.pi**2/N_ROTATION, np.sum(rotation_network.volumes), np.pi**2)
+        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION, ROTATION_RANDOM_SEED)
         write_object(rotation_network, output.network_file)
-
-rule test_rotation_volume_convergence:
-    run:
-        from molgri.network.rotation_network import create_rotation_network
-        import matplotlib.pyplot as plt
-
-        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION)
-        all_volumes = []
-        detail_levels = [1, 2, 3, 4, 5, 7, 10, 20, 50]
-        for detail_level in detail_levels:
-            all_volumes.append([node.volume(detail_level) for node in rotation_network.nodes])
-        volumes = np.array(all_volumes)
-        for volume in volumes.T:
-            plt.plot(np.array(detail_levels), volume)
-        plt.savefig(f"{PATH_OUTPUT_TESTS}volume_convergence.png", dpi=600)
 
 
 rule create_translation_network:
@@ -160,7 +142,6 @@ rule display_network_node_attributes:
         interactive_volumes= "{some_path}/volumes.html",
     run:
         from molgri.plotting import draw_points
-        import numpy as np
         grid = read_object(input.grid)
         draw_points(grid, save_as=output.grid, save_interactive_as=output.interactive_grid, show=False)
         volumes = read_object(input.volumes)

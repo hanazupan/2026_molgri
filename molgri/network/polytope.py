@@ -19,8 +19,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from molgri.plotting import draw_curve, draw_line_between, draw_points
-from molgri.utils import (find_inverse_quaternion, normalise_vectors, remove_bottom_half_quaternions, which_row_is_k,
-                          q_in_upper_sphere)
+from molgri.utils.quaternions import find_inverse_quaternion, remove_bottom_half_quaternions, q_in_upper_sphere
+from molgri.utils.arrays import normalise_vectors, which_row_is_k
 
 
 class NewPolytope(ABC):
@@ -42,7 +42,6 @@ class NewPolytope(ABC):
     The function plot() is very useful for visualization
     """
 
-    np.random.seed(1)
 
     def __init__(self, d: int = 3):
         self.G = nx.Graph()
@@ -84,11 +83,13 @@ class NewPolytope(ABC):
         sorted_nodes = [value[attribute_name] for key, value in sorted(self.G.nodes.items())]
         return np.array(sorted_nodes)
 
-    def create_exactly_N_points(self, N: int) -> None:
+    def create_exactly_N_points(self, N: int, rotation_random_seed: float = None) -> None:
         """
         Start the initial distribution, keep dividing the edges until you have more points than N, then remove points and
         reconnect edges until you have exactly N points.
         """
+        if rotation_random_seed is not None:
+            np.random.seed(rotation_random_seed)
         while self.G.number_of_nodes() < N:
             self.divide_edges()
         while self.G.number_of_nodes() > N:
@@ -318,11 +319,13 @@ class Cube4DPolytope(NewPolytope):
     def __init__(self):
         super().__init__(d=4)
 
-    def create_exactly_N_points(self, N: int) -> NDArray:
+    def create_exactly_N_points(self, N: int, rotation_random_seed = None) -> NDArray:
         """
         Start the initial distribution, keep dividing the edges until you have more points than N, then remove points and
         reconnect edges until you have exactly N points.
         """
+        if rotation_random_seed is not None:
+            np.random.seed(rotation_random_seed)
         all_in_upper_sphere = []
         while len(all_in_upper_sphere) < N:
             self.divide_edges()
