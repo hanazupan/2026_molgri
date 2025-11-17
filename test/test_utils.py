@@ -4,12 +4,14 @@ import numpy as np
 from scipy.constants import pi
 from scipy.spatial import SphericalVoronoi
 
-from molgri.utils import (get_volume_hypersphere_polygon, normalise_vectors, norm_per_axis,
-                          distance_between_quaternions, dist_on_sphere,
-                          angle_between_vectors, find_inverse_quaternion, q_in_upper_sphere,
-                          hemisphere_quaternion_set, is_array_with_d_dim_r_rows_c_columns, all_row_norms_similar,
-                          all_row_norms_equal_k, quaternion_in_array, two_sets_of_quaternions_equal,
-                          sort_points_on_sphere_ccw, exact_area_of_spherical_polygon, random_sphere_points)
+from molgri.utils.quaternions import (hypersphere_voronoi_cell_volumes, quaternion_in_array, hemisphere_quaternion_set,
+                                      two_sets_of_quaternions_equal, q_in_upper_sphere, distance_between_quaternions,
+                                      find_inverse_quaternion)
+from molgri.utils.arrays import (angle_between_vectors, normalise_vectors, norm_per_axis,
+                                 is_array_with_d_dim_r_rows_c_columns,
+                                 all_row_norms_similar, all_row_norms_equal_k)
+from molgri.utils.spheres import (dist_on_sphere, sort_points_on_sphere_ccw,
+                                  exact_area_of_spherical_polygon, random_sphere_points)
 
 
 def test_normalising():
@@ -343,8 +345,8 @@ def test_volume_hypersphere_polygon():
     expected_volume_per_region = 2*pi**2 / N_points
     print(f"Expected: {expected_volume_per_region}")
 
-    from molgri.utils import voronoi_cell_volumes
-    print(voronoi_cell_volumes(example_points))
+    from molgri.utils import hypersphere_voronoi_cell_volumes
+    print(hypersphere_voronoi_cell_volumes(example_points))
 
 
 
