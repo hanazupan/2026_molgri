@@ -24,10 +24,10 @@ rule all:
             to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
-        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
-        #     ending = ["png"],
-        #     network_type = ["full", "rotation", "translation"],
-        #        to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network"])
+        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
+            ending = ["png"],
+            network_type = ["full", "rotation", "translation"],
+               to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network"])
 
 rule create_rotation_network:
     benchmark:
@@ -49,7 +49,8 @@ rule create_translation_network:
     run:
         from molgri.network.translation_network import create_translation_network
 
-        translation_network = create_translation_network(TRANSLATION_ALGORITHM, *DEFINE_TRANSLATION_EACH_SUBGRID)
+        translation_network = create_translation_network(TRANSLATION_ALGORITHM, *DEFINE_TRANSLATION_EACH_SUBGRID,
+            random_seed=ROTATION_RANDOM_SEED)
         write_object(translation_network, output.network_file)
 
 rule create_full_network:
@@ -146,6 +147,6 @@ rule display_network_node_attributes:
         draw_points(grid, save_as=output.grid, save_interactive_as=output.interactive_grid, show=False)
         volumes = read_object(input.volumes)
         draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes,
-            save_interactive_as=output.interactive_volumes,show=False)
+            save_interactive_as=output.interactive_volumes, show=False)
 
 

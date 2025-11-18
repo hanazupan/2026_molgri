@@ -6,9 +6,9 @@ import networkx as nx
 import numpy as np
 from numpy._typing import NDArray
 
-from molgri.network.abstract import AbstractNetwork, AbstractNode, ReducedSphericalVoronoi, find_shared_vertices, circular_sector_area
+from molgri.network.abstract import AbstractNetwork, AbstractNode, find_shared_vertices, \
+    circular_sector_area, get_spherical_voronoi
 from molgri.network.polytope import IcosahedronPolytope
-from molgri.utils.spheres import exact_area_of_spherical_polygon
 
 
 class OneDimTranslationNode:
@@ -36,20 +36,17 @@ class OneDimTranslationNode:
 
 class SphericalNode:
 
-    def __init__(self, spherical_index: int, unit_vector: NDArray, unit_hull = None):
+    def __init__(self, spherical_index: int, unit_vector: NDArray, unit_hull = None, area: float = None):
         self.index = spherical_index
         self.coordinate = unit_vector
         self.hull = unit_hull
+        self.unit_voronoi_area = area
 
     def __str__(self):
         return f'Sph node {self.index}'
 
     def __repr__(self) -> str:
         return self.__str__()
-
-    @cached_property
-    def unit_voronoi_area(self):
-        return exact_area_of_spherical_polygon(self.hull)
 
 class SphericalTranslationNode(AbstractNode):
 
@@ -239,7 +236,7 @@ def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic",
             raise KeyError(f"{algorithm_keyword} is not a valid translation algorithm keyword")
 
 def _create_cartesian_network(periodic_in_dimensions,
-                              x_linspace_params, y_linspace_params, z_linspace_params):
+                              x_linspace_params, y_linspace_params, z_linspace_params, **kwargs):
     x_grid = np.linspace(*x_linspace_params)
     y_grid = np.linspace(*y_linspace_params)
     z_grid = np.linspace(*z_linspace_params)
@@ -272,9 +269,9 @@ def _create_cartesian_network(periodic_in_dimensions,
     full_network = CartesianTranslationNetwork(full_network)
     return full_network
 
-def _create_spherical_coordinate_network(spherical_N_points, radial_parameters):
+def _create_spherical_coordinate_network(spherical_N_points, radial_parameters, random_seed = None):
     radial_network = _create_radial_network(radial_parameters)
-    spherical_network = _create_spherical_network(spherical_N_points)
+    spherical_network = _create_spherical_network(spherical_N_points, random_seed=random_seed)
     full_network = nx.cartesian_product(radial_network,spherical_network)
     mapping = {(a, b): SphericalTranslationNode(a, b) for (a, b) in full_network.nodes}
     full_network = nx.relabel_nodes(full_network, mapping)
@@ -284,7 +281,10 @@ def _create_spherical_coordinate_network(spherical_N_points, radial_parameters):
 def _create_radial_network(radial_parameters) -> nx.Graph:
     r_grid = np.linspace(*radial_parameters)
     nodes  = []
-    delta_r = r_grid[1] - r_grid[0]
+    if len(r_grid) == 1:
+        delta_r = r_grid[0]
+    else:
+        delta_r = r_grid[1] - r_grid[0]
     for coo_i, coo in enumerate(r_grid):
         hull = (coo - delta_r / 2, coo + delta_r / 2)
         nodes.append(OneDimTranslationNode("r", coo_i, coo, hull))
@@ -295,16 +295,18 @@ def _create_radial_network(radial_parameters) -> nx.Graph:
         G.add_edge(node_1, node_2, edge_type="r")
     return G
 
-def _create_spherical_network(spherical_N_points):
+def _create_spherical_network(spherical_N_points, random_seed=None):
     ico = IcosahedronPolytope()
-    ico.create_exactly_N_points(spherical_N_points)
+    ico.create_exactly_N_points(spherical_N_points, random_seed)
     spherical_points = ico.get_nodes(projection=True)
-    unit_spherical_voronoi = ReducedSphericalVoronoi(spherical_points)
+    unit_spherical_voronoi = get_spherical_voronoi(spherical_points)
+    areas = unit_spherical_voronoi.calculate_areas()
     layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
     hulls = unit_spherical_voronoi.get_hulls()
 
     G = nx.Graph()
-    all_layer_nodes = [SphericalNode(direction_i, coo_3d, hulls[direction_i]) for direction_i, coo_3d in enumerate(spherical_points)]
+    all_layer_nodes = [SphericalNode(direction_i, coo_3d, hulls[direction_i], areas[direction_i]) for direction_i,
+    coo_3d in enumerate(spherical_points)]
     G.add_nodes_from(all_layer_nodes)
     for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
         node1 = all_layer_nodes[node_i_1]

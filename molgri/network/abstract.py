@@ -46,8 +46,8 @@ class AbstractNetwork(nx.Graph, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # if there is only one node there are no edges and therefore no edge properties
-        #if self.number_of_nodes() > 1:
-        #    self.calculate_all_edge_properties()
+        if self.number_of_nodes() > 1:
+            self.calculate_all_edge_properties()
 
     def create_pseudotrajectory_coordinates_from(self, moving_coordinates: NDArray, weights: NDArray = None) -> list:
         nodes = [node.apply_transform_on(moving_coordinates, weights=weights) for node in sorted(self.nodes)]

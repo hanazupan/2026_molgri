@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from molgri.transgrid import TranslationObject
+from molgri.network.translation_network import create_translation_network
 from molgri.constants import ICO_PERFECT_NUM
 
 
@@ -14,10 +14,11 @@ def test_radial_grid():
     R_max = 7.3
     N_rad = 15
 
-    my_translations = TranslationObject(N_ray, R_min, R_max, N_rad)
-    assert len(my_translations.radial_grid) == N_rad
-    assert np.isclose(my_translations.radial_grid[0], R_min)
-    assert np.isclose(my_translations.radial_grid[-1], R_max)
+    my_translations = create_translation_network("spherical", N_ray, [R_min, R_max, N_rad])
+    assert len(my_translations.grid) == N_rad
+    assert len(my_translations.sorted_nodes) == N_rad
+    assert np.isclose(my_translations.sorted_nodes[0].r.coordinate, R_min)
+    assert np.isclose(my_translations.sorted_nodes[-1].r.coordinate, R_max)
 
 
 
@@ -30,28 +31,18 @@ def test_ray_grid():
     R_max = 1
     N_rad = 1
 
-    my_translations = TranslationObject(N_ray, R_min, R_max, N_rad)
-    assert len(my_translations.unit_sphere_grid) == N_ray
+    my_translations = create_translation_network("spherical", N_ray, [R_min, R_max, N_rad])
+    assert len(my_translations.sorted_nodes) == N_ray
     # all should have radius 1
-    assert np.allclose(np.linalg.norm(my_translations.unit_sphere_grid, axis=1), 1.0)
+    assert np.allclose([np.linalg.norm(node.sphere.coordinate) for node in my_translations.sorted_nodes], 1.0)
 
-
-def test_in_betweeen():
-    N_ray = 1
-    R_min = 2.5
-    R_max = 7.5
-    N_rad = 3
-
-    my_translations = TranslationObject(N_ray, R_min, R_max, N_rad)
-
-    between_radii = my_translations._get_between_radii()
-    assert np.allclose([0.0, 3.75, 6.25, 8.75], between_radii)
 
 
 def test_adjacency():
     np.random.seed(1)
-    to = TranslationObject(20, 2, 7, 3)
-    adj = to.adjacency.toarray()
+
+    to = create_translation_network("spherical", 20, [2, 7, 3])
+    adj = to.adjacency_matrix.toarray()
 
     # is symmetric
     assert np.allclose(adj, adj.T)
@@ -76,7 +67,7 @@ def test_adjacency():
 
 
 def test_single_direction():
-    my_translations = TranslationObject(1, 2, 3, 5)
+    my_translations = create_translation_network("spherical", 1, [2, 3, 5])
 
     # only the two side diagonals
     expected_adjacency = [[0, 1, 0, 0, 0],
@@ -86,16 +77,15 @@ def test_single_direction():
                           [0, 0, 0, 1, 0]]
 
     # the only adjacency is in radial name
-    assert np.allclose(expected_adjacency, my_translations.adjacency.toarray())
+    assert np.allclose(expected_adjacency, my_translations.adjacency_matrix.toarray())
 
-    # todo test one grid visually
-    radii = np.array([0.0, 2.125, 2.375, 2.625, 2.875, 3.125])
-    assert np.allclose(radii, my_translations._get_between_radii())
+    radii = np.array([1.875, 2.125, 2.375, 2.625, 2.875, 3.125])
+
     expected_volumes = 4/3*np.pi * radii**3
 
     expected_volumes_shells = expected_volumes[1:]-expected_volumes[:-1]
     assert np.allclose(expected_volumes_shells, my_translations.volumes)
-    assert np.allclose(0.25*np.array(expected_adjacency), my_translations.distances.toarray())
+    assert np.allclose(0.25*np.array(expected_adjacency), my_translations.distance_matrix.toarray())
 
     expected_surfaces = 4 * np.pi * radii ** 2
 
@@ -104,14 +94,14 @@ def test_single_direction():
                                 [0, expected_surfaces[2], 0, expected_surfaces[3], 0],
                                 [0, 0, expected_surfaces[3], 0, expected_surfaces[4]],
                                 [0, 0, 0, expected_surfaces[4], 0]]
-    assert np.allclose(expected_surfaces_array, my_translations.surfaces.toarray())
+    assert np.allclose(expected_surfaces_array, my_translations.surface_matrix.toarray())
 
 
 def test_perfect_division():
     #approximate volumes, areas etc from perfect division
     for N_dir in ICO_PERFECT_NUM:
-        my_translations = TranslationObject(N_dir, 2.5, 3.5, 3)
-        hull_radii = np.array([0, 2.75, 3.25, 3.75])
+        my_translations = create_translation_network("spherical", N_dir, [2.5, 3.5, 3], 1)
+        hull_radii = np.array([2.25, 2.75, 3.25, 3.75])
 
         # volumes
         volume_difference = hull_radii[1:]**3 - hull_radii[:-1]**3
@@ -139,18 +129,22 @@ def test_perfect_division():
 
 
 def test_visual_example():
-    to = TranslationObject(20, 2, 7, 3)
-    #to.plot(show_node_numbers=True, show_hulls=False, show_distances=False, show_hulls_of_cells=[0, 3, 5, 11])
+    to = create_translation_network("spherical", 20, [2, 7, 3], 1)
+    from molgri.plotting import draw_points
+    fig = draw_points(to.grid, label_by_index=True, show=False)
+    vertices = np.concatenate([node.hull for node in to.sorted_nodes], axis=1)
+    fig = draw_points(vertices[0], color="green", show=False, fig=fig)
+    draw_points(vertices[1], color="green", show=True, fig=fig)
 
     assert to.volumes[33] > to.volumes[0]
     assert to.volumes[5] > to.volumes[11]
     assert to.volumes[24] > to.volumes[33]
 
-    areas = to.surfaces.toarray()
-    assert areas[33][53] > areas[33][13] > areas[33][31] > areas[33][0]
+    areas = to.surface_matrix.toarray()
+    assert areas[33][53] > areas[33][39] > areas[33][13]
     assert areas[0][5] < areas[11][9] < areas[0][9]
 
-    dist = to.distances.toarray()
+    dist = to.distance_matrix.toarray()
     assert np.allclose([dist[8][28], dist[48][28], dist[21][41]], dist[8][28])
     assert dist[54][53] < dist[54][45]
     assert dist[51][42] < dist[51][53]
@@ -159,9 +153,8 @@ def test_visual_example():
 if __name__ == "__main__":
     test_radial_grid()
     test_ray_grid()
-    test_in_betweeen()
     test_adjacency()
     test_single_direction()
     test_perfect_division()
-    test_visual_example()
+    # test_visual_example()
     print("All tests successful.")

@@ -1,8 +1,8 @@
-unique_network_name: "cartesian_nonperiodic_45"
+unique_network_name: "cartesian_nonperiodic_102"
 
 rotation_algorithm: "hypercube"
 rotation_random_seed: 1
-N_rotations: 3
+N_rotations:  102
 translation_algorithm: "cartesian_nonperiodic"
 translation_subgrids_A: [[-20, 20, 50], [-20, 20, 3], [5, 20, 5]]
 

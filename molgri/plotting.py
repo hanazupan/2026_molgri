@@ -81,7 +81,7 @@ def draw_points(points, fig = None, label_by_index: bool = False, custom_labels=
     if len(points.shape) == 2 and points.shape[1] == 4:
         # last coordinate of quaternions is shown as opacity
         for point_i, point in enumerate(points):
-            opacity = (point[3] + 1)/2 +0.1
+            opacity = np.min[(point[3] + 1)/2 +0.1, 1]
             if text is not None:
                 one_point_text = text[point_i]
             else:
@@ -124,10 +124,7 @@ def show_graph(G, node_property: str = "total_index", edge_property: str = "edge
                save_as = None, show=True):
     labels = {node: node_i for node_i, node in enumerate(sorted(G.nodes))}
 
-    if edge_property == "edge_type":
-        edge_labels = {(u,v): edge_data[edge_property] for u, v, edge_data in G.edges(data=True)}
-    else:
-        edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in G.edges(data=True)}
+
 
 
     type_to_color = {"r": "red", "spherical": "blue", "rotational": "yellow",
@@ -136,8 +133,14 @@ def show_graph(G, node_property: str = "total_index", edge_property: str = "edge
 
     pos = nx.kamada_kawai_layout(G, weight="numerical_edge_type")
     nx.draw(G, pos, labels=labels)
-    nx.draw_networkx_edges(G, pos, edge_color=edge_colors)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+    if G.number_of_edges() > 1:
+        if edge_property == "edge_type":
+            edge_labels = {(u,v): edge_data[edge_property] for u, v, edge_data in G.edges(data=True)}
+        else:
+            edge_labels = {(u, v): np.round(edge_data[edge_property], 2) for u, v, edge_data in G.edges(data=True)}
+        nx.draw_networkx_edges(G, pos, edge_color=edge_colors)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
     if save_as is not None:
         plt.savefig(save_as)
     if show:
