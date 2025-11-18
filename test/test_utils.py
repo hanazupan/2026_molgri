@@ -339,28 +339,27 @@ def test_volume_hypersphere_polygon():
     example_points = np.array(example_points)
     N_points = len(example_points)
     all_row_norms_equal_k(example_points, 1)
-    spherical_voronoi = SphericalVoronoi(example_points)
 
 
     expected_volume_per_region = 2*pi**2 / N_points
-    print(f"Expected: {expected_volume_per_region}")
+    calculated_volume_per_region = hypersphere_voronoi_cell_volumes(example_points)
+    np.allclose(calculated_volume_per_region, expected_volume_per_region, atol=0.01, rtol=0.01)
 
-    from molgri.utils import hypersphere_voronoi_cell_volumes
-    print(hypersphere_voronoi_cell_volumes(example_points))
+    # TODO: other test examples
 
 
 
 if __name__ == "__main__":
     test_volume_hypersphere_polygon()
-    # test_normalising()
-    # test_normalising_on_arrays()
-    # test_all_row_norms_similar()
-    # test_is_array_with_d_dim_r_rows_c_columns()
-    # test_distance_between_quaternions()
-    # test_unit_dist_on_sphere()
-    # test_angle_between()
-    # test_find_inverse_quaternion()
-    # test_quat_in_array()
-    # test_quaternion_sets_equal()
-    # test_sort_points_on_sphere_ccw()
-    # test_exact_area_of_spherical_polygon()
+    test_normalising()
+    test_normalising_on_arrays()
+    test_all_row_norms_similar()
+    test_is_array_with_d_dim_r_rows_c_columns()
+    test_distance_between_quaternions()
+    test_unit_dist_on_sphere()
+    test_angle_between()
+    test_find_inverse_quaternion()
+    test_quat_in_array()
+    test_quaternion_sets_equal()
+    test_sort_points_on_sphere_ccw()
+    test_exact_area_of_spherical_polygon()

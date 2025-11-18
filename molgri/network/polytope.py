@@ -108,15 +108,17 @@ class NewPolytope(ABC):
         indices = self.get_nodes(projection=False, indices=True)
         adjacencies = nx.adjacency_matrix(self.G)
         if show_nodes:
-            draw_points(nodes, fig, label_by_index=show_node_numbers, custom_labels=indices)
+            draw_points(nodes, fig, label_by_index=show_node_numbers, custom_labels=indices, show=False)
             # potentially show straight-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
                 for row, col in zip(rows, columns):
                     draw_line_between(fig, nodes[row], nodes[col])
 
+
         if show_projected_nodes:
-            draw_points(projected_nodes, fig, label_by_index=show_node_numbers, custom_labels=indices, color="green")
+            draw_points(projected_nodes, fig, label_by_index=show_node_numbers, custom_labels=indices, color="green",
+                        show=False)
             # potentially show curved-line edges
             if show_vertices:
                 rows, columns = adjacencies.nonzero()
@@ -165,7 +167,7 @@ class NewPolytope(ABC):
             self.G.remove_edge(old1, old2)
 
 
-    def _add_edges_of_len(self, edge_len: float, wished_levels: List[int] = None, only_seconds: bool = True,
+    def _add_edges_of_len(self, edge_len: list, wished_levels: List[int] = None, only_seconds: bool = True,
                           only_face: bool = True):
         """
         Finds and adds all possible edges of specifies length between existing nodes (optionally only between nodes
@@ -188,6 +190,8 @@ class NewPolytope(ABC):
             wished_levels.sort(reverse=True)
         assert len(wished_levels) == 2
 
+        found_lengths = []
+
         # central indices of all points within wished level
         selected_level = [n for n, d in self.G.nodes(data=True) if d['level'] == wished_levels[0]]
         for new_node in selected_level:
@@ -204,8 +208,10 @@ class NewPolytope(ABC):
                 # check face criterion
                 if not only_face or self._find_face([new_node, other_node]):
                     # check distance criterion
-                    if np.isclose(node_dist, edge_len):
-                        self.G.add_edge(new_node, other_node)
+                    found_lengths.append(node_dist)
+                    for interesting_length in edge_len:
+                        if np.isclose(node_dist, interesting_length):
+                            self.G.add_edge(new_node, other_node)
 
 
     def _add_polytope_point(self, polytope_point: ArrayLike, face: set = None, face_neighbours_indices=None):
@@ -378,14 +384,18 @@ class Cube4DPolytope(NewPolytope):
                 row = 1 if i < 4 else 2
                 col = i + 1 if i < 4 else i + 1 - 4
                 draw_points(cell.get_nodes(), fig, label_by_index=show_node_numbers, custom_labels=cell.get_nodes(
-                    indices=True), row=row, col=col)
+                    indices=True), row=row, col=col, show=False)
 
                 if show_vertices:
                     adjacency = nx.adjacency_matrix(cell.G).astype(bool).tocoo()
                     for i, j in zip(adjacency.row, adjacency.col):
                         coo_1 = cell.get_nodes()[i]
                         coo_2 = cell.get_nodes()[j]
+                        x, y, z = np.mean(np.array([coo_1, coo_2]), axis=0)
+                        length = np.linalg.norm(coo_1 - coo_2)
                         draw_line_between(fig, coo_1, coo_2, row=row, col=col)
+                        fig.add_trace(go.Scatter3d(x=[x], y=[y], z=[z], text=[np.round(length, 2)],
+                                                   mode="text"))
         fig.show()
 
 
@@ -408,11 +418,7 @@ class Cube4DPolytope(NewPolytope):
         for i, vert in enumerate(vertices):
             belongs_to = [face_i for face_i, face in enumerate(faces) if i in face]
             self._add_polytope_point(vert, face=set(belongs_to))
-        self._add_edges_of_len(self.side_len, wished_levels=[self.current_level, self.current_level],
-                               only_seconds=False, only_face=False)
-        self._add_edges_of_len(self.side_len*np.sqrt(2), wished_levels=[self.current_level, self.current_level],
-                               only_seconds=False, only_face=False)
-        self._add_edges_of_len(self.side_len * np.sqrt(3), wished_levels=[self.current_level, self.current_level],
+        self._add_edges_of_len([self.side_len, self.side_len*np.sqrt(2), self.side_len*np.sqrt(3)],
                                only_seconds=False, only_face=False)
         super()._create_level0()
 
@@ -420,18 +426,10 @@ class Cube4DPolytope(NewPolytope):
         """Before or after dividing edges, make sure all relevant connections are present. Then perform a division of
         all connections (point in the middle, connection split in two), increase the level and halve the side_len."""
         super().divide_edges()
-        print("BEFORE EDGES", self.G.number_of_edges())
-        self._add_edges_of_len(2*self.side_len, wished_levels=[self.current_level - 1, self.current_level - 1],
+        before_edges = self.G.number_of_edges()
+        self._add_edges_of_len([2*self.side_len, 2*self.side_len*np.sqrt(2), 2*self.side_len*np.sqrt(3)],
+                               wished_levels=[self.current_level - 1, self.current_level - 1],
                                only_seconds=False)
-        print("BEFORE FACE DIAGONALS", self.G.number_of_edges())
-        len_square_diagonals = 2*self.side_len*np.sqrt(2)
-        self._add_edges_of_len(len_square_diagonals, wished_levels=[self.current_level-1, self.current_level-1],
-                              only_seconds=False)
-        print("BEFORE BODY DIAGONALS", self.G.number_of_edges())
-        len_cube_diagonals = 2 * self.side_len * np.sqrt(3)
-        self._add_edges_of_len(len_cube_diagonals, wished_levels=[self.current_level - 1, self.current_level - 1],
-                               only_seconds=False)
-        print("AFTER ALL", self.G.number_of_edges())
 
 ########################################################################################################################
 #
@@ -609,7 +607,7 @@ class IcosahedronPolytope(NewPolytope):
         for i, vert in enumerate(vertices):
             set_of_faces = set(faces_i for faces_i, face in enumerate(faces) if i in face)
             self._add_polytope_point(vert, face=set_of_faces)
-        self._add_edges_of_len(self.side_len, wished_levels=[self.current_level, self.current_level],
+        self._add_edges_of_len([self.side_len], wished_levels=[self.current_level, self.current_level],
                                only_seconds=False, only_face=False)
         # perform end of creation
         super()._create_level0()
@@ -622,7 +620,7 @@ class IcosahedronPolytope(NewPolytope):
         """
         self._add_mid_edge_nodes()
         self._end_of_divison()
-        self._add_edges_of_len(self.side_len*2, wished_levels=[self.current_level-1, self.current_level-1],
+        self._add_edges_of_len([self.side_len*2], wished_levels=[self.current_level-1, self.current_level-1],
                                only_seconds=True)
 
 

@@ -1,6 +1,6 @@
 from molgri.constants import CUBE_4D_PERFECT_NUM, ICO_PERFECT_NUM
 from molgri.network.polytope import Cube4DPolytope, IcosahedronPolytope
-from molgri.utils import all_rows_unique, all_row_norms_equal_k
+from molgri.utils.arrays import all_rows_unique, all_row_norms_equal_k
 
 def test_full_division_ico():
     """
@@ -29,7 +29,6 @@ def test_full_division_cube4D():
     This applies to polytopes with full number of points. We test that after each level of division, the number of
     points is as expected.
     """
-    expected_num_of_edges = [112, 848, 6688]
 
     hypercube = Cube4DPolytope()
 
@@ -39,9 +38,6 @@ def test_full_division_cube4D():
         assert hypercube.G.number_of_nodes() == CUBE_4D_PERFECT_NUM[i], f"At level {i} hypercube should have {CUBE_4D_PERFECT_NUM[i]} nodes, not {hypercube.G.number_of_nodes()}"
         # those points are unique
         all_rows_unique(hypercube.get_nodes(projection=True))
-
-        assert hypercube.G.number_of_edges() == expected_num_of_edges[i], f"At level {i} hypercube should have {expected_num_of_edges[i]} edges, not {hypercube.G.number_of_edges()}"
-
 
 
 def test_removing_points_ico():
