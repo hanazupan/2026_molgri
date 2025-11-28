@@ -53,6 +53,15 @@ class AbstractNetwork(nx.Graph, ABC):
         nodes = [node.apply_transform_on(moving_coordinates, weights=weights) for node in sorted(self.nodes)]
         return nodes
 
+    def add_node_property(self, sorted_values_list: list, property_name: str):
+        for node_i, node in enumerate(self.sorted_nodes):
+            node.__dict__[property_name] = sorted_values_list[node_i]
+
+    def get_node_property(self, property_name: str) -> NDArray:
+        chosen_property = [node.__dict__[property_name] for node in self.sorted_nodes]
+        chosen_property = np.array(chosen_property, dtype=float)
+        return chosen_property
+
     @cached_property
     def sorted_nodes(self):
         nodes = [node for node in sorted(self.nodes)]

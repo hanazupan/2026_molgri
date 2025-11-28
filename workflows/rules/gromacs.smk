@@ -1,0 +1,94 @@
+"""Here are parts of a sqra pipeline that are GROMACS-specific"""
+
+
+from workflows.helpers.PATHS import PATH_INPUT_DEFAULT_GROMACS, PATH_OUTPUT_GROMACS
+
+
+MOLECULE_NAMES = f"{config['molecule_1']}_{config['molecule_2']}"
+NETWORK_NAME = f"{config['unique_network_name']}"
+PROVIDED_DATA_PATH =  f"{PATH_INPUT_DEFAULT_GROMACS}{MOLECULE_NAMES}/"
+EXPERIMENT_FULL_PATH = f"{PATH_OUTPUT_GROMACS}{MOLECULE_NAMES}/{NETWORK_NAME}/"
+
+def modify_mdrun(path_to_file, param_to_change, new_value):
+    with open(path_to_file, "r") as f:
+        lines = f.readlines()
+    for i, line in enumerate(lines):
+        if line.startswith(param_to_change):
+            lines[i] = f"{param_to_change} = {new_value}\n"
+            break
+    # if the parameter doesn't exist, add it
+    else:
+        lines.append(f"{param_to_change} = {new_value}\n")
+    with open(path_to_file, "w") as f:
+        f.writelines(lines)
+
+
+rule all:
+    f"{EXPERIMENT_FULL_PATH}mdrun.mdp"
+
+rule copy_gromacs_input:
+    """
+    Copy the rest of necessary files to start a sqra run with a GROMACS calculation and potentially adapt default mdrun params.
+    """
+    input:
+        dimer_topology = f"{PROVIDED_DATA_PATH}topol.top",
+        select_energy = f"{PROVIDED_DATA_PATH}select_energy_five",
+        runfile= f"{PROVIDED_DATA_PATH}mdrun.mdp",
+        force_field_stuff = f"{PROVIDED_DATA_PATH}force_field_stuff/"
+    output:
+        dimer_topology = f"{{where}}topol.top",
+        select_energy = f"{{where}}select_energy",
+        runfile = f"{{where}}mdrun.mdp",
+        force_field_stuff = directory(f"{{where}}force_field_stuff/")
+    params:
+        tau_t = config["params_setup"]["tau_t"],
+        integrator = config["params_setup"]["integrator"],
+        energy_writeout_frequency= config["params_setup"]["energy_writeout_frequency"],
+        cutoff_scheme = config["params_setup"]["cutoff-scheme"],
+        epsilon = config["params_setup"]["epsilon"]
+    run:
+        import shutil
+        shutil.copy(input.select_energy,output.select_energy)
+        shutil.copy(input.dimer_topology, output.dimer_topology)
+        shutil.copy(input.runfile,output.runfile)
+        shutil.copytree(input.force_field_stuff,output.force_field_stuff, dirs_exist_ok=True)
+
+        # modifying files
+        modify_mdrun(output.runfile, "tau_t", params.tau_t)
+        modify_mdrun(output.runfile,"integrator",params.integrator)
+        modify_mdrun(output.runfile,"nstenergy",params.energy_writeout_frequency)
+        modify_mdrun(output.runfile, "pcoupl", "no")
+        modify_mdrun(output.runfile,"coulombtype",params.cutoff_scheme)
+        modify_mdrun(output.runfile, "epsilon-r", params.epsilon)
+
+rule gromacs_rerun:
+    """
+    This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
+    energies.
+    """
+    wildcard_constraints:
+        ENERGY_PROGRAM  = "GROMACS"
+    input:
+        structure = f"{{where}}structure.{config['structure_extension']}",
+        trajectory = f"{{where}}trajectory.{config['trajectory_extension']}",
+        runfile = rules.copy_gromacs_input.output.runfile,
+        topology = rules.copy_gromacs_input.output.dimer_topology,
+        select_energy = rules.copy_gromacs_input.output.select_energy,
+        force_field_stuff = rules.copy_gromacs_input.output.force_field_stuff
+    shadow: "minimal"
+    log:
+        log = f"{{where}}logging_gromacs.log"
+    benchmark:
+        repeat(f"{{where}}gromacs_benchmark.txt", config['num_repeats'])
+    output:
+        energy = f"{{where}}energy.xvg",
+    shell:
+        """
+        initial_dir=$(pwd)
+        cd $(dirname {input.structure})
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -p $(basename {input.topology}) -o result.tpr
+        gmx22 mdrun -s result.tpr -rerun $(basename {input.trajectory}) -g $(basename {log.log})
+        gmx22 energy -f ener.edr -o $(basename {output.energy}) < $(basename {input.select_energy})
+        cd "$initial_dir" || exit
+        """

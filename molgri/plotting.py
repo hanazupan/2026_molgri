@@ -81,7 +81,7 @@ def draw_points(points, fig = None, label_by_index: bool = False, custom_labels=
     if len(points.shape) == 2 and points.shape[1] == 4:
         # last coordinate of quaternions is shown as opacity
         for point_i, point in enumerate(points):
-            opacity = np.min[(point[3] + 1)/2 +0.1, 1]
+            opacity = np.min([(point[3] + 1)/2 +0.1, 1])
             if text is not None:
                 one_point_text = text[point_i]
             else:

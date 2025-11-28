@@ -270,8 +270,8 @@ def assign_closest_quaternion(points: NDArray, available_quaternions) -> NDArray
 
 def cut_off_constant_dimension_quat(my_array: NDArray):
     u, s, vh = svd(my_array)
+    rotated_points = np.dot(my_array, vh.T)
     # rotate till last dimension is only zeros, then cut off the redundant dimension. Now we can correctly
     # calculate borders using lower-dimensional tools
-    rotated_points = np.dot(my_array, vh.T)
     assert np.allclose(rotated_points[:, -1], 0.0)
     return rotated_points[:, :-1]

@@ -72,3 +72,7 @@ def _write_trajectory(universe, filename: str) -> None:
 
 def _read_molecular_structure(filename: str) -> md.Universe:
     return md.Universe(filename)
+
+def get_num_atoms(structure_file:str) -> int:
+    file = read_object(structure_file)
+    return file.atoms.n_atoms

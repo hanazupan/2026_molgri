@@ -1,0 +1,18 @@
+energy_program: GROMACS
+molecule_1: "water"
+molecule_2: "water"
+unique_network_name: "cartesian_xy_1"
+
+
+params_setup:
+ tau_t: 0.01
+ up1_nm: None
+ up2_nm: None
+ force_constant_restraint: None
+ nsteps: None
+ integrator: None
+ dt_ps: 0.002
+ energy_writeout_frequency: 0
+ compressed_writeout_frequency: 5
+ epsilon: 1
+ cutoff-scheme: Cut-off

@@ -1,6 +1,7 @@
 """
 Here we use existing networks and apply them to molecules.
 """
+include: "general.smk"
 
 from workflows.helpers.io import read_object, write_object
 from workflows.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT_PTS, PATH_OUTPUT_NETWORKS
@@ -16,6 +17,7 @@ SOME_FOLDER = f"{PATH_OUTPUT_PTS}{MOLECULE_1_NAME}_{MOLECULE_2_NAME}/{NETWORK_NA
 
 rule all:
     input:
+        config = f"{SOME_FOLDER}config_used.yaml",
         structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
         trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}",
 

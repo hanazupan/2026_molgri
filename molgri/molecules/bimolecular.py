@@ -48,7 +48,9 @@ def get_bimolecular_structure(universe_static: Universe, universe_moving: Univer
     Returns:
         a Universe object where atoms from both are combined.
     """
-    return Merge(universe_static.atoms, universe_moving.atoms)
+    merged_universe = Merge(universe_static.atoms, universe_moving.atoms)
+    merged_universe.dimensions = universe_static.dimensions
+    return merged_universe
 
 def get_bimolecular_pseudotrajectory(universe_static: Universe, universe_moving: Universe, moving_coordinates: list)-> Universe:
     """
@@ -71,7 +73,11 @@ def get_bimolecular_pseudotrajectory(universe_static: Universe, universe_moving:
 
     structure = get_bimolecular_structure(m1, m2)
     full_coordinates = combine_coordinates(m1.atoms.positions, np.array(moving_coordinates))
+
+
     combined_universe = Universe(structure._topology, full_coordinates, format=MemoryReader)
+    for ts in combined_universe.trajectory:
+        combined_universe.dimensions = universe_static.dimensions
     return combined_universe
 
 def move_to_center(universe: Universe) -> Universe:

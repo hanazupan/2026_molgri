@@ -1,6 +1,7 @@
 """
 Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
 """
+include: "general.smk"
 
 from workflows.helpers.PATHS import PATH_OUTPUT_NETWORKS, PATH_OUTPUT_TESTS
 from workflows.helpers.io import write_object, read_object
@@ -19,15 +20,18 @@ matplotlib.use('Agg')
 
 rule all:
     input:
+        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/config_used.yaml",
         expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
             network_type = ["full", "rotation", "translation"],
             to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
 
         # optional visualizations
-        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
-            ending = ["png"],
-            network_type = ["full", "rotation", "translation"],
-               to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network"])
+        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
+        #     ending = ["png"],
+        #     network_type = ["full", "rotation", "translation"],
+        #        to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"])
+
+
 
 rule create_rotation_network:
     benchmark:
@@ -150,3 +154,75 @@ rule display_network_node_attributes:
             save_interactive_as=output.interactive_volumes, show=False)
 
 
+rule display_geometry_properties_with_violin_distributions:
+    input:
+        volumes = "{some_path}/volumes.npy",
+        distances= "{some_path}/distances.npz",
+        surfaces= "{some_path}/surfaces.npz",
+    output:
+        volumes = "{some_path}/violin_plots.png",
+    run:
+        import plotly.graph_objects as go
+
+        volume_data = read_object(input.volumes)
+        distance_data = read_object(input.distances).data
+        surface_data = read_object(input.surfaces).data
+
+        fig = go.Figure()
+
+        arrays = [distance_data, surface_data, volume_data]
+        labels = ["Distance", "Surface", "Volume"]
+
+
+        for i, (arr, label) in enumerate(zip(arrays, labels)):
+            fig.add_trace(go.Violin(y=arr, name=label))
+            x = label
+
+            mn = np.min(arr)
+            mx = np.max(arr)
+            mean = np.mean(arr)
+            if np.allclose([mn, mx, mean], mn):
+                fig.add_annotation(
+                    x=x,
+                    y=mean,
+                    text=f"{mean:.2f}",
+                    showarrow=False,
+                    font=dict(color="red",size=12),
+                    yshift=0,
+                    xshift=50,
+                )
+                continue
+
+            # Annotate min
+            fig.add_annotation(
+                x=x,
+                y=mn,
+                showarrow=False,
+                text=f"min={mn:.2f}",
+                yshift=0,
+                xshift=50,
+            )
+
+            # Annotate max
+            fig.add_annotation(
+                x=x,
+                y=mx,
+                showarrow=False,
+                text=f"max={mx:.2f}",
+                yshift=0,
+                xshift=50,
+            )
+
+            # Annotate mean
+            fig.add_annotation(
+                x=x,
+                y=mean,
+                text=f"mean={mean:.2f}",
+                showarrow=False,
+                font=dict(color="red",size=12),
+                yshift=0,
+                xshift=50,
+            )
+
+
+        fig.write_image(output.volumes)

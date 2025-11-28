@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 from molgri.network.abstract import AbstractNetwork, AbstractNode, get_spherical_voronoi
 from molgri.network.polytope import Cube4DPolytope
 
-from molgri.utils.arrays import (all_rows_unique)
+from molgri.utils.arrays import (all_rows_unique, find_shared_rows)
 from molgri.utils.spheres import exact_area_of_spherical_polygon
 from molgri.utils.quaternions import (double_coverage_from_upper_quaternions, find_shared_quaternions,
                                       hypersphere_voronoi_cell_volumes, random_quaternions,
@@ -82,8 +82,12 @@ class RotationNetwork(AbstractNetwork):
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         shared_vertices = find_shared_quaternions(node1.hull, node2.hull)
-        lower_dim_points = cut_off_constant_dimension_quat(shared_vertices)
-        return  {"rotational": exact_area_of_spherical_polygon(lower_dim_points)}
+        if np.linalg.matrix_rank(shared_vertices) < 4:
+            lower_dim_points = cut_off_constant_dimension_quat(shared_vertices)
+            area = exact_area_of_spherical_polygon(lower_dim_points)
+        else:
+            area = 0.0
+        return  {"rotational": area}
 
     def _numerical_edge_type(self, edge_dict) -> dict:
         return  {"rotational": 4}
