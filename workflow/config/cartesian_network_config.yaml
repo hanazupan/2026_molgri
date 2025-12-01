@@ -1,10 +1,10 @@
-unique_network_name: "graphene_grid_D1"
+unique_network_name: "graphene_grid_C1"
 
 rotation_algorithm: "hypercube"
 rotation_random_seed: 1
 N_rotations:  1
 translation_algorithm: "cartesian_xy_periodic"
-translation_subgrids_A: [[-2, 2, 6], [-2, 2, 6], [10, 14, 5]]
+translation_subgrids_A: [[-3.07, 1.85, 6], [-4.26, 4.26,10], [1, 14, 13]]
 
 
 

@@ -1,4 +1,4 @@
-from workflows.helpers.io import read_object, write_object
+from workflow.helpers.io import read_object, write_object
 import numpy as np
 
 rule read_in_energies:

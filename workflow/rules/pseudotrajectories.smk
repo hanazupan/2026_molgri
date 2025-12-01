@@ -1,25 +1,20 @@
 """
 Here we use existing networks and apply them to molecules.
 """
-include: "general.smk"
-
-from workflows.helpers.io import read_object, write_object
-from workflows.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT_PTS, PATH_OUTPUT_NETWORKS
+from workflow.helpers.io import read_object, write_object
+from workflow.helpers.PATHS import PATH_INPUT_MOLECULES, NAME_PT_FOLDER, NAME_NETWORK_FOLDER
 
 
-MOLECULE_1_NAME = config["molecule_1"]
-MOLECULE_2_NAME = config["molecule_2"]
-STRUCTURE_ENDING = config["structure_ending"]
-TRAJECTORY_ENDING = config["trajectory_ending"]
-NETWORK_NAME = config["unique_network_name"]
-SOME_FOLDER = f"{PATH_OUTPUT_PTS}{MOLECULE_1_NAME}_{MOLECULE_2_NAME}/{NETWORK_NAME}/"
+MOLECULE_1_NAME = config["pseudotrajectory"]["molecule_1"]
+MOLECULE_2_NAME = config["pseudotrajectory"]["molecule_2"]
+STRUCTURE_ENDING = config["pseudotrajectory"]["structure_ending"]
+TRAJECTORY_ENDING = config["pseudotrajectory"]["trajectory_ending"]
 
 
-rule all:
+rule all_pseudotrajectory:
     input:
-        config = f"{SOME_FOLDER}config_used.yaml",
-        structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
-        trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}",
+        structure = f"{{some_path}}{NAME_PT_FOLDER}structure.{STRUCTURE_ENDING}",
+        trajectory = f"{{some_path}}{NAME_PT_FOLDER}trajectory.{TRAJECTORY_ENDING}",
 
 
 rule copy_molecular_files_from_input:
@@ -30,8 +25,8 @@ rule copy_molecular_files_from_input:
         molecule_1 = f"{PATH_INPUT_MOLECULES}{MOLECULE_1_NAME}.{STRUCTURE_ENDING}",
         molecule_2 = f"{PATH_INPUT_MOLECULES}{MOLECULE_2_NAME}.{STRUCTURE_ENDING}",
     output:
-        molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
-        molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",
+        molecule_1 = f"{{some_path}}{NAME_PT_FOLDER}molecule1.{STRUCTURE_ENDING}",
+        molecule_2 = f"{{some_path}}{NAME_PT_FOLDER}molecule2.{STRUCTURE_ENDING}",
     run:
         from molgri.molecules.bimolecular import move_to_center
 
@@ -51,12 +46,12 @@ rule create_pseudotrajectory:
     Here we are creating a pseudotrajectory from two molecules and a network.
     """
     input:
-        molecule_1 = f"{SOME_FOLDER}molecule1.{STRUCTURE_ENDING}",
-        molecule_2 = f"{SOME_FOLDER}molecule2.{STRUCTURE_ENDING}",
-        network = f"{PATH_OUTPUT_NETWORKS}{NETWORK_NAME}/full_network/network.pkl"
+        molecule_1 = f"{{some_path}}{NAME_PT_FOLDER}molecule1.{STRUCTURE_ENDING}",
+        molecule_2 = f"{{some_path}}{NAME_PT_FOLDER}molecule2.{STRUCTURE_ENDING}",
+        network = f"{{some_path}}{NAME_NETWORK_FOLDER}network.pkl"
     output:
-        structure = f"{SOME_FOLDER}structure.{STRUCTURE_ENDING}",
-        trajectory = f"{SOME_FOLDER}trajectory.{TRAJECTORY_ENDING}"
+        structure = f"{{some_path}}{NAME_PT_FOLDER}structure.{STRUCTURE_ENDING}",
+        trajectory = f"{{some_path}}{NAME_PT_FOLDER}trajectory.{TRAJECTORY_ENDING}"
     run:
         from molgri.molecules.bimolecular import get_bimolecular_pseudotrajectory, get_bimolecular_structure
         m1 = read_object(input.molecule_1)

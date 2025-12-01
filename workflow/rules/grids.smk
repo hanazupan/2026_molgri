@@ -3,33 +3,32 @@ Everything up to the introduction of molecules: get a full grid, adjacency matri
 """
 include: "general.smk"
 
-from workflows.helpers.PATHS import PATH_OUTPUT_NETWORKS, PATH_OUTPUT_TESTS
-from workflows.helpers.io import write_object, read_object
+from workflow.helpers.io import write_object, read_object
+from workflow.helpers.PATHS import NAME_NETWORK_FOLDER
 import numpy as np
 
-ROTATION_ALGORITHM = config["rotation_algorithm"]
-N_ROTATION =  config["N_rotations"]
-TRANSLATION_ALGORITHM = config["translation_algorithm"]
-DEFINE_TRANSLATION_EACH_SUBGRID = config["translation_subgrids_A"]
-NETWORK_ID = config["unique_network_name"]
-ROTATION_RANDOM_SEED = config["rotation_random_seed"]
+ROTATION_ALGORITHM = config["grid"]["rotation_algorithm"]
+N_ROTATION =  config["grid"]["N_rotations"]
+TRANSLATION_ALGORITHM = config["grid"]["translation_algorithm"]
+DEFINE_TRANSLATION_EACH_SUBGRID = config["grid"]["translation_subgrids_A"]
+ROTATION_RANDOM_SEED = config["grid"]["rotation_random_seed"]
 
 
 import matplotlib
 matplotlib.use('Agg')
 
-rule all:
+rule all_grid:
     input:
-        f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/config_used.yaml",
-        expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}",
-            network_type = ["full", "rotation", "translation"],
-            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"]),
+        expand("{some_path}/{NAME_NETWORK_FOLDER}/{to_create}",
+            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"],
+            allow_missing=True),
 
         # optional visualizations
-        # expand(f"{PATH_OUTPUT_NETWORKS}{NETWORK_ID}/{{network_type}}_network/{{to_create}}.{{ending}}",
-        #     ending = ["png"],
-        #     network_type = ["full", "rotation", "translation"],
-        #        to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"])
+        expand("{some_path}/{network_type}_network/{to_create}.{ending}",
+            ending = ["png"],
+            network_type = ["full", "rotation", "translation"],
+            to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"],
+            allow_missing=True)
 
 
 
@@ -37,7 +36,7 @@ rule create_rotation_network:
     benchmark:
         "{some_path}/rotation_network/network_creation.txt"
     output:
-        network_file = "{some_path}/rotation_network/network.pkl",
+        network_file = "{some_path}/rotation_network/network.pkl"
     run:
         from molgri.network.rotation_network import create_rotation_network
 
@@ -49,7 +48,7 @@ rule create_translation_network:
     benchmark:
         "{some_path}/translation_network/network_creation.txt"
     output:
-        network_file = "{some_path}/translation_network/network.pkl",
+        network_file = "{some_path}/translation_network/network.pkl"
     run:
         from molgri.network.translation_network import create_translation_network
 
@@ -60,11 +59,11 @@ rule create_translation_network:
 rule create_full_network:
     input:
         rotation_network_file = "{some_path}/rotation_network/network.pkl",
-        translation_network_file = "{some_path}/translation_network/network.pkl",
+        translation_network_file = "{some_path}/translation_network/network.pkl"
     benchmark:
-        "{some_path}/full_network/network_creation.txt"
+        f"{{some_path}}{NAME_NETWORK_FOLDER}network_creation.txt"
     output:
-        network_file = "{some_path}/full_network/network.pkl",
+        network_file = f"{{some_path}}{NAME_NETWORK_FOLDER}full_network/network.pkl"
     run:
         from molgri.network.full_network import create_full_network
 
@@ -84,7 +83,7 @@ rule save_network_properties:
         numerical_edge_type = "{some_path}/edge_types.npz",
         distances = "{some_path}/distances.npz",
         surfaces = "{some_path}/surfaces.npz",
-        volumes = "{some_path}/volumes.npy",
+        volumes = "{some_path}/volumes.npy"
     run:
         full_network = read_object(input.network_file)
 
@@ -114,7 +113,7 @@ rule display_network_edge_matrices:
         adjacency = "{some_path}/adjacency.npz",
         numerical_edge_type = "{some_path}/edge_types.npz",
         distances = "{some_path}/distances.npz",
-        surfaces = "{some_path}/surfaces.npz",
+        surfaces = "{some_path}/surfaces.npz"
     output:
         adjacency = "{some_path}/adjacency.png",
         numerical_edge_type = "{some_path}/edge_types.png",
@@ -123,7 +122,7 @@ rule display_network_edge_matrices:
         interactive_adjacency= "{some_path}/adjacency.html",
         interactive_numerical_edge_type= "{some_path}/edge_types.html",
         interactive_distances= "{some_path}/distances.html",
-        interactive_surfaces= "{some_path}/surfaces.html",
+        interactive_surfaces= "{some_path}/surfaces.html"
     run:
         from molgri.plotting import show_array
 
@@ -139,12 +138,12 @@ rule display_network_edge_matrices:
 rule display_network_node_attributes:
     input:
         grid = "{some_path}/grid.npy",
-        volumes= "{some_path}/volumes.npy",
+        volumes= "{some_path}/volumes.npy"
     output:
         grid = "{some_path}/grid.png",
         volumes = "{some_path}/volumes.png",
         interactive_grid= "{some_path}/grid.html",
-        interactive_volumes= "{some_path}/volumes.html",
+        interactive_volumes= "{some_path}/volumes.html"
     run:
         from molgri.plotting import draw_points
         grid = read_object(input.grid)
@@ -158,9 +157,9 @@ rule display_geometry_properties_with_violin_distributions:
     input:
         volumes = "{some_path}/volumes.npy",
         distances= "{some_path}/distances.npz",
-        surfaces= "{some_path}/surfaces.npz",
+        surfaces= "{some_path}/surfaces.npz"
     output:
-        volumes = "{some_path}/violin_plots.png",
+        volumes = "{some_path}/violin_plots.png"
     run:
         import plotly.graph_objects as go
 

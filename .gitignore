@@ -200,3 +200,6 @@ monomer.gro
 
 outputs
 inputs
+input
+output
+nobackup

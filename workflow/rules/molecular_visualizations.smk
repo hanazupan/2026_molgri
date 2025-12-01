@@ -27,7 +27,7 @@ rule plot_one_frame:
         frame_plot="{where}molecular_plots/frame_{frame_index}.tga"
     run:
         from molgri.create_vmdlog import VMDCreator
-        from workflows.helpers.io import get_num_atoms
+        from workflow.helpers.io import get_num_atoms
 
         n1 = get_num_atoms(input.structure1)
         n2 = get_num_atoms(input.structure2)
