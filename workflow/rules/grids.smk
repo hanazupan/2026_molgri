@@ -63,7 +63,7 @@ rule create_full_network:
     benchmark:
         f"{{some_path}}{NAME_NETWORK_FOLDER}network_creation.txt"
     output:
-        network_file = f"{{some_path}}{NAME_NETWORK_FOLDER}full_network/network.pkl"
+        network_file = f"{{some_path}}{NAME_NETWORK_FOLDER}network.pkl"
     run:
         from molgri.network.full_network import create_full_network
 

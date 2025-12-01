@@ -4,11 +4,11 @@ grid:
   rotation_random_seed: 1
   N_rotations: 1
   translation_algorithm: "cartesian_xy_periodic"
-  translation_subgrids_A: [ [ -3.07, 1.85, 6 ], [ -4.26, 4.26,10 ], [ 1, 14, 13 ] ]
+  translation_subgrids_A: [ [ -3.07, 1.85, 6 ], [ -4.26, 4.26,10 ], [1, 14, 13 ] ]
 
 pseudotrajectory:
-  molecule_1: "water"
-  molecule_2: "water"
+  molecule_1: "graphene"
+  molecule_2: "xylene"
   structure_ending: "gro"
   trajectory_ending: "xtc"
 

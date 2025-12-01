@@ -201,17 +201,17 @@ class CartesianTranslationNetwork(TranslationNetwork):
     @cached_property
     def delta_x(self) -> float:
         first_node = self.sorted_nodes[0]
-        return first_node.x.hull[1] - first_node.x.hull[0]
+        return np.abs(first_node.x.hull[1] - first_node.x.hull[0])
 
     @cached_property
     def delta_y(self) -> float:
         first_node = self.sorted_nodes[0]
-        return first_node.y.hull[1] - first_node.y.hull[0]
+        return np.abs(first_node.y.hull[1] - first_node.y.hull[0])
 
     @cached_property
     def delta_z(self) -> float:
         first_node = self.sorted_nodes[0]
-        return first_node.z.hull[1] - first_node.z.hull[0]
+        return np.abs(first_node.z.hull[1] - first_node.z.hull[0])
 
     def _distances(self, edge_dict) -> dict:
         return {"x": self.delta_x, "y": self.delta_y, "z": self.delta_z}
@@ -239,7 +239,13 @@ def _create_cartesian_network(periodic_in_dimensions,
                               x_linspace_params, y_linspace_params, z_linspace_params, **kwargs):
     x_grid = np.linspace(*x_linspace_params)
     y_grid = np.linspace(*y_linspace_params)
-    z_grid = np.linspace(*z_linspace_params)
+    # a trick for gromacs: we should start with the largest distance first; if the first structure is too high in
+    # energy it causes an error -> the linspace should get parameters like (12, 2, 50) to start at 12 A and go to 2 A
+    num_start, num_stop, num_steps = z_linspace_params
+    if num_start < num_stop:
+        z_grid = np.linspace(num_stop, num_start, num_steps)
+    else:
+        z_grid = np.linspace(num_start, num_stop, num_steps)
 
     sub_networks = []
     labels = ("x", "y", "z")
@@ -279,7 +285,13 @@ def _create_spherical_coordinate_network(spherical_N_points, radial_parameters, 
     return full_network
 
 def _create_radial_network(radial_parameters) -> nx.Graph:
-    r_grid = np.linspace(*radial_parameters)
+    # a trick for gromacs: we should start with the largest distance first; if the first structure is too high in
+    # energy it causes an error -> the linspace should get parameters like (12, 2, 50) to start at 12 A and go to 2 A
+    num_start, num_stop, num_steps = radial_parameters
+    if num_start < num_stop:
+        r_grid = np.linspace(num_stop, num_start, num_steps)
+    else:
+        r_grid = np.linspace(num_start, num_stop, num_steps)
     nodes  = []
     if len(r_grid) == 1:
         delta_r = r_grid[0]
