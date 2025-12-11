@@ -1,7 +1,10 @@
+ase==3.26.0
+matplotlib==3.10.6
 networkx==3.5
-numpy==2.3.2
+numpy==1.26.4
 pip==25.2
-plotly==6.3.0
+plotly==6.3.1
+pymatgen==2025.10.7
 pytest-cov==7.0.0
 scipy==1.16.1
 setuptools==80.9.0

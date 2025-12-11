@@ -1,10 +1,10 @@
 grid:
-  unique_network_name: "auto_grid_20"
+  unique_network_name: "simple_grid_A20"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 20
   translation_algorithm: "cartesian_xy_periodic"
-  translation_subgrids_A: [ [None, None, 10], [ None, None, 10], [2, 5, 10] ]
+  translation_subgrids_A: [ [ -1.53, 0.93, 5], [ 0, 4.26, 5], [2, 5, 5 ] ]
 
 pseudotrajectory:
   molecule_1: "graphene"

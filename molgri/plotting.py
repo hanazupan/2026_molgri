@@ -1,7 +1,10 @@
+import os
 from functools import wraps
 
 import networkx as nx
 import numpy as np
+from numpy.typing import NDArray
+from MDAnalysis import Universe
 from matplotlib import pyplot as plt
 from scipy.spatial import geometric_slerp
 import plotly.graph_objects as go
@@ -26,7 +29,7 @@ def save_plotly(func):
     def wrapper(*args, **kwargs):
         save_as = kwargs.pop("save_as", None)
         save_interactive_as = kwargs.pop("save_interactive_as", None)
-        show = kwargs.pop("show", True)
+        show = kwargs.pop("show", False)
         fig = func(*args, **kwargs)
         if fig is None:
             return None
@@ -34,8 +37,8 @@ def save_plotly(func):
             fig.show()
         if save_as is not None:
             fig.write_image(save_as)
-        if save_interactive_as is not None:
-            fig.write_html(save_interactive_as)
+            name, ext = os.path.splitext(save_as)
+            fig.write_html(f"{name}.html")
         return fig
     return wrapper
 
@@ -63,7 +66,7 @@ def draw_spherical_polygon(fig, points, color="black"):
 
 @save_plotly
 def draw_points(points, fig = None, label_by_index: bool = False, custom_labels=None, marker_size=None, color="black",
-                **kwargs):
+                colorbar=None, equal_aspect = False, **kwargs):
     if fig is None:
         fig = go.Figure()
     if label_by_index or custom_labels is not None:
@@ -94,7 +97,10 @@ def draw_points(points, fig = None, label_by_index: bool = False, custom_labels=
                                        marker=dict(color=color, opacity=opacity, size=single_marker_size)), **kwargs)
     else:
         fig.add_trace(go.Scatter3d(x=points.T[0], y=points.T[1], z=points.T[2], text=text, mode=mode,
-                                   marker=dict(color=color, size=normalized_marker_size)), **kwargs)
+                                   marker=dict(color=color, size=normalized_marker_size, colorbar=colorbar),
+                                   **kwargs))
+    if equal_aspect:
+        fig.update_scenes(aspectmode='data')
     return fig
 
 
@@ -145,3 +151,59 @@ def show_graph(G, node_property: str = "total_index", edge_property: str = "edge
         plt.savefig(save_as)
     if show:
         plt.show()
+
+@save_plotly
+def show_violin(data, cutoff=None, name=None):
+        data = np.array(data)
+
+        # Apply cutoff
+        if cutoff is not None:
+            data_to_plot = data[data <= cutoff]
+        else:
+            data_to_plot = data
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Violin(y=data_to_plot, name=name, line_color="black", fillcolor="white",opacity=0.8))
+
+        if cutoff is not None:
+            fig.add_shape(type="line",x0=-0.5, x1=0.5,y0=cutoff, y1=cutoff,line=dict(color="red", dash="dash"))
+            fig.add_annotation(x=0,y=cutoff, text=f"cutoff = {cutoff}", showarrow=False, yshift=10, font=dict(color="red"))
+
+        fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", margin=dict(l=70, r=20, t=60, b=60),
+                          xaxis=dict(showline=True, linewidth=1, linecolor="black",showgrid=False),
+                          yaxis=dict(showline=True,linewidth=1,linecolor="black",showgrid=True,gridcolor="lightgray"))
+        return fig
+
+
+@save_plotly
+def draw_structure(fig, path, color="black"):
+    u = Universe(path)
+    fig = draw_points(u.atoms.positions, fig=fig, equal_aspect=True, color=color)
+    fig.update_layout(showlegend=False)
+    return fig
+
+@save_plotly
+def draw_unit_cell(fig: go.Figure, lattice: NDArray, color="blue"):
+    """
+    Provide a 3x3 array where every row is a lattice vector and get a drawing of a unit cell (all edges)
+    """
+    O = np.array([0,0,0])
+    a = lattice[0]
+    b = lattice[1]
+    c = lattice[2]
+
+    edges = [
+        (O, a), (O, b), (O, c),
+        (a, a+b), (a, a+c),
+        (b, a+b), (b, b+c),
+        (c, a+c), (c, b+c),
+        (a+b, a+b+c), (a+c, a+b+c), (b+c, a+b+c)
+    ]
+
+    for start, end in edges:
+        draw_line_between(fig, start, end, color=color)
+
+    fig.update_layout(scene_aspectmode="data")
+    fig.update_layout(showlegend=False)
+    return fig

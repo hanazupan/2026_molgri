@@ -544,6 +544,21 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
             # each render contains first molecule in representation 0 and second molecule in representation 1, 2, 3 ...
             self._render_representations([0, i+1], plot_path)
 
+    def plot_multiple_overlappig_frames(self, frame_indices: list, plot_path: str) -> None:
+        """
+        Renders a figure with usual coloring for each grid point in my_indices.
+
+        INDICES OF FRAMES ALREADY MUST HAVE +1 IF NEEDED
+        """
+
+        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=0)
+
+        for path_index in frame_indices:
+            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index)
+
+        self._add_rotations_translations()
+        self._render_representations(list(range(len(frame_indices)+1)), plot_path=plot_path)
+
     def _add_rotations_translations(self):
         """
         If the script was loaded before, it will be used, else nothing happens.

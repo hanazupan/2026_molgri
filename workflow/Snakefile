@@ -1,21 +1,47 @@
 
 configfile: "workflow/config/example_config.yaml"
 
+import numpy as np
+from workflow.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT, NAME_PT_FOLDER, NAME_NETWORK_FOLDER, \
+    NAME_ENERGY_FOLDER, NAME_LOWEST_E_FOLDER, NAME_PLOTS
+
+
+all_translation_coo = np.array(config["grid"]["translation_subgrids_A"]).reshape(-1)
+
+if 'None' in all_translation_coo:
+    from molgri.molecules.find_unit_cell import get_x_y_grid_inputs
+    path_input = f"{PATH_INPUT_MOLECULES}{config['pseudotrajectory']['molecule_1']}.gro"
+    num_x_points = config["grid"]["translation_subgrids_A"][0][2]
+    num_y_points = config["grid"]["translation_subgrids_A"][1][2]
+    z = config["grid"]["translation_subgrids_A"][2]
+    x, y = get_x_y_grid_inputs(path_input, num_x_points=num_x_points, num_y_points=num_y_points)
+    config["grid"]["translation_subgrids_A"] = [x, y, z]
+
 include: "rules/general.smk"
 include: "rules/grids.smk"
 include: "rules/pseudotrajectories.smk"
 include: "rules/gromacs.smk"
+include: "rules/energy.smk"
+include: "rules/molecular_visualizations.smk"
 
-from workflow.helpers.PATHS import PATH_OUTPUT, NAME_PT_FOLDER, NAME_NETWORK_FOLDER, NAME_ENERGY_FOLDER
+MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}/"
+NETWORK_NAME = f"{config['grid']['unique_network_name']}/"
 
-MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}"
-NETWORK_NAME = f"{config['grid']['unique_network_name']}"
+EXPERIMENT_FULL_PATH = f"{PATH_OUTPUT}{MOLECULE_NAMES}{NETWORK_NAME}"
 
-EXPERIMENT_FULL_PATH = f"{PATH_OUTPUT}{MOLECULE_NAMES}/{NETWORK_NAME}/"
 
 rule all:
     input:
+        expand(f"{EXPERIMENT_FULL_PATH}{NAME_PLOTS}ring_vector.png", N=[1, 3, 10, 100, 250, 1000]),
+        expand(f"{EXPERIMENT_FULL_PATH}{NAME_PLOTS}ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
+        expand(f"{EXPERIMENT_FULL_PATH}{NAME_LOWEST_E_FOLDER}lowest_{{N}}_view{{i}}.tga", i=[1,2], N=[1, 2, 10, 50, 100]),
+        f"{EXPERIMENT_FULL_PATH}{NAME_ENERGY_FOLDER}energy.csv",
+        #expand(f"{PATH_OUTPUT}{MOLECULE_NAMES}simulation/all_view{{i}}.png", i=[1,2]),
+        expand(f"{EXPERIMENT_FULL_PATH}molecule{{i}}/energy.xvg", i=[1,2]),
+        f"{EXPERIMENT_FULL_PATH}{NAME_PLOTS}violin_plot_energies.png",
+        expand(f"{EXPERIMENT_FULL_PATH}{NAME_LOWEST_E_FOLDER}all_view{{view_i}}.png", view_i=[1,2]),
         f"{EXPERIMENT_FULL_PATH}{NAME_ENERGY_FOLDER}energy.xvg",
-        f"{EXPERIMENT_FULL_PATH}{NAME_PT_FOLDER}structure.gro",
+        f"{EXPERIMENT_FULL_PATH}{NAME_PT_FOLDER}trajectory.xtc",
         f"{EXPERIMENT_FULL_PATH}{NAME_NETWORK_FOLDER}grid.npy",
         f"{EXPERIMENT_FULL_PATH}config_used.yaml",
+

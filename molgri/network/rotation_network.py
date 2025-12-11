@@ -148,7 +148,10 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
     double_coverage_points = double_coverage_from_upper_quaternions(upper_quaternions)
     unit_spherical_voronoi = get_spherical_voronoi(double_coverage_points)
     hulls = unit_spherical_voronoi.get_hulls()
-    volumes = hypersphere_voronoi_cell_volumes(double_coverage_points)
+    try:
+        volumes = hypersphere_voronoi_cell_volumes(double_coverage_points)
+    except MemoryError:
+        volumes = [None] * N_upper_points
 
 
     # why can we just use the hulls of half the points? We only use the hulls to calculate lengths/areas/volumes, so

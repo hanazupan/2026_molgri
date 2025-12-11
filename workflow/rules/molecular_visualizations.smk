@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 
 plt.switch_backend('agg')
 
+from workflow.helpers.PATHS import NAME_PT_FOLDER, NAME_VMD_OUTPUT, NAME_FRAME_PLOTS, PATH_VMD_SCRIPTS, NAME_PLOTS
+MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}/"
 
-rule all:
+rule all_visualization:
     input:
         expand("/home/hanaz63/2026_molgri/outputs/pseudotrajectories/graphene_xylene/graphene_grid_D1/molecular_plots/frame_{i}.tga",
             i=[1, 5, 20])
@@ -18,13 +20,14 @@ rule plot_one_frame:
     Plot one specific frame and save it to molecular_plots/
     """
     input:
-        structure=f"{{where}}structure.gro",
-        trajectory=f"{{where}}trajectory.xtc",
-        structure1=f"{{where}}m1.gro",
-        structure2=f"{{where}}m2.gro",
+        structure=f"{{some_path}}{NAME_PT_FOLDER}structure.gro",
+        trajectory=f"{{some_path}}{NAME_PT_FOLDER}trajectory.xtc",
+        structure1=f"{{some_path}}{NAME_PT_FOLDER}molecule1.gro",
+        structure2=f"{{some_path}}{NAME_PT_FOLDER}molecule2.gro",
+        translation_rotation_script = f"{PATH_VMD_SCRIPTS}{MOLECULE_NAMES}script{{view_i}}.log"
     output:
-        vmdlog="{where}molecular_vmdlog/frame_{frame_index}",
-        frame_plot="{where}molecular_plots/frame_{frame_index}.tga"
+        vmdlog=f"{{some_path}}{NAME_VMD_OUTPUT}frame_{{frame_index}}_view{{view_i}}",
+        frame_plot=f"{{some_path}}{NAME_FRAME_PLOTS}frame_{{frame_index}}_view{{view_i}}.tga"
     run:
         from molgri.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms
@@ -32,9 +35,8 @@ rule plot_one_frame:
         n1 = get_num_atoms(input.structure1)
         n2 = get_num_atoms(input.structure2)
 
-
-        my_vmd = VMDCreator(str(n1), str(n2))
-        #my_vmd.load_translation_rotation_script(my_script)
+        my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
+        my_vmd.load_translation_rotation_script(input.translation_rotation_script)
 
         index_to_plot = [int(wildcards.frame_index) + 1]
 
@@ -44,30 +46,35 @@ rule plot_one_frame:
         shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
 
 
+rule plot_overlay_frames:
+    """
+    Plot one specific frame and save it to molecular_plots/
+    """
+    input:
+        structure=f"{{some_path}}{NAME_PT_FOLDER}structure.gro",
+        trajectory=f"{{some_path}}{NAME_PT_FOLDER}trajectory.xtc",
+        structure1=f"{{some_path}}{NAME_PT_FOLDER}molecule1.gro",
+        structure2=f"{{some_path}}{NAME_PT_FOLDER}molecule2.gro",
+        translation_rotation_script = f"{PATH_VMD_SCRIPTS}{MOLECULE_NAMES}script{{view_i}}.log",
+        indices= f"{{some_path}}{{subfolder}}lowest_{{N}}.txt"
+    output:
+        vmdlog=f"{{some_path}}{{subfolder}}lowest_{{N}}_view{{view_i}}",
+        frame_plot=f"{{some_path}}{{subfolder}}lowest_{{N}}_view{{view_i}}.tga"
+    run:
+        from molgri.create_vmdlog import VMDCreator
+        from workflow.helpers.io import get_num_atoms, read_object
 
+        indices = read_object(input.indices)
 
-# rule join_plots_lowestE:
-#     input:
-#         prepare_all_lowestE_plots
-#     output:
-#         joint_plot = "{where}lowest_energy/all_lowestE.png"
-#     run:
-#         from molgri.plotting.modifying_images import trim_images_with_common_bbox, join_images
-#         modified_paths = [f"{os.path.split(file)[0]}/trimmed_{os.path.split(file)[1]}" for file in input]
-#         trim_images_with_common_bbox(input,modified_paths)
-#         join_images(modified_paths, output.joint_plot)
-#
-# rule collect_these_images:
-#     """
-#     Over different sub-folders (eg different cut-offs) collect the same image eg. first eigenvector.
-#     """
-#     input:
-#         all_images = expand("{where}absolute_lim_{limit}/eigenvectors/{what}.png", limit=["1", "3", "5", "10", "20", "50", "100", "200", "500", "1000"], allow_missing=True)
-#     output:
-#         joint_image = "{where}joint_images/{what}.png"
-#     run:
-#         from molgri.plotting.modifying_images import trim_images_with_common_bbox, join_images
-#         modified_paths = [f"{os.path.split(file)[0]}/trimmed_{os.path.split(file)[1]}" for file in input]
-#         trim_images_with_common_bbox(input,modified_paths)
-#         join_images(modified_paths, output.joint_image, flip=False)
+        n1 = get_num_atoms(input.structure1)
+        n2 = get_num_atoms(input.structure2)
 
+        my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
+        my_vmd.load_translation_rotation_script(input.translation_rotation_script)
+
+        index_to_plot = [int(i) + 1 for i in indices]
+
+        my_vmd.plot_multiple_overlappig_frames(index_to_plot,output.frame_plot)
+        my_vmd.write_text_to_file(output.vmdlog)
+
+        shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")

@@ -1,8 +1,6 @@
 """
 Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
 """
-include: "general.smk"
-
 from workflow.helpers.io import write_object, read_object
 from workflow.helpers.PATHS import NAME_NETWORK_FOLDER
 import numpy as np
@@ -19,12 +17,12 @@ matplotlib.use('Agg')
 
 rule all_grid:
     input:
-        expand("{some_path}/{NAME_NETWORK_FOLDER}/{to_create}",
+        expand("{some_path}{NAME_NETWORK_FOLDER}{to_create}",
             to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"],
             allow_missing=True),
 
         # optional visualizations
-        expand("{some_path}/{network_type}_network/{to_create}.{ending}",
+        expand("{some_path}{network_type}_network/{to_create}.{ending}",
             ending = ["png"],
             network_type = ["full", "rotation", "translation"],
             to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"],
@@ -34,9 +32,9 @@ rule all_grid:
 
 rule create_rotation_network:
     benchmark:
-        "{some_path}/rotation_network/network_creation.txt"
+        "{some_path}rotation_network/network_creation.txt"
     output:
-        network_file = "{some_path}/rotation_network/network.pkl"
+        network_file = "{some_path}rotation_network/network.pkl"
     run:
         from molgri.network.rotation_network import create_rotation_network
 
@@ -46,9 +44,9 @@ rule create_rotation_network:
 
 rule create_translation_network:
     benchmark:
-        "{some_path}/translation_network/network_creation.txt"
+        "{some_path}translation_network/network_creation.txt"
     output:
-        network_file = "{some_path}/translation_network/network.pkl"
+        network_file = "{some_path}translation_network/network.pkl"
     run:
         from molgri.network.translation_network import create_translation_network
 
@@ -58,8 +56,8 @@ rule create_translation_network:
 
 rule create_full_network:
     input:
-        rotation_network_file = "{some_path}/rotation_network/network.pkl",
-        translation_network_file = "{some_path}/translation_network/network.pkl"
+        rotation_network_file = "{some_path}rotation_network/network.pkl",
+        translation_network_file = "{some_path}translation_network/network.pkl"
     benchmark:
         f"{{some_path}}{NAME_NETWORK_FOLDER}network_creation.txt"
     output:
@@ -74,16 +72,16 @@ rule create_full_network:
 
 rule save_network_properties:
     input:
-        network_file = "{some_path}/network.pkl"
+        network_file = "{some_path}network.pkl"
     benchmark:
-        "{some_path}/saving_properties.txt"
+        "{some_path}saving_properties.txt"
     output:
-        grid = "{some_path}/grid.npy",
-        adjacency = "{some_path}/adjacency.npz",
-        numerical_edge_type = "{some_path}/edge_types.npz",
-        distances = "{some_path}/distances.npz",
-        surfaces = "{some_path}/surfaces.npz",
-        volumes = "{some_path}/volumes.npy"
+        grid = "{some_path}grid.npy",
+        adjacency = "{some_path}adjacency.npz",
+        numerical_edge_type = "{some_path}edge_types.npz",
+        distances = "{some_path}distances.npz",
+        surfaces = "{some_path}surfaces.npz",
+        volumes = "{some_path}volumes.npy"
     run:
         full_network = read_object(input.network_file)
 
@@ -97,9 +95,9 @@ rule save_network_properties:
 
 rule display_network:
     input:
-        network_file = "{some_path}/network.pkl"
+        network_file = "{some_path}network.pkl"
     output:
-        plot = "{some_path}/network.png"
+        plot = "{some_path}network.png"
     run:
         from molgri.plotting import show_graph
 
@@ -110,56 +108,50 @@ rule display_network:
 
 rule display_network_edge_matrices:
     input:
-        adjacency = "{some_path}/adjacency.npz",
-        numerical_edge_type = "{some_path}/edge_types.npz",
-        distances = "{some_path}/distances.npz",
-        surfaces = "{some_path}/surfaces.npz"
+        adjacency = "{some_path}adjacency.npz",
+        numerical_edge_type = "{some_path}edge_types.npz",
+        distances = "{some_path}distances.npz",
+        surfaces = "{some_path}surfaces.npz"
     output:
-        adjacency = "{some_path}/adjacency.png",
-        numerical_edge_type = "{some_path}/edge_types.png",
-        distances = "{some_path}/distances.png",
-        surfaces = "{some_path}/surfaces.png",
-        interactive_adjacency= "{some_path}/adjacency.html",
-        interactive_numerical_edge_type= "{some_path}/edge_types.html",
-        interactive_distances= "{some_path}/distances.html",
-        interactive_surfaces= "{some_path}/surfaces.html"
+        adjacency = "{some_path}adjacency.png",
+        numerical_edge_type = "{some_path}edge_types.png",
+        distances = "{some_path}distances.png",
+        surfaces = "{some_path}surfaces.png"
     run:
         from molgri.plotting import show_array
 
         show_array(read_object(input.adjacency).toarray(), "Adjacency_type",
-            save_as=output.adjacency, save_interactive_as=output.interactive_adjacency, show=False)
+            save_as=output.adjacency, show=False)
         show_array(read_object(input.numerical_edge_type).toarray(),"Edge types",
-            save_as=output.numerical_edge_type, save_interactive_as=output.interactive_numerical_edge_type, show=False)
+            save_as=output.numerical_edge_type, show=False)
         show_array(read_object(input.distances).toarray(), "Distance_matrix",
-            save_as=output.distances, save_interactive_as=output.interactive_distances, show=False)
+            save_as=output.distances, show=False)
         show_array(read_object(input.surfaces).toarray(), "Surface_matrix",
-            save_as=output.surfaces, save_interactive_as=output.interactive_surfaces, show=False)
+            save_as=output.surfaces, show=False)
 
 rule display_network_node_attributes:
     input:
-        grid = "{some_path}/grid.npy",
-        volumes= "{some_path}/volumes.npy"
+        grid = "{some_path}grid.npy",
+        volumes= "{some_path}volumes.npy"
     output:
-        grid = "{some_path}/grid.png",
-        volumes = "{some_path}/volumes.png",
-        interactive_grid= "{some_path}/grid.html",
-        interactive_volumes= "{some_path}/volumes.html"
+        grid = "{some_path}grid.png",
+        volumes = "{some_path}volumes.png"
     run:
         from molgri.plotting import draw_points
         grid = read_object(input.grid)
-        draw_points(grid, save_as=output.grid, save_interactive_as=output.interactive_grid, show=False)
+        draw_points(grid, save_as=output.grid, show=False)
         volumes = read_object(input.volumes)
         draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes,
-            save_interactive_as=output.interactive_volumes, show=False)
+            show=False)
 
 
 rule display_geometry_properties_with_violin_distributions:
     input:
-        volumes = "{some_path}/volumes.npy",
-        distances= "{some_path}/distances.npz",
-        surfaces= "{some_path}/surfaces.npz"
+        volumes = "{some_path}volumes.npy",
+        distances= "{some_path}distances.npz",
+        surfaces= "{some_path}surfaces.npz"
     output:
-        volumes = "{some_path}/violin_plots.png"
+        volumes = "{some_path}violin_plots.png"
     run:
         import plotly.graph_objects as go
 

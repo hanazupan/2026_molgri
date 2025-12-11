@@ -2,7 +2,7 @@
 Here we use existing networks and apply them to molecules.
 """
 from workflow.helpers.io import read_object, write_object
-from workflow.helpers.PATHS import PATH_INPUT_MOLECULES, NAME_PT_FOLDER, NAME_NETWORK_FOLDER
+from workflow.helpers.PATHS import NAME_SIMULATION_FOLDER, PATH_INPUT_MOLECULES, NAME_PT_FOLDER, NAME_NETWORK_FOLDER
 
 
 MOLECULE_1_NAME = config["pseudotrajectory"]["molecule_1"]
@@ -39,6 +39,19 @@ rule copy_molecular_files_from_input:
 
         write_object(m1, output.molecule_1)
         write_object(m2, output.molecule_2)
+
+rule create_only_structure:
+    input:
+        molecule_1 = f"{{some_path}}{NAME_PT_FOLDER}molecule1.{STRUCTURE_ENDING}",
+        molecule_2 = f"{{some_path}}{NAME_PT_FOLDER}molecule2.{STRUCTURE_ENDING}",
+    output:
+        structure = f"{{some_path}}{NAME_SIMULATION_FOLDER}structure.{STRUCTURE_ENDING}",
+    run:
+        from molgri.molecules.bimolecular import get_bimolecular_structure
+        m1 = read_object(input.molecule_1)
+        m2 = read_object(input.molecule_2)
+        structure = get_bimolecular_structure(m1, m2)
+        write_object(structure, output.structure)
 
 
 rule create_pseudotrajectory:

@@ -22,7 +22,7 @@ rule copy_config:
     The idea is to save the config file used in this run to some end directory.
     """
     log:
-        configfile_record = "{end_folder}/config_used.yaml"
+        configfile_record = "{end_folder}config_used.yaml"
     run:
         with open(log.configfile_record,"w") as f:
             yaml.dump(config,f, Dumper=FlowSeqDumper, sort_keys=False)

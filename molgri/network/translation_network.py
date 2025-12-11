@@ -237,8 +237,8 @@ def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic",
 
 def _create_cartesian_network(periodic_in_dimensions,
                               x_linspace_params, y_linspace_params, z_linspace_params, **kwargs):
-    x_grid = np.linspace(*x_linspace_params)
-    y_grid = np.linspace(*y_linspace_params)
+    x_grid = np.linspace(*x_linspace_params, endpoint=False)
+    y_grid = np.linspace(*y_linspace_params, endpoint=False)
     # a trick for gromacs: we should start with the largest distance first; if the first structure is too high in
     # energy it causes an error -> the linspace should get parameters like (12, 2, 50) to start at 12 A and go to 2 A
     num_start, num_stop, num_steps = z_linspace_params

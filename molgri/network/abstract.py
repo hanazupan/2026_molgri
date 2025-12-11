@@ -13,7 +13,7 @@ from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
 
 from molgri.constants import UNIQUE_TOL
-from molgri.utils.arrays import all_rows_unique, which_row_is_k, angle_between_vectors
+from molgri.utils.arrays import all_rows_unique, k_argmin_in_array, which_row_is_k, angle_between_vectors
 
 
 class AbstractNode(ABC):
@@ -27,6 +27,8 @@ class AbstractNode(ABC):
     def hull(self) -> NDArray:
         pass
 
+    def get_node_property(self, property_name: str):
+        return self.__dict__[property_name]
 
     @abstractmethod
     def apply_transform_on(self, molecular_coordinates: NDArray, weights: NDArray = None) -> NDArray:
@@ -53,14 +55,22 @@ class AbstractNetwork(nx.Graph, ABC):
         nodes = [node.apply_transform_on(moving_coordinates, weights=weights) for node in sorted(self.nodes)]
         return nodes
 
-    def add_node_property(self, sorted_values_list: list, property_name: str):
+    def add_node_properties(self, sorted_values_list: list, property_name: str):
         for node_i, node in enumerate(self.sorted_nodes):
             node.__dict__[property_name] = sorted_values_list[node_i]
 
-    def get_node_property(self, property_name: str) -> NDArray:
-        chosen_property = [node.__dict__[property_name] for node in self.sorted_nodes]
+    def get_node_properties(self, property_name: str) -> NDArray:
+        chosen_property = [node.get_node_property(property_name) for node in self.sorted_nodes]
         chosen_property = np.array(chosen_property, dtype=float)
         return chosen_property
+
+    def _get_node_indices_by_property(self, property_condition):
+        return [i for i, node in enumerate(self.sorted_nodes) if property_condition(node)]
+
+    def get_node_indices_N_lowest_energies(self, N: int):
+        all_energies = self.get_node_properties("energy")
+        return k_argmin_in_array(all_energies, N)
+
 
     @cached_property
     def sorted_nodes(self):
@@ -72,6 +82,7 @@ class AbstractNetwork(nx.Graph, ABC):
         volumes = [node.volume for node in self.sorted_nodes]
         volumes = np.array(volumes, dtype=float)
         return volumes
+
 
     @cached_property
     def hulls(self):

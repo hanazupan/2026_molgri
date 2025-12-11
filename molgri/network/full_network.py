@@ -3,6 +3,7 @@ from functools import cached_property
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
+from itertools import groupby
 
 from molgri.network.rotation_network import RotationNode, RotationNetwork
 from molgri.network.translation_network import TranslationNode, TranslationNetwork
@@ -33,6 +34,7 @@ class FullNode(AbstractNode):
 
     def get_indices(self):
         return [self.translation_node, self.rotation_node]
+
 
     @cached_property
     def volume(self):
@@ -65,6 +67,37 @@ class FullNetwork(AbstractNetwork):
 
     def _numerical_edge_type(self, edge_dict) -> dict:
         return {edge_dict["edge_type"]: edge_dict["numerical_edge_type"]}
+
+    def get_translation_indices(self) -> NDArray:
+        N_translations, N_rotations = self.list_of_position_nodes.shape
+        indices = np.array([np.repeat(i, N_rotations) for i in range(N_translations)], dtype=int)
+        indices = indices.reshape(-1)
+        return indices
+
+    def get_rotation_indices(self) -> NDArray:
+        N_translations, N_rotations = self.list_of_position_nodes.shape
+        indices = np.array([node.rotation_node.index for node in self.sorted_nodes], dtype=int)
+        return indices
+
+    @cached_property
+    def list_of_position_nodes(self):
+        """
+        The result is an array, first line are all nodes at the first position, the second all nodes at the second
+        position and so on.
+        """
+        groups = np.array([list(g) for k, g in groupby(self.sorted_nodes, key=lambda o: o.translation_node)])
+        return groups
+
+
+    def get_property_per_position(self, property_name):
+        """
+        The result is an array, first line are all nodes at the first position, the second all nodes at the second
+        position and so on. But instead of returning the nodes directly we return some property of that node. To do
+        this efficiently we use the numpy vectorize function.
+        """
+        groups = self.list_of_position_nodes
+        func = np.vectorize(lambda o: o.get_node_property(property_name))
+        return func(groups)
 
 
 def create_full_network(translation_network: TranslationNetwork, rotation_network: RotationNetwork) -> FullNetwork:
