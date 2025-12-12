@@ -33,7 +33,7 @@ def combine_coordinates(static_coordinates: NDArray, moving_coordinates: NDArray
     merged_coordinates = np.concatenate([static_coordinates_tiled, moving_coordinates], axis=1)
     return merged_coordinates
 
-def get_bimolecular_structure(universe_static: Universe, universe_moving: Universe) -> Universe:
+def get_bimolecular_structure(universe_static: Universe, universe_moving: Universe, z_distance: float = None) -> Universe:
     """
     The goal here is to combine the atoms from both Universe objects to create a combined Universe. This will be
     exported as the structure file. Only a single frame  is returned even if universes have trajectories attached.
@@ -44,10 +44,13 @@ def get_bimolecular_structure(universe_static: Universe, universe_moving: Univer
     Args:
         universe_static (Universe): contain the atoms of molecule 1 that do not move during a pseutotrajectory
         universe_moving (Universe): contain the atoms of molecule 2 that move
+        z_distance (float): if not None molecule 2 will be translated in the z-direction for this amount
 
     Returns:
         a Universe object where atoms from both are combined.
     """
+    if z_distance is not None:
+        universe_moving.atoms.translate(np.array([0, 0, z_distance]))
     merged_universe = Merge(universe_static.atoms, universe_moving.atoms)
     merged_universe.dimensions = universe_static.dimensions
     return merged_universe

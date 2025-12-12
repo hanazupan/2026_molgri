@@ -1,7 +1,7 @@
 
 from workflow.helpers.io import read_object, write_object
 from workflow.helpers.PATHS import NAME_NETWORK_FOLDER, NAME_ENERGY_FOLDER, NAME_PLOTS, NAME_LOWEST_E_FOLDER, \
-    NAME_FRAME_PLOTS, NAME_PT_FOLDER
+    NAME_FRAME_PLOTS, NAME_PT_FOLDER, NAME_SIMULATION_FOLDER
 from molgri.utils.arrays import k_argmin_in_array
 
 MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}/"
@@ -46,6 +46,34 @@ checkpoint create_energy_csv:
 
         df = df.sort_values(by="Binding energy [kJ/mol]",ascending=True)
         print(df.head(300)["Rotation index"])
+
+checkpoint create_simulation_energy_csv:
+    input:
+        energy=f"{{some_path}}{NAME_SIMULATION_FOLDER}energy.xvg",
+        m1_energy=f"{{some_path}}{NAME_SIMULATION_FOLDER}m1.xvg",
+        m2_energy=f"{{some_path}}{NAME_SIMULATION_FOLDER}m2.xvg"
+    output:
+        energy_csv = f"{{some_path}}{NAME_SIMULATION_FOLDER}energy.csv"
+    run:
+        import pandas as pd
+        import numpy as np
+
+        my_energy = read_object(input.energy)
+        my_energy_array = my_energy[ENERGY_TYPE].to_numpy()
+
+        energy_m1 = read_object(input.m1_energy)[ENERGY_TYPE]
+        energy_m2 = read_object(input.m2_energy)[ENERGY_TYPE]
+
+        df = pd.DataFrame(np.array([my_energy_array, energy_m1, energy_m2]).T,
+            columns=["Energy [kJ/mol]", "Molecule 1 [kJ/mol]", "Molecule 2 [kJ/mol]"])
+
+        df["Binding energy [kJ/mol]"] = df["Energy [kJ/mol]"] - df["Molecule 1 [kJ/mol]"]  - df["Molecule 2 [kJ/mol]"]
+        df.index.name = "Total index"
+
+        write_object(df, output.energy_csv)
+
+        df = df.sort_values(by="Binding energy [kJ/mol]",ascending=True)
+        print(df.head(50))
 
 
 rule read_in_energies:

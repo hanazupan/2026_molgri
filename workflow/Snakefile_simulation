@@ -19,6 +19,7 @@ if 'None' in all_translation_coo:
 include: "rules/general.smk"
 include: "rules/pseudotrajectories.smk"
 include: "rules/gromacs.smk"
+include: "rules/energy.smk"
 
 MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}/"
 NETWORK_NAME = f"{config['grid']['unique_network_name']}/"
@@ -28,5 +29,7 @@ EXPERIMENT_FULL_PATH = f"{PATH_OUTPUT}{MOLECULE_NAMES}{NETWORK_NAME}"
 
 rule all:
     input:
+        f"{EXPERIMENT_FULL_PATH}{NAME_SIMULATION_FOLDER}energy.csv",
+        expand(f"{EXPERIMENT_FULL_PATH}molecule{{i}}/full_energy.xvg", i=[1,2]),
         f"{EXPERIMENT_FULL_PATH}{NAME_SIMULATION_FOLDER}energy.xvg",
         f"{EXPERIMENT_FULL_PATH}config_used.yaml",

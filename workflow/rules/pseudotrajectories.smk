@@ -21,12 +21,14 @@ rule copy_molecular_files_from_input:
     """
     Here the goal is just to start a new directory and copy molecular files there.
     """
+    wildcard_constraints:
+        output_folder=fr"({NAME_PT_FOLDER}|molecule1/|molecule2/)"
     input:
         molecule_1 = f"{PATH_INPUT_MOLECULES}{MOLECULE_1_NAME}.{STRUCTURE_ENDING}",
         molecule_2 = f"{PATH_INPUT_MOLECULES}{MOLECULE_2_NAME}.{STRUCTURE_ENDING}",
     output:
-        molecule_1 = f"{{some_path}}{NAME_PT_FOLDER}molecule1.{STRUCTURE_ENDING}",
-        molecule_2 = f"{{some_path}}{NAME_PT_FOLDER}molecule2.{STRUCTURE_ENDING}",
+        molecule_1 = f"{{some_path}}{{output_folder}}molecule1.{STRUCTURE_ENDING}",
+        molecule_2 = f"{{some_path}}{{output_folder}}molecule2.{STRUCTURE_ENDING}",
     run:
         from molgri.molecules.bimolecular import move_to_center
 
@@ -50,7 +52,8 @@ rule create_only_structure:
         from molgri.molecules.bimolecular import get_bimolecular_structure
         m1 = read_object(input.molecule_1)
         m2 = read_object(input.molecule_2)
-        structure = get_bimolecular_structure(m1, m2)
+        z_distance = float(config["grid"]["translation_subgrids_A"][-1][1])
+        structure = get_bimolecular_structure(m1, m2, z_distance=z_distance)
         write_object(structure, output.structure)
 
 
