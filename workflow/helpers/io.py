@@ -55,7 +55,6 @@ def _write_network(network, filename: str) -> nx.Graph:
         pickle.dump(network, f)
 
 def _read_network(filename: str):
-    my_network = None
     with open(filename, "rb") as f:
         my_network = pickle.load(f)
     return my_network

@@ -196,6 +196,9 @@ workflow/*.csv
 *.vmd
 *.tga
 *.mpg
+*.xtc
+*.gro
+*.xyz
 monomer.gro
 
 outputs
@@ -203,3 +206,4 @@ inputs
 input
 output
 nobackup
+januar_outdated_outputs/

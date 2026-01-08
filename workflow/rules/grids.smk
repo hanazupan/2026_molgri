@@ -2,7 +2,6 @@
 Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
 """
 from workflow.helpers.io import write_object, read_object
-from workflow.helpers.PATHS import NAME_NETWORK_FOLDER
 import numpy as np
 
 ROTATION_ALGORITHM = config["grid"]["rotation_algorithm"]
@@ -17,12 +16,12 @@ matplotlib.use('Agg')
 
 rule all_grid:
     input:
-        expand("{some_path}{NAME_NETWORK_FOLDER}{to_create}",
+        expand("<outputs_network>{to_create}",
             to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"],
             allow_missing=True),
 
         # optional visualizations
-        expand("{some_path}{network_type}_network/{to_create}.{ending}",
+        expand("<outputs_network>{network_type}_network/{to_create}.{ending}",
             ending = ["png"],
             network_type = ["full", "rotation", "translation"],
             to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"],
@@ -32,9 +31,9 @@ rule all_grid:
 
 rule create_rotation_network:
     benchmark:
-        "{some_path}rotation_network/network_creation.txt"
+        "<outputs_network>rotation_network/network_creation.txt"
     output:
-        network_file = "{some_path}rotation_network/network.pkl"
+        network_file = "<outputs_network>rotation_network/network.pkl"
     run:
         from molgri.network.rotation_network import create_rotation_network
 
@@ -44,9 +43,9 @@ rule create_rotation_network:
 
 rule create_translation_network:
     benchmark:
-        "{some_path}translation_network/network_creation.txt"
+        "<outputs_network>translation_network/network_creation.txt"
     output:
-        network_file = "{some_path}translation_network/network.pkl"
+        network_file = "<outputs_network>translation_network/network.pkl"
     run:
         from molgri.network.translation_network import create_translation_network
 
@@ -56,12 +55,12 @@ rule create_translation_network:
 
 rule create_full_network:
     input:
-        rotation_network_file = "{some_path}rotation_network/network.pkl",
-        translation_network_file = "{some_path}translation_network/network.pkl"
+        rotation_network_file = "<outputs_network>rotation_network/network.pkl",
+        translation_network_file = "<outputs_network>translation_network/network.pkl"
     benchmark:
-        f"{{some_path}}{NAME_NETWORK_FOLDER}network_creation.txt"
+        f"<outputs_network>network_creation.txt"
     output:
-        network_file = f"{{some_path}}{NAME_NETWORK_FOLDER}network.pkl"
+        network_file = f"<outputs_network>network.pkl"
     run:
         from molgri.network.full_network import create_full_network
 
@@ -72,16 +71,16 @@ rule create_full_network:
 
 rule save_network_properties:
     input:
-        network_file = "{some_path}network.pkl"
+        network_file = "<outputs_network>network.pkl"
     benchmark:
-        "{some_path}saving_properties.txt"
+        "<outputs_network>saving_properties.txt"
     output:
-        grid = "{some_path}grid.npy",
-        adjacency = "{some_path}adjacency.npz",
-        numerical_edge_type = "{some_path}edge_types.npz",
-        distances = "{some_path}distances.npz",
-        surfaces = "{some_path}surfaces.npz",
-        volumes = "{some_path}volumes.npy"
+        grid = "<outputs_network>grid.npy",
+        adjacency = "<outputs_network>adjacency.npz",
+        numerical_edge_type = "<outputs_network>edge_types.npz",
+        distances = "<outputs_network>distances.npz",
+        surfaces = "<outputs_network>surfaces.npz",
+        volumes = "<outputs_network>volumes.npy"
     run:
         full_network = read_object(input.network_file)
 
@@ -95,9 +94,9 @@ rule save_network_properties:
 
 rule display_network:
     input:
-        network_file = "{some_path}network.pkl"
+        network_file = "<outputs_network>network.pkl"
     output:
-        plot = "{some_path}network.png"
+        plot = "<outputs_network>network.png"
     run:
         from molgri.plotting import show_graph
 
@@ -108,15 +107,15 @@ rule display_network:
 
 rule display_network_edge_matrices:
     input:
-        adjacency = "{some_path}adjacency.npz",
-        numerical_edge_type = "{some_path}edge_types.npz",
-        distances = "{some_path}distances.npz",
-        surfaces = "{some_path}surfaces.npz"
+        adjacency = "<outputs_network>adjacency.npz",
+        numerical_edge_type = "<outputs_network>edge_types.npz",
+        distances = "<outputs_network>distances.npz",
+        surfaces = "<outputs_network>surfaces.npz"
     output:
-        adjacency = "{some_path}adjacency.png",
-        numerical_edge_type = "{some_path}edge_types.png",
-        distances = "{some_path}distances.png",
-        surfaces = "{some_path}surfaces.png"
+        adjacency = "<outputs_network>adjacency.png",
+        numerical_edge_type = "<outputs_network>edge_types.png",
+        distances = "<outputs_network>distances.png",
+        surfaces = "<outputs_network>surfaces.png"
     run:
         from molgri.plotting import show_array
 
@@ -131,11 +130,11 @@ rule display_network_edge_matrices:
 
 rule display_network_node_attributes:
     input:
-        grid = "{some_path}grid.npy",
-        volumes= "{some_path}volumes.npy"
+        grid = "<outputs_network>grid.npy",
+        volumes= "<outputs_network>volumes.npy"
     output:
-        grid = "{some_path}grid.png",
-        volumes = "{some_path}volumes.png"
+        grid = "<outputs_network>grid.png",
+        volumes = "<outputs_network>volumes.png"
     run:
         from molgri.plotting import draw_points
         grid = read_object(input.grid)
@@ -147,11 +146,11 @@ rule display_network_node_attributes:
 
 rule display_geometry_properties_with_violin_distributions:
     input:
-        volumes = "{some_path}volumes.npy",
-        distances= "{some_path}distances.npz",
-        surfaces= "{some_path}surfaces.npz"
+        volumes = "<outputs_network>volumes.npy",
+        distances= "<outputs_network>distances.npz",
+        surfaces= "<outputs_network>surfaces.npz"
     output:
-        volumes = "{some_path}violin_plots.png"
+        volumes = "<outputs_network>violin_plots.png"
     run:
         import plotly.graph_objects as go
 

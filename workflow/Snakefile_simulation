@@ -1,35 +1,65 @@
-
 configfile: "workflow/config/example_config.yaml"
 
-import numpy as np
-from workflow.helpers.PATHS import PATH_INPUT_MOLECULES, PATH_OUTPUT, NAME_SIMULATION_FOLDER
 
+from workflow.helpers.PATHS import auto_create_grid
 
-all_translation_coo = np.array(config["grid"]["translation_subgrids_A"]).reshape(-1)
+config = auto_create_grid(config)
 
-if 'None' in all_translation_coo:
-    from molgri.molecules.find_unit_cell import get_x_y_grid_inputs
-    path_input = f"{PATH_INPUT_MOLECULES}{config['pseudotrajectory']['molecule_1']}.gro"
-    num_x_points = config["grid"]["translation_subgrids_A"][0][2]
-    num_y_points = config["grid"]["translation_subgrids_A"][1][2]
-    z = config["grid"]["translation_subgrids_A"][2]
-    x, y = get_x_y_grid_inputs(path_input, num_x_points=num_x_points, num_y_points=num_y_points)
-    config["grid"]["translation_subgrids_A"] = [x, y, z]
+if config["perform_simulation"]:
+    subfolder = "simulation/"
+else:
+    subfolder = "pseudosimulation/"
+
+pathvars:
+    molecule1 = config["pseudotrajectory"]["molecule_1"],
+    molecule2 = config["pseudotrajectory"]["molecule_2"],
+    ext_str = config["pseudotrajectory"]["structure_ending"],
+    ext_trj = config["pseudotrajectory"]["trajectory_ending"],
+    network = f"{config['grid']['unique_network_name']}/",
+    molecules = f"<molecule1>_<molecule2>/",
+    inputs = "inputs/",
+    inputs_gromacs =f"<inputs>default_gromacs/<molecules>",
+    inputs_vmd =f"<inputs>vmd_scripts/<molecules>",
+    inputs_structures = f"<inputs>one_molecule_structures/",
+    outputs = f'nobackup/<molecules><network>{subfolder}',
+    outputs_network = f'nobackup/<molecules><network>network/',
+    outputs_gromacs = f'<outputs>gromacs/',
+    outputs_indices = f'<outputs>important_indices/',
+    outputs_vmd = f'<outputs>vmd/',
+    outputs_plots = f'<outputs>plots/',
+    outputs_frame_plots = f'<outputs_plots>frames/',
+
 
 include: "rules/general.smk"
+include: "rules/grids.smk"
 include: "rules/pseudotrajectories.smk"
-include: "rules/gromacs.smk"
 include: "rules/energy.smk"
+include: "rules/molecular_visualizations.smk"
 
-MOLECULE_NAMES = f"{config['pseudotrajectory']['molecule_1']}_{config['pseudotrajectory']['molecule_2']}/"
-NETWORK_NAME = f"{config['grid']['unique_network_name']}/"
+if config["perform_simulation"]:
+    include: "rules/simulation_only.smk"
+else:
+    include: "rules/rerun_only.smk"
 
-EXPERIMENT_FULL_PATH = f"{PATH_OUTPUT}{MOLECULE_NAMES}{NETWORK_NAME}"
 
-
-rule all:
-    input:
-        f"{EXPERIMENT_FULL_PATH}{NAME_SIMULATION_FOLDER}energy.csv",
-        expand(f"{EXPERIMENT_FULL_PATH}molecule{{i}}/full_energy.xvg", i=[1,2]),
-        f"{EXPERIMENT_FULL_PATH}{NAME_SIMULATION_FOLDER}energy.xvg",
-        f"{EXPERIMENT_FULL_PATH}config_used.yaml",
+if config["perform_simulation"]:
+    rule all:
+        input:
+            f"<outputs_frame_plots>frame_22_view1.tga",
+            #expand(f"{EXPERIMENT_FULL_PATH}{IMPORTANT_INDICES}all_view{{view_i}}.png", view_i=[1,2]),
+            expand(f"<outputs_indices>lowest_{{N}}_binding_energies.txt", N=[1, 5, 10, 50]),
+            f"<outputs>energy.csv",
+            f"<outputs_gromacs>energy.xvg",
+            f"<outputs_gromacs>structure.gro",
+            f"<outputs>config_used.yaml",
+else:
+    rule all:
+        input:
+            #expand(f"{EXPERIMENT_FULL_PATH}{IMPORTANT_INDICES}all_view{{view_i}}.png", view_i=[1,2]),
+            f"<outputs>network_energy.pkl",
+            f"<outputs_frame_plots>frame_22_view1.tga",
+            expand(f"<outputs_indices>lowest_{{N}}_binding_energies.txt", N=[1, 5, 10, 50]),
+            f"<outputs>energy.csv",
+            f"<outputs_gromacs>energy.xvg",
+            f"<outputs_gromacs>trajectory.xtc",
+            f"<outputs>config_used.yaml",

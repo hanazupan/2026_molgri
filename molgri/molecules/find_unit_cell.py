@@ -225,6 +225,8 @@ if __name__ == "__main__":
     rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
                                                        numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
 
+    print(rectangular_unit_structure)
+
 
     fig = go.Figure()
     draw_unit_cell(fig, primitive_structure.lattice.matrix)
