@@ -19,6 +19,4 @@ energy:
 
 
 plotting:
-  energy_type_name: Potential
-  plot_N_lowest: 5
   upper_E_limit: 0

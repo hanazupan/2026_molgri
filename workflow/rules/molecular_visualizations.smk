@@ -43,7 +43,7 @@ rule plot_one_frame:
 
 rule plot_overlay_frames:
     """
-    Plot one specific frame and save it to molecular_plots/
+    Plot multiple frames at the same time (eg. 10 lowest E structures, but this is a general rule).
     """
     input:
         structure=f"<outputs_gromacs>structure.gro",
@@ -51,10 +51,10 @@ rule plot_overlay_frames:
         structure1=f"<outputs_gromacs>molecule1.gro",
         structure2=f"<outputs_gromacs>molecule2.gro",
         translation_rotation_script = f"<inputs_vmd>script{{view_i}}.log",
-        indices= f"<outputs>{{subfolder}}lowest_{{N}}_binding_energies.txt"
+        indices= f"<outputs_indices>{{file_name}}.txt"
     output:
-        vmdlog=f"<outputs>{{subfolder}}lowest_{{N}}_energies_view{{view_i}}",
-        frame_plot=f"<outputs>{{subfolder}}lowest_{{N}}_energies_view{{view_i}}.tga"
+        vmdlog=f"<outputs_vmd>{{file_name}}_view{{view_i}}",
+        frame_plot=f"<outputs_plots_lowest>{{file_name}}_view{{view_i}}.tga"
     run:
         from molgri.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms, read_object
