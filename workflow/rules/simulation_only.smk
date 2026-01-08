@@ -47,15 +47,21 @@ rule gromacs_production:
         repeat(f"<outputs_gromacs>gromacs_benchmark.txt",1)
     shadow: "minimal"
     output:
+        structure_tpr=f"<outputs_gromacs>structure.tpr",
         energy=f"<outputs_gromacs>energy.xvg",
+        original_trajectory=f"<outputs_gromacs>raw_trajectory.xtc",
         trajectory=f"<outputs_gromacs>trajectory.xtc",
     shell:
         """
         initial_dir=$(pwd)
         cd $(dirname {input.runfile})
         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -p $(basename {input.topology}) -o trajectory.tpr -n $(basename {input.index})
-        gmx22 mdrun -v -deffnm trajectory -g $(basename {log.log})
-        gmx22 energy -f trajectory.edr -o $(basename {output.energy}) < $(basename {input.select_energy})
+        gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -p $(basename {input.topology}) -o raw_trajectory.tpr -n $(basename {input.index})
+        gmx22 mdrun -v -deffnm raw_trajectory -g $(basename {log.log})
+        gmx22 energy -f raw_trajectory.edr -o $(basename {output.energy}) < $(basename {input.select_energy})
+        # now fit to first frame
+        gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -p $(basename {input.topology}) -o $(basename {output.structure_tpr}) -n $(basename {input.index}) 
+        echo "2\n0\n" |  gmx22 trjconv -f raw_trajectory.xtc -s  $(basename {output.structure_tpr}) -pbc mol -center -o centered_trajectory.xtc -n $(basename {input.index})
+        echo "2\n0\n" |  gmx22 trjconv -fit rot+trans -f centered_trajectory.xtc -o $(basename {output.trajectory}) -s  $(basename {output.structure_tpr}) -n $(basename {input.index})
         cd "$initial_dir" || exit
         """

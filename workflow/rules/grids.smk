@@ -144,6 +144,52 @@ rule display_network_node_attributes:
             show=False)
 
 
+rule create_index_csv:
+    """
+    Save which quaternion and position relate to which index.
+    """
+    input:
+        network= f"<outputs_network>network.pkl",
+    output:
+        energy_csv = f"<outputs_network>indices_interpretation.csv"
+    run:
+        import pandas as pd
+        import numpy as np
+
+        my_network = read_object(input.network)
+
+        translation_indices = my_network.get_translation_indices()
+        rotation_indices = my_network.get_rotation_indices()
+        coordinates = my_network.grid
+        positions = coordinates[:, :3]
+        quaternions = coordinates[:, 3:]
+
+        df = pd.DataFrame(np.array([translation_indices, rotation_indices]).T,
+            columns=["Translation index", "Rotation index"])
+
+        df["Position"] = list(positions)
+        df["Quaternion"] = list(quaternions)
+        df.index.name = "Total index"
+        # indices should be integers
+        df["Translation index"] = df["Translation index"].astype("Int64")
+        df["Rotation index"] = df["Rotation index"].astype("Int64")
+
+        write_object(df, output.energy_csv)
+
+
+rule print_indices_interpretation:
+    """
+    Use this rule if you want to quickly look at the indices and understand them.
+    """
+    input:
+        indices_csv =f"<outputs_network>indices_interpretation.csv"
+    run:
+        df = read_object(input.indices_csv)
+        # for example only filter the ones with specific rotation index
+        df_filtered = df.loc[df["Rotation index"] == 5]
+        print(df_filtered.head(10))
+
+
 rule display_geometry_properties_with_violin_distributions:
     input:
         volumes = "<outputs_network>volumes.npy",

@@ -37,6 +37,7 @@ include: "rules/grids.smk"
 include: "rules/pseudotrajectories.smk"
 include: "rules/energy.smk"
 include: "rules/molecular_visualizations.smk"
+include: "rules/graphene_xylene_specific.smk"
 
 if config["perform_simulation"]:
     include: "rules/simulation_only.smk"
@@ -44,11 +45,13 @@ else:
     include: "rules/rerun_only.smk"
 
 N=[1, 5, 10, 50]
-view_i=[1,2]
+view_i=[1]
 
 if config["perform_simulation"]:
     rule all:
         input:
+            f"<outputs_other_plots>ring_vector.png",
+            expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=N),
             f"<outputs_other_plots>violin_plot_energies.png",
             expand(f"<outputs_plots_lowest>lowest_{{N}}_binding_energies_view{{view_i}}.tga",N=N,view_i=view_i),
             f"<outputs_frame_plots>frame_22_view1.tga",
@@ -60,9 +63,9 @@ if config["perform_simulation"]:
 else:
     rule all:
         input:
-        expand(f"{EXPERIMENT_FULL_PATH}{NAME_PLOTS}ring_vector.png", N=[1, 3, 10, 100, 250, 1000]),
-        expand(f"{EXPERIMENT_FULL_PATH}{NAME_PLOTS}ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
-            f"<outputs>indices_interpretation.csv",
+            expand(f"<outputs_other_plots>ring_vector.png"),
+            expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
+            f"<outputs_network>indices_interpretation.csv",
             f"<outputs_other_plots>violin_plot_energies.png",
             expand(f"<outputs_plots_lowest>lowest_{{N}}_binding_energies_view{{view_i}}.tga", N=N, view_i=view_i),
             f"<outputs>network_energy.pkl",

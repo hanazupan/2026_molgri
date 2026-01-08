@@ -255,7 +255,7 @@ class VMDCreator:
             self.default_drawing_method = "NewCartoon"
         else:
             self.default_coloring_method = "Type"
-            self.default_drawing_method = "CPK 1.000000 0.300000 12.000000 10.000000"
+            self.default_drawing_method = "DynamicBonds 1.600000 0.300000 6.000000"
 
         self.num_representations = 0
         self._start_new_file()
@@ -533,10 +533,11 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         """
         assert len(my_indices) == len(plot_names)
 
-        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=0)
+        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=1,
+                                 representation="DynamicBonds 1.600000 0.300000 6.000000")
 
         for path_index in my_indices:
-            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index)
+            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index, representation="Licorice")
 
         self._add_rotations_translations()
 
@@ -551,10 +552,12 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         INDICES OF FRAMES ALREADY MUST HAVE +1 IF NEEDED
         """
 
-        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=0)
+        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=1,
+                                 representation="DynamicBonds 1.600000 0.300000 6.000000")
 
         for path_index in frame_indices:
-            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index)
+            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index,
+                                     representation="Licorice")
 
         self._add_rotations_translations()
         self._render_representations(list(range(len(frame_indices)+1)), plot_path=plot_path)

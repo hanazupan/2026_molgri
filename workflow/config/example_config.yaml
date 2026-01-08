@@ -1,4 +1,4 @@
-perform_simulation: False
+perform_simulation: True
 
 grid:
   unique_network_name: "auto_grid_20"
