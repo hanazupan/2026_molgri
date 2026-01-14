@@ -105,12 +105,19 @@ def draw_points(points, fig = None, label_by_index: bool = False, custom_labels=
 
 
 def draw_line_between(fig, point1, point2, color="black", **kwargs):
-    fig.add_trace(
-        go.Scatter3d(x=[point1[0], point2[0]],
-                     y=[point1[1], point2[1]],
-                     z=[point1[2], point2[2]],
-                     mode="lines",
-                     marker=dict(color=color)), **kwargs)
+    if len(point1) == 3:
+        fig.add_trace(
+            go.Scatter3d(x=[point1[0], point2[0]],
+                         y=[point1[1], point2[1]],
+                         z=[point1[2], point2[2]],
+                         mode="lines",
+                         marker=dict(color=color)), **kwargs)
+    else:
+        fig.add_trace(
+            go.Scatter(x=[point1[0], point2[0]],
+                         y=[point1[1], point2[1]],
+                         mode="lines",
+                         marker=dict(color=color)), **kwargs)
 
 @save_plotly
 def show_array(my_array, title: str = ""):
@@ -184,25 +191,39 @@ def draw_structure(fig, path, color="black"):
     return fig
 
 @save_plotly
-def draw_unit_cell(fig: go.Figure, lattice: NDArray, color="blue"):
+def draw_unit_cell(fig: go.Figure, side_lengths: NDArray, color="blue", start_at=None, **kwargs):
     """
     Provide a 3x3 array where every row is a lattice vector and get a drawing of a unit cell (all edges)
     """
-    O = np.array([0,0,0])
-    a = lattice[0]
-    b = lattice[1]
-    c = lattice[2]
+    print("start at", start_at)
+    print("lattice", side_lengths)
+    if start_at is None:
+        v0 = np.array([0,0,0])
+    else:
+        v0 = np.array(start_at)
 
+    Lx, Ly, Lz = side_lengths
+
+    vertices = np.array([
+        v0,
+        v0 + [Lx, 0, 0],
+        v0 + [0, Ly, 0],
+        v0 + [0, 0, Lz],
+        v0 + [Lx, Ly, 0],
+        v0 + [Lx, 0, Lz],
+        v0 + [0, Ly, Lz],
+        v0 + [Lx, Ly, Lz],
+    ])
     edges = [
-        (O, a), (O, b), (O, c),
-        (a, a+b), (a, a+c),
-        (b, a+b), (b, b+c),
-        (c, a+c), (c, b+c),
-        (a+b, a+b+c), (a+c, a+b+c), (b+c, a+b+c)
+        (0, 1), (0, 2), (0, 3),
+        (1, 4), (1, 5),
+        (2, 4), (2, 6),
+        (3, 5), (3, 6),
+        (4, 7), (5, 7), (6, 7),
     ]
 
     for start, end in edges:
-        draw_line_between(fig, start, end, color=color)
+        draw_line_between(fig, vertices[start], vertices[end], color=color)
 
     fig.update_layout(scene_aspectmode="data")
     fig.update_layout(showlegend=False)

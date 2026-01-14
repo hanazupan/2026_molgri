@@ -7,21 +7,6 @@ def get_ring_carbons(u):
     return ring_carbons
 
 
-"""
-
-0 gmx22 trjconv -f trajectory.xtc -s structure.tpr -o pbc_trajectory1.xtc -pbc mol
-2 0 gmx22 trjconv -f pbc_trajectory1.xtc -s structure.tpr -o pbc_trajectory2.xtc -center
-
-
-2 2 0 gmx22 trjconv -f pbc_trajectory1.xtc -s structure.tpr -o pbc_trajectory2.xtc -fit rot+trans -center
-
-
-
-        
-"""
-
-
-
 rule get_xylene_ring_normal:
     input:
         structure=f"<outputs_gromacs>structure.gro",
@@ -110,87 +95,73 @@ rule get_xylene_ring_normal:
         fig.write_image(output.plot)
 
 
+rule wrap_ring_center:
+    input:
+        structure = f"<outputs_gromacs>structure.<ext_str>",
+        trajectory = f"<outputs_gromacs>trajectory.<ext_trj>",
+        structure1=f"<outputs_gromacs>molecule1.<ext_str>",
+    output:
+        com_m2 = f"<outputs_assignment>ring_center.npy",
+        com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_ring_center.npy",
+    run:
+        from workflow.helpers.io import write_object
+        from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_to_cuboid_cell
+        from MDAnalysis import Universe
+
+        # determine com of 2nd molecule
+        u = Universe(input.structure, input.trajectory)
+        ag_ring = get_ring_carbons(u)
+
+        com_ring = np.zeros((len(u.trajectory), 3))
+        for i, ts in enumerate(u.trajectory):
+            com_ring[i] = ag_ring.center_of_mass()
+        write_object(com_ring, output.com_m2)
+
+        # determine cuboid cell
+        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        origin = np.zeros(3)
+
+        # wrap
+        wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_ring)
+        write_object(wrapped_com_m2, output.com_m2_wrapped)
+
+
 rule plot_xylene_ring_center:
     input:
-        structure=f"<outputs_gromacs>structure.gro",
-        trajectory=f"<outputs_gromacs>trajectory.xtc",
         structure1=f"<outputs_gromacs>molecule1.gro",
-        structure2=f"<outputs_gromacs>molecule2.gro",
-        indices_csv = "<outputs_network>indices_interpretation.csv",
-        energy_csv= f"<outputs>energy.csv"
+        energy_csv= f"<outputs>energy.csv",
+        #com_m2= f"<outputs_assignment>m2_com.npy",
+        com_m2_wrapped= f"<outputs_assignment>cuboid_wrapped_ring_center.npy",
     output:
         plot=f"<outputs_other_plots>ring_position_lowest_{{N}}.png"
     run:
-        from molgri.plotting import draw_points
+        from molgri.plotting import draw_points, draw_line_between
         from MDAnalysis import Universe
         import plotly.graph_objects as go
+        from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths
+        my_sides = get_rectangular_cell_side_lengths(input.structure1)
+        my_sides[-1] = 0.1
+        start_at = np.array([0,0, 0])
 
-        from workflow.helpers.io import get_num_atoms
-        molecule1 = read_object(input.structure1)
-        molecule2 = read_object(input.structure2)
-
-        n1 = get_num_atoms(input.structure1)
-        n2 = get_num_atoms(input.structure2)
-
-        u = Universe(input.structure, input.trajectory)
-        first_molecule = u.select_atoms(f"type C")
-        first_molecule = first_molecule[first_molecule.indices < n1]
+        u = Universe(input.structure1)
 
         from MDAnalysis.topology.guessers import guess_bonds
-        bonds = guess_bonds(first_molecule, first_molecule.atoms.positions)
+        bonds = guess_bonds(u.select_atoms("all"), u.atoms.positions)
         u.add_TopologyAttr('bonds',bonds)
-        print(u.bonds)
 
-
+        # plot bonds
         fig = go.Figure()
-
-
+        positions = u.atoms.positions
+        x, y = positions[:, 0], positions[:, 1]
         ring_carbons = get_ring_carbons(u)
-
-
-        df_energy = read_object(input.energy_csv)
-        df_index = read_object(input.indices_csv)
-        df_combined = df_index.join(df_energy)
-
-
-        result = (
-            df_combined.loc[df_combined.groupby("Translation index")["Binding energy [kJ/mol]"].idxmin()]
-            .nsmallest(int(wildcards.N),"Binding energy [kJ/mol]")
-        )
-        selected_indices = result.index.to_numpy()
-
-
-        # todo: plot positions of ring at min energy
-        max_energy = config['plotting']['upper_E_limit']
-        colors = df_combined["Binding energy [kJ/mol]"]
-        colors[colors > max_energy] = max_energy
-
-        collect_points = []
-        for i, ts in zip(selected_indices, u.trajectory[selected_indices]):
-            collect_points.append(ring_carbons.center_of_geometry())
-        collect_points = np.array(collect_points)
-        fig.add_trace(go.Scatter3d(x=collect_points.T[0], y=collect_points.T[1], z=collect_points.T[2], mode = "markers",
-            marker=dict(color=colors[selected_indices],
-                colorbar=dict(thickness=20, title="Energy [kJ/mol]", y=1.05,yanchor="top"),
-                colorscale="RdBu_r", cmin=-52,cmax=-50),))
-
-        fig.update_layout(
-            scene_camera=dict(eye=dict(x=0,y=0,z=0.5))
-        )
-
-        positions = first_molecule.atoms.positions
-        x, y, z = positions[:, 0], positions[:, 1], positions[:, 2]
-
-        # Create bond line segments
         bond_traces = []
         for bond in u.bonds:
             i, j = bond.atoms.indices
             bond_traces.append(
-                go.Scatter3d(
+                go.Scatter(
                     x=[x[i], x[j]],
                     y=[y[i], y[j]],
-                    z=[z[i], z[j]],
-                    mode='lines',
+                    mode='lines+markers',
                     line=dict(color='gray',width=3),
                     hoverinfo='skip'
                 )
@@ -199,4 +170,33 @@ rule plot_xylene_ring_center:
         for bt in bond_traces:
             fig.add_trace(bt)
         fig.update_layout(showlegend=False)
-        fig = draw_points(first_molecule.atoms.positions, fig=fig, show=False, save_as=output.plot, equal_aspect=True)
+
+        # plot COMs
+        coms = read_object(input.com_m2_wrapped)
+        df_energy = read_object(input.energy_csv)
+        rows_smallest_energy = rows = df_energy.nsmallest(int(wildcards.N), "Binding energy [kJ/mol]")
+        selected_indices = rows_smallest_energy.index.to_numpy()
+        selected_coms = coms[selected_indices]
+
+        colors = df_energy["Binding energy [kJ/mol]"]
+        inverse_coms = selected_coms[::-1]
+        inverse_indices = selected_indices[::-1]
+        fig.add_trace(go.Scatter(x=inverse_coms.T[0], y=inverse_coms.T[1], mode = "markers", opacity=0.7,
+            marker=dict(color=colors[inverse_indices], size=10,
+                colorbar=dict(thickness=20, title="Energy [kJ/mol]", y=1.05,yanchor="top"),
+                colorscale="RdBu_r", cmin=-61,cmax=-59)))
+
+        Lx, Ly, Lz = my_sides
+        draw_line_between(fig, np.array([0, 0]), np.array([Lx, 0]), color="green")
+        draw_line_between(fig, np.array([0, 0]), np.array([0, Ly]), color="green")
+        draw_line_between(fig,np.array([Lx, Ly]),np.array([Lx, 0]),color="green")
+        draw_line_between(fig,np.array([Lx, Ly]),np.array([0, Ly]),color="green")
+        fig.update_xaxes(showgrid=True, range=[-Lx/2, 3*Lx/2])
+        fig.update_yaxes(showgrid=True, range=[-Ly/2, 3*Ly/2])
+        fig.update_layout(
+            xaxis=dict(
+                scaleanchor="y",
+                scaleratio=1
+            )
+        )
+        fig.write_image(output.plot)

@@ -2,6 +2,7 @@ from itertools import product
 
 import plotly.graph_objects as go
 from ase.io import read
+from ase.io.rmc6f import ncols2style
 from numpy._typing import NDArray
 from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
@@ -192,8 +193,10 @@ def get_x_y_grid_inputs(structure_path: str, num_x_points: int, num_y_points: in
     Returns:
         [[x_min, x_max, x_step], [y_min, y_max, y_step]]
     """
-    original_structure = read(structure_path)
+    max_x, max_y, max_z = get_rectangular_cell_side_lengths(structure_path)
+    return [0, max_x, num_x_points], [0, max_y, num_y_points]
 
+def get_rectangular_cell_side_lengths(structure_path: str):
     primitive_structure = find_primitive_cell(structure_path)
     primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
 
@@ -202,9 +205,16 @@ def get_x_y_grid_inputs(structure_path: str, num_x_points: int, num_y_points: in
     rectangular_lattice = find_rectangular_cell(supercell_atoms.get_cell(), np.array(supercell_atoms.get_positions()),
                                                 numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
 
-    max_x = float(rectangular_lattice[0][0])
-    max_y = float(rectangular_lattice[1][1])
-    return [0, max_x, num_x_points], [0, max_y, num_y_points]
+    Lx = float(rectangular_lattice[0][0])
+    Ly = float(rectangular_lattice[1][1])
+    Lz = float(rectangular_lattice[2][2])
+    return np.array([Lx, Ly, Lz])
+
+def wrap_to_cuboid_cell(origin: NDArray, side_lengths: NDArray, coordinates:NDArray, wrap_only_xy: bool = False):
+    if wrap_only_xy:
+        wrapped_2D = origin[:2] + np.mod(coordinates[:,:2] - origin[:2], side_lengths[:2])
+        return np.column_stack((wrapped_2D, coordinates[:, 2]))
+    return origin + np.mod(coordinates - origin, side_lengths)
 
 if __name__ == "__main__":
     """
@@ -229,8 +239,8 @@ if __name__ == "__main__":
 
 
     fig = go.Figure()
-    draw_unit_cell(fig, primitive_structure.lattice.matrix)
-    draw_unit_cell(fig, supercell_structure.lattice.matrix, color="red")
+    draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
+    draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
 
-    draw_unit_cell(fig, rectangular_unit_structure, color="green")
-    draw_structure(fig, test_structure, show=False)
+    draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
+    draw_structure(fig, test_structure, show=True)

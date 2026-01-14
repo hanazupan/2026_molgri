@@ -1,3 +1,5 @@
+import numpy as np
+
 rule gromacs_equilibration:
     """
     This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
@@ -50,7 +52,7 @@ rule gromacs_production:
         structure_tpr=f"<outputs_gromacs>structure.tpr",
         energy=f"<outputs_gromacs>energy.xvg",
         original_trajectory=f"<outputs_gromacs>raw_trajectory.xtc",
-        trajectory=f"<outputs_gromacs>trajectory.xtc",
+        trajectory=f"<outputs_gromacs>trajectory.<ext_trj>",
     shell:
         """
         initial_dir=$(pwd)
@@ -65,3 +67,96 @@ rule gromacs_production:
         echo "2\n0\n" |  gmx22 trjconv -fit rot+trans -f centered_trajectory.xtc -o $(basename {output.trajectory}) -s  $(basename {output.structure_tpr}) -n $(basename {input.index})
         cd "$initial_dir" || exit
         """
+
+rule wrap_molecule2_COM:
+    input:
+        structure = f"<outputs_gromacs>structure.<ext_str>",
+        trajectory = f"<outputs_gromacs>trajectory.<ext_trj>",
+        structure1=f"<outputs_gromacs>molecule1.<ext_str>",
+    output:
+        com_m2 = f"<outputs_assignment>m2_com.npy",
+        com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
+    run:
+        from workflow.helpers.io import get_atomgoup_m1, get_atomgoup_m2, write_object
+        from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_to_cuboid_cell
+        from MDAnalysis import Universe
+
+        # determine com of 2nd molecule
+        u = Universe(input.structure, input.trajectory)
+        ag_m2 = get_atomgoup_m2(u, input.structure1)
+        ag_m1 = get_atomgoup_m1(u, input.structure1)
+
+        com_array_m1 = np.zeros((len(u.trajectory), 3))
+        com_array_m2 = np.zeros((len(u.trajectory), 3))
+        for i, ts in enumerate(u.trajectory):
+            com_array_m1[i] = ag_m1.center_of_mass()
+            com_array_m2[i] = ag_m2.center_of_mass()
+
+        write_object(com_array_m2, output.com_m2)
+        # assert com of m1 not changing
+        assert np.max(com_array_m1 - com_array_m1[0]) < 0.01, "Molecule 1 seems to be moving - is it not fitted to the reference or just very flexible?"
+
+
+        # determine cuboid cell
+        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        origin = np.zeros(3)
+
+        # wrap
+        wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_array_m2)
+        write_object(wrapped_com_m2, output.com_m2_wrapped)
+
+
+rule assign_com2position_grid:
+    input:
+        structure1 = f"<outputs_gromacs>molecule1.<ext_str>",
+        com_m2 = f"<outputs_assignment>m2_com.npy",
+        df_indices = f"<outputs_network>indices_interpretation.csv",
+        grid= "<outputs_network>grid.npy",
+    output:
+        position_assignment = f"<outputs_assignment>position_assignment.npy",
+    run:
+        from workflow.helpers.io import read_object, write_object
+        from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths
+        import matplotlib.pyplot as plt
+
+        com_m2 = read_object(input.com_m2)
+        position_grid = read_object(input.grid)[:, :3]
+        x_grid = np.unique(position_grid[:, 0].T)
+        x_grid.sort()
+
+
+
+        delta_x = x_grid[1] - x_grid[0]
+        N = len(x_grid)
+
+        Lx, Ly, Lz = get_rectangular_cell_side_lengths(input.structure1)
+
+        fig, ax = plt.subplots(figsize=(5, 2))
+        #ax.scatter(x_grid, np.ones(x_grid.shape))
+        #plt.xlim(0, Lx)
+
+
+        x_trajectory = com_m2[:, 0].T
+        wrapped_x_trajectory = x_trajectory % Lx
+        x_indices = np.floor(wrapped_x_trajectory  / delta_x + 0.5) % N
+        write_object(x_indices, output.position_assignment)
+
+        for index_num in range(N):
+            assigned_to = x_trajectory[np.where(x_indices == index_num)[0]]
+            ax.scatter(assigned_to,np.full(assigned_to.shape, 1.0+0.1*index_num), s=1, alpha=0.4)
+        ax.vlines([k*Lx for k in range(10, 33)], ymin=1, ymax=2, linestyles="dashed", color="black")
+        ax.vlines([k * Lx + delta_x for k in range(10,33)],ymin=1,ymax=2,linestyles="dotted",color="black", lw=1)
+        ax.vlines([k * Lx + 9*delta_x for k in range(10,33)],ymin=1,ymax=2,linestyles="dotted",color="black",lw=1)
+        ax.set_xlim(50,55)
+        plt.savefig("outputs/image.png", dpi=600)
+
+
+        #print(np.min(position_grid,axis=0))
+
+        # determine cuboid cell
+        # side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        # origin = np.zeros(3)
+        #
+        # # wrap
+        # wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_array_m2)
+        # write_object(wrapped_com_m2, output.com_m2_wrapped)

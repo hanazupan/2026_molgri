@@ -5,6 +5,7 @@ import os
 import networkx as nx
 import numpy as np
 import pandas as pd
+from MDAnalysis import Universe
 from numpy.typing import NDArray
 from scipy.sparse import save_npz, sparray, load_npz
 import MDAnalysis as md
@@ -125,3 +126,17 @@ def _read_molecular_structure(filename: str) -> md.Universe:
 def get_num_atoms(structure_file:str) -> int:
     file = read_object(structure_file)
     return int(file.atoms.n_atoms)
+
+def get_atomgoup_m1(universe_both: md.Universe, path_str1: str):
+    n1 = get_num_atoms(path_str1)
+
+    m1_atoms = universe_both.select_atoms(f"all")
+    m1_atoms = m1_atoms[m1_atoms.indices < n1]
+    return m1_atoms
+
+def get_atomgoup_m2(universe_both: md.Universe, path_str1: str):
+    n1 = get_num_atoms(path_str1)
+
+    m2_atoms = universe_both.select_atoms(f"all")
+    m2_atoms = m2_atoms[m2_atoms.indices >= n1]
+    return m2_atoms

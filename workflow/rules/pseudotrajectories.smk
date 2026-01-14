@@ -40,3 +40,38 @@ rule create_structure:
         structure = get_bimolecular_structure(m1, m2, z_distance=z_distance)
         write_object(structure, output.structure)
 
+rule copy_mdp_files:
+    """
+    Copy only mdp files that are required - e.g. for rerun you do not need a minim.mdp and nvt.mdp.
+    """
+    input:
+        mdp = f"<inputs_gromacs>{{file_name}}.mdp",
+    output:
+        mdp = f"<outputs_gromacs>{{file_name}}.mdp",
+    run:
+        import shutil
+        shutil.copy(input.mdp,output.mdp)
+
+
+rule copy_other_gromacs_input:
+    """
+    Copy the rest of necessary files to start a GROMACS calculation.
+    """
+    input:
+        dimer_topology = f"<inputs_gromacs>topol.top",
+        select_energy = f"<inputs_gromacs>select_energy",
+        index = f"<inputs_gromacs>index.ndx",
+        force_field_stuff = f"<inputs_gromacs>force_field_stuff/"
+    output:
+        dimer_topology = f"<outputs_gromacs>topol.top",
+        select_energy = f"<outputs_gromacs>select_energy",
+        index = f"<outputs_gromacs>index.ndx",
+        force_field_stuff = directory(f"<outputs_gromacs>force_field_stuff/")
+    run:
+        import shutil
+        shutil.copy(input.select_energy,output.select_energy)
+        shutil.copy(input.dimer_topology, output.dimer_topology)
+        shutil.copy(input.select_energy,output.select_energy)
+        shutil.copy(input.index,output.index)
+        shutil.copytree(input.force_field_stuff,output.force_field_stuff, dirs_exist_ok=True)
+
