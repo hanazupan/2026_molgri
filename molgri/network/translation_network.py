@@ -2,14 +2,10 @@ from abc import ABC
 from functools import cached_property
 from itertools import product
 
-import networkx as nx
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 
-from molgri.network.abstract import AbstractNetwork, AbstractNode, find_shared_vertices, \
-    circular_sector_area, get_spherical_voronoi
-from molgri.network.polytope import IcosahedronPolytope
-
+from molgri.network.abstract import AbstractNetwork, AbstractNode, find_shared_vertices, circular_sector_area
 
 class OneDimTranslationNode:
 
@@ -221,107 +217,3 @@ class CartesianTranslationNetwork(TranslationNetwork):
 
     def _numerical_edge_type(self, edge_dict) -> dict:
         return {"x": 1, "y": 2, "z": 3}
-
-def create_translation_network(algorithm_keyword: str = "cartesian_nonperiodic", *args, **kwargs) -> TranslationNetwork:
-    match algorithm_keyword:
-        case "cartesian_nonperiodic":
-            return _create_cartesian_network("none", *args, **kwargs)
-        case "cartesian_periodic":
-            return _create_cartesian_network("xyz", *args, **kwargs)
-        case "cartesian_xy_periodic":
-            return _create_cartesian_network("xy", *args, **kwargs)
-        case "spherical":
-            return _create_spherical_coordinate_network(*args, **kwargs)
-        case _:
-            raise KeyError(f"{algorithm_keyword} is not a valid translation algorithm keyword")
-
-def _create_cartesian_network(periodic_in_dimensions,
-                              x_linspace_params, y_linspace_params, z_linspace_params, **kwargs):
-    x_grid = np.linspace(*x_linspace_params, endpoint=False)
-    y_grid = np.linspace(*y_linspace_params, endpoint=False)
-    # a trick for gromacs: we should start with the largest distance first; if the first structure is too high in
-    # energy it causes an error -> the linspace should get parameters like (12, 2, 50) to start at 12 A and go to 2 A
-    num_start, num_stop, num_steps = z_linspace_params
-    if num_start < num_stop:
-        z_grid = np.linspace(num_stop, num_start, num_steps)
-    else:
-        z_grid = np.linspace(num_start, num_stop, num_steps)
-
-    sub_networks = []
-    labels = ("x", "y", "z")
-    subgrids = (x_grid, y_grid, z_grid)
-    for label, sub_grid in zip(labels, subgrids):
-        delta_coo = sub_grid[1] - sub_grid[0]
-        nodes = []
-        for coo_i, coo in enumerate(sub_grid):
-            hull = (coo - delta_coo / 2, coo + delta_coo / 2)
-            nodes.append(OneDimTranslationNode(label, coo_i, coo, hull))
-        G = nx.Graph()
-        G.add_nodes_from(nodes)
-        # now add edges to these sub-graphs - this is without periodicity
-        for node_1, node_2 in zip(nodes[:-1], nodes[1:]):
-            G.add_edge(node_1, node_2, edge_type=label)
-        # possible periodicity - add edge between first and last element
-        if label in periodic_in_dimensions:
-            G.add_edge(nodes[0], nodes[-1], edge_type=label)
-        sub_networks.append(G)
-
-    # now combine the sub-networks
-    xy_network = nx.cartesian_product(sub_networks[0], sub_networks[1])
-    full_network = nx.cartesian_product(xy_network, sub_networks[2])
-
-    mapping = {((a, b), c): TranslationNode(a, b, c) for ((a, b), c) in full_network.nodes}
-    full_network = nx.relabel_nodes(full_network, mapping)
-    full_network = CartesianTranslationNetwork(full_network)
-    return full_network
-
-def _create_spherical_coordinate_network(spherical_N_points, radial_parameters, random_seed = None):
-    radial_network = _create_radial_network(radial_parameters)
-    spherical_network = _create_spherical_network(spherical_N_points, random_seed=random_seed)
-    full_network = nx.cartesian_product(radial_network,spherical_network)
-    mapping = {(a, b): SphericalTranslationNode(a, b) for (a, b) in full_network.nodes}
-    full_network = nx.relabel_nodes(full_network, mapping)
-    full_network = SphericalTranslationNetwork(full_network)
-    return full_network
-
-def _create_radial_network(radial_parameters) -> nx.Graph:
-    # a trick for gromacs: we should start with the largest distance first; if the first structure is too high in
-    # energy it causes an error -> the linspace should get parameters like (12, 2, 50) to start at 12 A and go to 2 A
-    num_start, num_stop, num_steps = radial_parameters
-    if num_start < num_stop:
-        r_grid = np.linspace(num_stop, num_start, num_steps)
-    else:
-        r_grid = np.linspace(num_start, num_stop, num_steps)
-    nodes  = []
-    if len(r_grid) == 1:
-        delta_r = r_grid[0]
-    else:
-        delta_r = r_grid[1] - r_grid[0]
-    for coo_i, coo in enumerate(r_grid):
-        hull = (coo - delta_r / 2, coo + delta_r / 2)
-        nodes.append(OneDimTranslationNode("r", coo_i, coo, hull))
-    G = nx.Graph()
-    G.add_nodes_from(nodes)
-    # now add edges to these sub-graphs - this is without periodicity
-    for node_1, node_2 in zip(nodes[:-1], nodes[1:]):
-        G.add_edge(node_1, node_2, edge_type="r")
-    return G
-
-def _create_spherical_network(spherical_N_points, random_seed=None):
-    ico = IcosahedronPolytope()
-    ico.create_exactly_N_points(spherical_N_points, random_seed)
-    spherical_points = ico.get_nodes(projection=True)
-    unit_spherical_voronoi = get_spherical_voronoi(spherical_points)
-    areas = unit_spherical_voronoi.calculate_areas()
-    layer_adjacency = unit_spherical_voronoi.get_adjacency_matrix()
-    hulls = unit_spherical_voronoi.get_hulls()
-
-    G = nx.Graph()
-    all_layer_nodes = [SphericalNode(direction_i, coo_3d, hulls[direction_i], areas[direction_i]) for direction_i,
-    coo_3d in enumerate(spherical_points)]
-    G.add_nodes_from(all_layer_nodes)
-    for node_i_1, node_i_2 in zip(layer_adjacency.row, layer_adjacency.col):
-        node1 = all_layer_nodes[node_i_1]
-        node2 = all_layer_nodes[node_i_2]
-        G.add_edge(node1, node2, edge_type="spherical")
-    return G

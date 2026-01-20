@@ -4,13 +4,6 @@ Everything up to the introduction of molecules: get a full grid, adjacency matri
 from workflow.helpers.io import write_object, read_object
 import numpy as np
 
-ROTATION_ALGORITHM = config["grid"]["rotation_algorithm"]
-N_ROTATION =  config["grid"]["N_rotations"]
-TRANSLATION_ALGORITHM = config["grid"]["translation_algorithm"]
-DEFINE_TRANSLATION_EACH_SUBGRID = config["grid"]["translation_subgrids_A"]
-ROTATION_RANDOM_SEED = config["grid"]["rotation_random_seed"]
-
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -28,29 +21,48 @@ rule all_grid:
             allow_missing=True)
 
 
+rule save_basic_grid_information:
+    output:
+        info_material = "<outputs_network>grid_info.yaml"
+    run:
+        from workflow.helpers.build_subgrids import make_grid_base
+
+        save_information = make_grid_base(config)
+
+        write_object(save_information, output.info_material)
+
 
 rule create_rotation_network:
+    input:
+        info_material = "<outputs_network>grid_info.yaml"
     benchmark:
         "<outputs_network>rotation_network/network_creation.txt"
     output:
         network_file = "<outputs_network>rotation_network/network.pkl"
     run:
-        from molgri.network.rotation_network import create_rotation_network
+        from molgri.network.generation import build_quaternion_network, create_full_network
 
-        rotation_network = create_rotation_network(ROTATION_ALGORITHM, N_ROTATION, ROTATION_RANDOM_SEED)
+        grid_info = read_object(input.info_material)
+        upper_quaternions = np.array(grid_info["quaternions"])
+
+        rotation_network = build_quaternion_network(upper_quaternions)
         write_object(rotation_network, output.network_file)
 
 
 rule create_translation_network:
+    input:
+        info_material = "<outputs_network>grid_info.yaml"
     benchmark:
         "<outputs_network>translation_network/network_creation.txt"
     output:
         network_file = "<outputs_network>translation_network/network.pkl"
     run:
-        from molgri.network.translation_network import create_translation_network
+        from molgri.network.generation import build_translation_network
+        grid_info = read_object(input.info_material)
+        periodic_in = grid_info["periodic_in"]
+        subgrids = grid_info["subgrid_points"]
 
-        translation_network = create_translation_network(TRANSLATION_ALGORITHM, *DEFINE_TRANSLATION_EACH_SUBGRID,
-            random_seed=ROTATION_RANDOM_SEED)
+        translation_network = build_translation_network(subgrids,periodic_in)
         write_object(translation_network, output.network_file)
 
 rule create_full_network:
@@ -62,8 +74,7 @@ rule create_full_network:
     output:
         network_file = f"<outputs_network>network.pkl"
     run:
-        from molgri.network.full_network import create_full_network
-
+        from molgri.network.generation import create_full_network
         rotation_network = read_object(input.rotation_network_file)
         translation_network = read_object(input.translation_network_file)
         full_network = create_full_network(translation_network, rotation_network)
@@ -143,6 +154,35 @@ rule display_network_node_attributes:
         draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes,
             show=False)
 
+checkpoint all_rotations_first_position_indices:
+    """
+    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
+    """
+    input:
+        info_material = "<outputs_network>grid_info.yaml"
+    output:
+        indices= f"<outputs_indices>all_rotations_first_position.txt"
+    run:
+        info_grid = read_object(input.info_material)
+        rotation_points = info_grid["N_rotations"]
+        required_indices = np.array(list(range(0,rotation_points)))
+        write_object(required_indices, output.indices)
+
+checkpoint all_positions_first_rotation_indices:
+    """
+    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
+    """
+    input:
+        info_material = "<outputs_network>grid_info.yaml"
+    output:
+        indices= f"<outputs_indices>all_positions_first_rotation.txt"
+    run:
+        info_grid = read_object(input.info_material)
+        position_points = np.prod(info_grid["subgrid_N_points"])
+        rotation_points = info_grid["N_rotations"]
+        total_N_points = position_points * rotation_points
+        required_indices = np.array(list(range(0,total_N_points,rotation_points)))
+        write_object(required_indices, output.indices)
 
 rule create_index_csv:
     """
@@ -167,8 +207,8 @@ rule create_index_csv:
         df = pd.DataFrame(np.array([translation_indices, rotation_indices]).T,
             columns=["Translation index", "Rotation index"])
 
-        df["Position"] = list(positions)
-        df["Quaternion"] = list(quaternions)
+        df["Position"] = list(map(tuple, positions))
+        df["Quaternion"] = list(map(tuple, quaternions))
         df.index.name = "Total index"
         # indices should be integers
         df["Translation index"] = df["Translation index"].astype("Int64")
@@ -185,9 +225,10 @@ rule print_indices_interpretation:
         indices_csv =f"<outputs_network>indices_interpretation.csv"
     run:
         df = read_object(input.indices_csv)
+        print(df)
         # for example only filter the ones with specific rotation index
-        df_filtered = df.loc[df["Rotation index"] == 5]
-        print(df_filtered.head(10))
+        #df_filtered = df.loc[df["Rotation index"] == 5]
+        #print(df_filtered.head(10))
 
 
 rule display_geometry_properties_with_violin_distributions:

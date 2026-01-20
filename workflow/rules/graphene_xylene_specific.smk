@@ -1,3 +1,7 @@
+from MDAnalysis import Universe
+import plotly.graph_objects as go
+import numpy as np
+from workflow.helpers.io import get_num_atoms, read_object
 
 
 def get_ring_carbons(u):
@@ -18,13 +22,6 @@ rule get_xylene_ring_normal:
         plot=f"<outputs_other_plots>ring_vector.png"
     run:
         from molgri.utils.spheres import angle_between_vectors
-        from molgri.plotting import draw_points
-        from MDAnalysis import Universe
-        import plotly.graph_objects as go
-        import numpy as np
-
-        from workflow.helpers.io import get_num_atoms, read_object
-
 
         n1 = get_num_atoms(input.structure1)
         n2 = get_num_atoms(input.structure2)
@@ -135,7 +132,7 @@ rule plot_xylene_ring_center:
     output:
         plot=f"<outputs_other_plots>ring_position_lowest_{{N}}.png"
     run:
-        from molgri.plotting import draw_points, draw_line_between
+        from molgri.plotting import draw_line_between
         from MDAnalysis import Universe
         import plotly.graph_objects as go
         from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths
@@ -182,9 +179,9 @@ rule plot_xylene_ring_center:
         inverse_coms = selected_coms[::-1]
         inverse_indices = selected_indices[::-1]
         fig.add_trace(go.Scatter(x=inverse_coms.T[0], y=inverse_coms.T[1], mode = "markers", opacity=0.7,
-            marker=dict(color=colors[inverse_indices], size=10,
+            marker=dict(color=colors[inverse_indices], size=8,
                 colorbar=dict(thickness=20, title="Energy [kJ/mol]", y=1.05,yanchor="top"),
-                colorscale="RdBu_r", cmin=-61,cmax=-59)))
+                colorscale="RdBu_r", cmin=-61,cmax=-50)))
 
         Lx, Ly, Lz = my_sides
         draw_line_between(fig, np.array([0, 0]), np.array([Lx, 0]), color="green")

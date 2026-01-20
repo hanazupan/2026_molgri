@@ -1,7 +1,6 @@
 configfile: "workflow/config/example_config.yaml"
 
-
-from workflow.helpers.PATHS import auto_create_grid
+from workflow.helpers.build_subgrids import auto_create_grid
 
 config = auto_create_grid(config)
 
@@ -28,8 +27,11 @@ pathvars:
     outputs_assignment = f'<outputs>assignment/',
     outputs_vmd = f'<outputs>vmd/',
     outputs_plots = f'<outputs>plots/',
-    outputs_plots_lowest = f'<outputs_plots>lowest/',
+    overlayed_vmd_frames = f'<outputs_plots>overlayed_vmd_frames/',
+    stacked_vmd_frames = f'<outputs_plots>stacked_vmd_frames/',
     outputs_frame_plots = f'<outputs_plots>frames/',
+    outputs_all_translations = f'<outputs_plots>all_translations/',
+    outputs_all_rotations = f'<outputs_plots>all_rotations/',
     outputs_other_plots = f'<outputs_plots>other/',
 
 
@@ -51,12 +53,15 @@ view_i=[1]
 if config["perform_simulation"]:
     rule all:
         input:
-            f"<outputs_assignment>position_assignment.npy",
+            expand("<outputs_other_plots>position_grid_energy_{i}.png", i=range(20)),
+            "<outputs_network>grid_info.yaml",
+            f"<outputs_network>grid.npy",
+            f"<outputs_assignment>assignment.csv",
             f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
             f"<outputs_other_plots>ring_vector.png",
             expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
             f"<outputs_other_plots>violin_plot_energies.png",
-            expand(f"<outputs_plots_lowest>lowest_{{N}}_binding_energies_view{{view_i}}.tga",N=N,view_i=view_i),
+            expand(f"<overlayed_vmd_frames>lowest_{{N}}_binding_energies_view{{view_i}}_full.tga",N=N,view_i=view_i),
             f"<outputs_frame_plots>frame_22_view1.tga",
             expand(f"<outputs_indices>lowest_{{N}}_binding_energies.txt", N=[1, 5, 10, 50]),
             f"<outputs>energy.csv",
@@ -70,9 +75,9 @@ else:
             expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
             f"<outputs_network>indices_interpretation.csv",
             f"<outputs_other_plots>violin_plot_energies.png",
-            expand(f"<outputs_plots_lowest>lowest_{{N}}_binding_energies_view{{view_i}}.tga", N=N, view_i=view_i),
+            expand(f"<overlayed_vmd_frames>lowest_{{N}}_binding_energies_view{{view_i}}.tga", N=N, view_i=view_i),
             f"<outputs>network_energy.pkl",
-            f"<outputs_frame_plots>frame_22_view1.tga",
+            f"<outputs_frame_plots>frame_22_view1_both.tga",
             expand(f"<outputs_indices>lowest_{{N}}_binding_energies.txt", N=N),
             f"<outputs>energy.csv",
             f"<outputs_gromacs>energy.xvg",

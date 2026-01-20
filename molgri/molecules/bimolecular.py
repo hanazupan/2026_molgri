@@ -77,7 +77,6 @@ def get_bimolecular_pseudotrajectory(universe_static: Universe, universe_moving:
     structure = get_bimolecular_structure(m1, m2)
     full_coordinates = combine_coordinates(m1.atoms.positions, np.array(moving_coordinates))
 
-
     combined_universe = Universe(structure._topology, full_coordinates, format=MemoryReader)
     for ts in combined_universe.trajectory:
         combined_universe.dimensions = universe_static.dimensions
@@ -95,4 +94,19 @@ def move_to_center(universe: Universe) -> Universe:
     """
     com = universe.atoms.center_of_mass()
     universe.atoms.positions -= com
+    return universe
+
+def move_to_box_center(universe: Universe) -> Universe:
+    """
+    Move the molecule so that its center of mass is the center of the simulation box.
+
+    Args:
+        universe (Universe): a molecular object
+
+    Returns:
+        the molecule rigidly translated to box center
+    """
+    box_center = universe.dimensions[:3] / 2
+    com = universe.atoms.center_of_mass()
+    universe.atoms.translate(box_center - com)
     return universe

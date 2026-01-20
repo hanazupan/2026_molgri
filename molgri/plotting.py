@@ -191,40 +191,51 @@ def draw_structure(fig, path, color="black"):
     return fig
 
 @save_plotly
-def draw_unit_cell(fig: go.Figure, side_lengths: NDArray, color="blue", start_at=None, **kwargs):
+def draw_unit_cell(fig: go.Figure, side_lengths: NDArray, color="blue", in_3d = True, **kwargs):
     """
     Provide a 3x3 array where every row is a lattice vector and get a drawing of a unit cell (all edges)
     """
-    print("start at", start_at)
-    print("lattice", side_lengths)
-    if start_at is None:
+
+    if in_3d:
         v0 = np.array([0,0,0])
+
+        Lx, Ly, Lz = side_lengths
+
+        vertices = np.array([
+            v0,
+            v0 + [Lx, 0, 0],
+            v0 + [0, Ly, 0],
+            v0 + [0, 0, Lz],
+            v0 + [Lx, Ly, 0],
+            v0 + [Lx, 0, Lz],
+            v0 + [0, Ly, Lz],
+            v0 + [Lx, Ly, Lz],
+        ])
+        edges = [
+            (0, 1), (0, 2), (0, 3),
+            (1, 4), (1, 5),
+            (2, 4), (2, 6),
+            (3, 5), (3, 6),
+            (4, 7), (5, 7), (6, 7),
+        ]
+
+        for start, end in edges:
+            draw_line_between(fig, vertices[start], vertices[end], color=color)
+
+        fig.update_layout(scene_aspectmode="data")
+        fig.update_layout(showlegend=False)
     else:
-        v0 = np.array(start_at)
-
-    Lx, Ly, Lz = side_lengths
-
-    vertices = np.array([
-        v0,
-        v0 + [Lx, 0, 0],
-        v0 + [0, Ly, 0],
-        v0 + [0, 0, Lz],
-        v0 + [Lx, Ly, 0],
-        v0 + [Lx, 0, Lz],
-        v0 + [0, Ly, Lz],
-        v0 + [Lx, Ly, Lz],
-    ])
-    edges = [
-        (0, 1), (0, 2), (0, 3),
-        (1, 4), (1, 5),
-        (2, 4), (2, 6),
-        (3, 5), (3, 6),
-        (4, 7), (5, 7), (6, 7),
-    ]
-
-    for start, end in edges:
-        draw_line_between(fig, vertices[start], vertices[end], color=color)
-
-    fig.update_layout(scene_aspectmode="data")
-    fig.update_layout(showlegend=False)
+        Lx, Ly,= side_lengths
+        draw_line_between(fig, np.array([0, 0]), np.array([Lx, 0]), color="green")
+        draw_line_between(fig, np.array([0, 0]), np.array([0, Ly]), color="green")
+        draw_line_between(fig,np.array([Lx, Ly]),np.array([Lx, 0]),color="green")
+        draw_line_between(fig,np.array([Lx, Ly]),np.array([0, Ly]),color="green")
+        fig.update_xaxes(showgrid=True, range=[-Lx/2, 3*Lx/2])
+        fig.update_yaxes(showgrid=True, range=[-Ly/2, 3*Ly/2])
+        fig.update_layout(
+            xaxis=dict(
+                scaleanchor="y",
+                scaleratio=1
+            )
+        )
     return fig

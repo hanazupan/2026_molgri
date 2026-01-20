@@ -1,12 +1,11 @@
 from functools import cached_property
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from itertools import groupby
 
-from molgri.network.rotation_network import RotationNode, RotationNetwork
-from molgri.network.translation_network import TranslationNode, TranslationNetwork
+from molgri.network.rotation_network import RotationNode
+from molgri.network.translation_network import TranslationNode
 from molgri.network.abstract import AbstractNetwork, AbstractNode
 
 
@@ -75,7 +74,6 @@ class FullNetwork(AbstractNetwork):
         return indices
 
     def get_rotation_indices(self) -> NDArray:
-        N_translations, N_rotations = self.list_of_position_nodes.shape
         indices = np.array([node.rotation_node.index for node in self.sorted_nodes], dtype=int)
         return indices
 
@@ -100,8 +98,3 @@ class FullNetwork(AbstractNetwork):
         return func(groups)
 
 
-def create_full_network(translation_network: TranslationNetwork, rotation_network: RotationNetwork) -> FullNetwork:
-    full_network = nx.cartesian_product(translation_network, rotation_network)
-    mapping = {(trans, rot): FullNode(trans, rot) for (trans, rot) in full_network.nodes}
-    full_network = nx.relabel_nodes(full_network, mapping)
-    return FullNetwork(full_network)

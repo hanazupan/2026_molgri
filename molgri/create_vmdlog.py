@@ -278,6 +278,9 @@ class VMDCreator:
         # in case we want to build another file after this one
         self._start_new_file()
 
+    def _add_box(self):
+        self.total_file_text += """pbc box\n"""
+
     def _add_pretty_plot_settings(self) -> None:
         """
         Delete the initial default representation. Don't add any representations yet.
@@ -286,6 +289,7 @@ class VMDCreator:
         #display projection Orthographic
 
         self.total_file_text += f"""
+logfile /dev/null       
 mol delrep 0 0
 color Display Background white
 axes location Off
@@ -296,6 +300,7 @@ material add copy AOChalky
 material change shininess Material22 0.000000
 display resize 1800 1200
 """
+
 
     def _add_representation(self, first_molecule: bool = False, second_molecule: bool = True, coloring: str = None,
                             color: str = None, representation: str = None, trajectory_frames: ArrayLike = None):
@@ -519,7 +524,7 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         for cluster_i, plot_name in enumerate(plot_names_individual):
             self._render_representations([0, cluster_i+1], plot_name)
 
-    def plot_these_structures(self, my_indices: list, plot_names: list) -> None:
+    def plot_frames_individually(self, my_indices: list, plot_names: list) -> None:
         """
         Renders a figure with usual coloring for each grid point in my_indices.
 
@@ -545,7 +550,47 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
             # each render contains first molecule in representation 0 and second molecule in representation 1, 2, 3 ...
             self._render_representations([0, i+1], plot_path)
 
-    def plot_multiple_overlappig_frames(self, frame_indices: list, plot_path: str) -> None:
+    def plot_m2_frames_individually(self, my_indices: list, plot_names: list) -> None:
+        """
+        Renders a figure with usual coloring for each grid point in my_indices.
+
+        INDICES OF FRAMES ALREADY MUST HAVE +1 IF NEEDED
+
+        Args:
+            my_indices (list): a list of indices like [15, 7, 385, 22] describing a path or sequence on a grid,
+            integers are grid indices
+            plot_names (list): a list of file names to which renders should be saved, should have the same length as
+                my_path
+        """
+        assert len(my_indices) == len(plot_names)
+
+        for path_index in my_indices:
+            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index, representation="Licorice")
+
+        self._add_rotations_translations()
+
+        for i, plot_path in enumerate(plot_names):
+            # each render contains first molecule in representation 0 and second molecule in representation 1, 2, 3 ...
+            self._render_representations([i], plot_path)
+
+    def _add_COM_of_m2_overlappig_frames(self, trajectory_frames: ArrayLike = None):
+            """
+            Add a little dot at COm of molecule2 for the selected frames.
+            """
+            trajectory_frames = [str(int(frame)) for frame in trajectory_frames]
+            self.total_file_text += f"""                                                          
+    set sel [atomselect top "{self.index_second_molecule}"]                                   
+    $sel set occupancy [$sel get mass]
+    set frames {{ {' '.join(trajectory_frames)} }}
+    foreach i $frames {{
+        $sel frame $i
+        set com [measure center $sel weight mass]
+        graphics top sphere $com radius 0.1
+    }}                                                                        
+    """
+
+
+    def plot_multiple_overlappig_frames(self, frame_indices: list, plot_path: str, only_COM_of_m2: bool = False) -> None:
         """
         Renders a figure with usual coloring for each grid point in my_indices.
 
@@ -555,9 +600,12 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=1,
                                  representation="DynamicBonds 1.600000 0.300000 6.000000")
 
-        for path_index in frame_indices:
-            self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index,
-                                     representation="Licorice")
+        if only_COM_of_m2:
+            self._add_COM_of_m2_overlappig_frames(frame_indices)
+        else:
+            for path_index in frame_indices:
+                self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=path_index,
+                                         representation="Licorice")
 
         self._add_rotations_translations()
         self._render_representations(list(range(len(frame_indices)+1)), plot_path=plot_path)

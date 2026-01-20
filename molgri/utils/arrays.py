@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numbers
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -211,20 +211,15 @@ def nested_numpy_types_to_python_types(obj: Sequence | numbers.Number) -> Sequen
         return obj.item()
     elif isinstance(obj, (list, tuple)):
         return type(obj)(nested_numpy_types_to_python_types(x) for x in obj)
+    elif isinstance(obj, np.ndarray):
+        return nested_numpy_types_to_python_types(obj.tolist())
     else:
         return obj
 
 
-def first_element_nested_list(obj: Sequence) -> Any:
-    """
-    Recursively find the first element of a sequence, no matter how deep the nesting is.
-
-    Args:
-        obj (Sequence): a list-like object (array, tuple ...)
-
-    Returns:
-        Whatever is the first element of a sequence that is not itself a sequence.
-    """
-    if isinstance(obj, list):
-        return first_element_nested_list(obj[0]) if obj else None
-    return obj
+def iter_elements_nested(obj: Iterable) -> Iterable[Any]:
+    if isinstance(obj, (list, tuple, np.ndarray)):
+        for x in obj:
+            yield from iter_elements_nested(x)
+    else:
+        yield obj

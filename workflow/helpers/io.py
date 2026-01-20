@@ -1,14 +1,19 @@
+from __future__ import annotations
 
+import numbers
 import pickle
 import os
 
 import networkx as nx
 import numpy as np
 import pandas as pd
-from MDAnalysis import Universe
+import yaml
 from numpy.typing import NDArray
 from scipy.sparse import save_npz, sparray, load_npz
 import MDAnalysis as md
+
+from molgri.utils.arrays import iter_elements_nested, nested_numpy_types_to_python_types
+
 
 def write_object(my_object, filename) -> None:
     file_extension = os.path.splitext(filename)[1]
@@ -26,6 +31,8 @@ def write_object(my_object, filename) -> None:
         function = _write_csv
     elif file_extension == ".txt":
         function = _write_txt
+    elif file_extension == ".yaml":
+        function = _write_yaml
     else:
         raise TypeError(f"Cannot write object of type {type(my_object)} to a {file_extension} file.")
 
@@ -47,6 +54,8 @@ def read_object(filename):
         function = _read_csv
     elif file_extension == ".txt":
         function = _read_txt
+    elif file_extension == ".yaml":
+        function = _read_yaml
     else:
         raise TypeError(f"Cannot read object from file with extension {file_extension}")
     return function(filename)
@@ -112,7 +121,6 @@ def _read_sparse_array(filename: str) -> sparray:
     return load_npz(filename)
 
 def _write_structure(universe, filename: str) -> None:
-    print(universe.atoms[-1].mass, filename)
     universe.atoms.write(filename)
 
 def _write_trajectory(universe, filename: str) -> None:
@@ -122,6 +130,16 @@ def _write_trajectory(universe, filename: str) -> None:
 
 def _read_molecular_structure(filename: str) -> md.Universe:
     return md.Universe(filename)
+
+def _write_yaml(dict_like_file, filename: str) -> None:
+    FlowSeqDumper.add_representer(list, represent_flow_sequence)
+    with open(filename, "w") as f:
+        yaml.dump(dict_like_file, f, Dumper=FlowSeqDumper, sort_keys=False)
+
+def _read_yaml(filename: str) -> dict:
+    with open(filename) as f:
+        data = yaml.safe_load(f)
+    return data
 
 def get_num_atoms(structure_file:str) -> int:
     file = read_object(structure_file)
@@ -140,3 +158,25 @@ def get_atomgoup_m2(universe_both: md.Universe, path_str1: str):
     m2_atoms = universe_both.select_atoms(f"all")
     m2_atoms = m2_atoms[m2_atoms.indices >= n1]
     return m2_atoms
+
+
+class FlowSeqDumper(yaml.SafeDumper):
+    pass
+
+
+def represent_flow_sequence(dumper, seq):
+    """
+    This is a quick helper function that forces the yaml to write lists in square brackets on the same line, not as a
+    super complicated nested list.
+    """
+    if isinstance(seq, (list, tuple, np.ndarray)):
+        for el in iter_elements_nested(seq):
+            if isinstance(el, numbers.Number):
+                seq = nested_numpy_types_to_python_types(seq)
+                break
+
+    return dumper.represent_sequence(
+        'tag:yaml.org,2002:seq',
+        seq,
+        flow_style=True
+    )
