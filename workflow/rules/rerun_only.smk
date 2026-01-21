@@ -113,3 +113,5 @@ rule stack_all_translation_options:
     input:
         joint_image_both = "<stacked_vmd_frames>all_positions_first_rotation_both.png",
         joint_image_m2 = "<stacked_vmd_frames>all_positions_first_rotation_m2.png"
+
+

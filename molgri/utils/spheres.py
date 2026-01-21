@@ -57,7 +57,7 @@ def sort_points_on_sphere_ccw(points: NDArray) -> NDArray:
 
     def is_ccw(v_0: NDArray, v_c: NDArray, v_i: NDArray) -> bool:
         """
-        Checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW (counter-clockwise)
+        Checks if the smaller interior angle for the great circles connecting trajectory_universe-v and v-w is CCW (counter-clockwise)
 
         Args:
             v_0 (NDArray): 3D coordinate of the first point

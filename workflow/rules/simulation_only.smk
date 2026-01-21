@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from numpy._typing import NDArray
 
 rule gromacs_equilibration:
     """
@@ -90,7 +91,6 @@ rule postprocess_gromacs:
         """
 
 
-
 rule wrap_molecule2_COM:
     input:
         structure = f"<outputs_gromacs>structure.<ext_str>",
@@ -129,111 +129,4 @@ rule wrap_molecule2_COM:
         # wrap
         wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_array_m2)
         write_object(wrapped_com_m2, output.com_m2_wrapped)
-
-
-# rule assign_com2position_grid:
-#     input:
-#         com_m2 = f"<outputs_assignment>m2_com.npy",
-#         grid_info = "<outputs_network>grid_info.yaml"
-#     output:
-#         position_assignment = f"<outputs_assignment>position_assignment.npy",
-#     run:
-#         from molgri.molecules.assignment import assign_to_cartesian_translation_grid
-#         from workflow.helpers.io import read_object, write_object
-#         com_m2 = read_object(input.com_m2)
-#
-#         grid_info = read_object(input.grid_info)
-#         subgrids = grid_info["subgrid_points"]
-#         subgrid_limits = grid_info["subgrid_limits_A"]
-#         periodic_in = grid_info["periodic_in"]
-#         N_gridpoints = grid_info["subgrid_N_points"]
-#         full_assignments = assign_to_cartesian_translation_grid(com_m2, subgrids, subgrid_limits, periodic_in)
-#
-#         write_object(full_assignments, output.position_assignment)
-
-rule position_assignment_csv:
-    input:
-        energy_csv = f"<outputs>energy.csv",
-        com_m2= f"<outputs_assignment>m2_com.npy",
-        grid_info= "<outputs_network>grid_info.yaml",
-        indices_csv= f"<outputs_network>indices_interpretation.csv"
-    output:
-        assignment_csv =  f"<outputs_assignment>assignment.csv"
-    run:
-        from molgri.molecules.assignment import assign_to_cartesian_translation_grid
-        from workflow.helpers.io import read_object, write_object
-        com_m2 = read_object(input.com_m2)
-        energy = read_object(input.energy_csv)["Binding energy [kJ/mol]"]
-        df_indices = read_object(input.indices_csv)
-        df_indices = df_indices.loc[df_indices["Rotation index"] == 0]
-
-        grid_info = read_object(input.grid_info)
-        subgrids = grid_info["subgrid_points"]
-        subgrid_limits = grid_info["subgrid_limits_A"]
-        periodic_in = grid_info["periodic_in"]
-        N_gridpoints = grid_info["subgrid_N_points"]
-        data = assign_to_cartesian_translation_grid(com_m2, subgrids, subgrid_limits, periodic_in)
-
-
-
-        df_assignments = pd.DataFrame(np.array(data).T, columns=["X index", "Y index", "Z index", "Total position index"], dtype=int)
-
-        df_assignments["Exact COM position"] = list(map(tuple, com_m2))
-
-        assigned_array = df_assignments["Total position index"].to_numpy()
-
-        rows = (
-            df_indices
-            .set_index("Translation index")
-            .loc[assigned_array]
-            .reset_index()
-        )
-
-        df_assignments["Assigned position gridpoint"] = rows["Position"].to_numpy()
-        df_assignments["Energy [kJ/mol]"] = energy.to_numpy()
-
-        print(df_assignments)
-
-        write_object(df_assignments, output.assignment_csv)
-
-
-N_points_z_dir = int(config["grid"]["translation_subgrids_A"][-1][-1])
-
-rule plot_E_per_assigned_position_grids:
-    input:
-        structure1 = f"<outputs_gromacs>molecule1.<ext_str>",
-        assignment_csv =  f"<outputs_assignment>assignment.csv",
-        grid_info= "<outputs_network>grid_info.yaml",
-    output:
-        plot = expand("<outputs_other_plots>position_grid_energy_{i}.png", i=range(N_points_z_dir))
-    run:
-        import ast
-        from workflow.helpers.graphene_xylene_specific import plot_graphene
-        from molgri.plotting import draw_unit_cell
-        import plotly.graph_objects as go
-        df = read_object(input.assignment_csv)
-        grid_info = read_object(input.grid_info)
-        subgrid_limits = grid_info["subgrid_limits_A"]
-        side_lengths = np.array([subgrid_limits[0][1], subgrid_limits[1][1]])
-
-        unique_z_indices = df["Z index"].unique()
-        unique_z_indices.sort()
-        for z_index in range(N_points_z_dir):
-            filtered_df = df[df["Z index"] == z_index]
-            position_gridpoints = np.array([ast.literal_eval(s) for s in filtered_df["Assigned position gridpoint"].to_numpy()])
-
-            fig = go.Figure()
-
-            u = Universe(input.structure1)
-            plot_graphene(u, fig, in_3d=False)
-
-            if len(position_gridpoints) >= 1:
-                x, y, z = position_gridpoints.T
-                fig.add_trace(go.Scatter(x=position_gridpoints.T[0], y=position_gridpoints.T[1],
-                    mode = "markers", opacity=0.7,
-                    marker=dict(color=filtered_df["Energy [kJ/mol]"], size=10,
-                        colorbar=dict(thickness=20, title="Energy [kJ/mol]", y=1.05,yanchor="top"),
-                        colorscale="RdBu_r", cmin=-61,cmax=-50)))
-            draw_unit_cell(fig, side_lengths, in_3d=False)
-            fig.write_image(output.plot[z_index])
 

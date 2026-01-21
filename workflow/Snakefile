@@ -41,6 +41,7 @@ include: "rules/pseudotrajectories.smk"
 include: "rules/energy.smk"
 include: "rules/molecular_visualizations.smk"
 include: "rules/graphene_xylene_specific.smk"
+include: "rules/assign.smk"
 
 if config["perform_simulation"]:
     include: "rules/simulation_only.smk"
