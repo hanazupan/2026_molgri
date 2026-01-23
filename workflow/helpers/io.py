@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from numpy.typing import NDArray
-from scipy.sparse import save_npz, sparray, load_npz
+from scipy.sparse import save_npz, sparray, load_npz, spmatrix
 import MDAnalysis as md
 
 from molgri.utils.arrays import iter_elements_nested, nested_numpy_types_to_python_types
@@ -19,7 +19,7 @@ def write_object(my_object, filename) -> None:
     file_extension = os.path.splitext(filename)[1]
     if isinstance(my_object,np.ndarray) and file_extension != ".txt":
         function = _write_array
-    elif isinstance(my_object, sparray):
+    elif isinstance(my_object, sparray) or isinstance(my_object, spmatrix):
         function = _write_sparse_array
     elif isinstance(my_object, nx.Graph):
         function = _write_network
@@ -159,6 +159,16 @@ def get_atomgoup_m2(universe_both: md.Universe, path_str1: str):
     m2_atoms = m2_atoms[m2_atoms.indices >= n1]
     return m2_atoms
 
+
+def read_from_mdrun(path_to_file, param_to_find):
+    with open(path_to_file, "r") as f:
+        lines = f.readlines()
+    for i, line in enumerate(lines):
+        if line.startswith(param_to_find):
+            my_line = line
+            if ";" in line:
+                my_line = line.split(";")[0]
+            return my_line.split("=")[1].strip()
 
 class FlowSeqDumper(yaml.SafeDumper):
     pass

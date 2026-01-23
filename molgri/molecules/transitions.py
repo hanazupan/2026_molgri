@@ -1,7 +1,9 @@
-from typing import Sequence, Tuple, Any
+from typing import Optional, Sequence, Tuple, Any
 from numpy.typing import NDArray
 import numpy as np
 from scipy.sparse import diags, dok_array
+from scipy.sparse.linalg import eigs
+
 
 def window(seq: Sequence, len_window: int, step: int = 1) -> Tuple[Any, Any]:
     """
@@ -85,3 +87,39 @@ class MSM:
         for tau_i, tau in enumerate(taus):
             transition_matrix[tau_i] = self.get_one_tau_transition_matrix(tau, noncorrelated_windows=noncorrelated_windows)
         return transition_matrix
+
+class DecompositionTool:
+
+    def __init__(self, matrix_to_decompose):
+        """
+
+        Args:
+            matrix_to_decompose (): either a single matrix or an array of matrices (for different taus) we want to
+            decompose
+        """
+        self.matrix_to_decompose = matrix_to_decompose
+
+    def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k=12):
+        """
+        The function for users - will decompose all matrices.
+
+            tol ():
+            maxiter ():
+            which ():
+            sigma ():
+
+        Returns:
+
+        """
+        eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which, sigma=sigma)
+        # if imaginary eigenvectors or eigenvalues, raise error
+        if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-3, atol=1e-5) or not np.allclose(eigenval.imag.max(), 0,
+                                                                                            rtol=1e-3, atol=1e-5):
+            print(f"Complex values for eigenvectors and/or eigenvalues: {eigenvec}, {eigenval}")
+        eigenvec = eigenvec.real
+        eigenval = eigenval.real
+        # sort eigenvectors according to their eigenvalues
+        idx = eigenval.argsort()[::-1]
+        eigenval = eigenval[idx]
+        eigenvec = eigenvec[:, idx]
+        return eigenval, eigenvec

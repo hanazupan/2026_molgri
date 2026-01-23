@@ -22,3 +22,8 @@ energy:
 plotting:
   upper_E_limit: 0
   analyse_first_N_frames: None
+
+msm:
+  num_interesting_timescales: 4
+  num_interesting_eigenvectors: 5
+  num_extremes_to_plot: 5

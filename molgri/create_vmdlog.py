@@ -432,7 +432,7 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         assert len(plot_names) == len(neg_eigenvector_frames) + 1
 
         # add first molecule without any special colors etc
-        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=0)
+        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=1)
 
         # add zeroth eigenvector without any special colors
         self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=abs_eigenvector_frames)

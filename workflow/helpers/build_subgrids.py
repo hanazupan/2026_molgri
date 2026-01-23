@@ -140,6 +140,8 @@ def make_grid_base(config_data: dict):
     """
     save_information = _make_translation_grid(config_data, dict())
     save_information = _make_rotation_grid(config_data, save_information)
+    save_information["N_translations"] = int(np.prod(save_information["subgrid_N_points"]))
+    save_information["N_total"] = save_information["N_translations"] * save_information["N_rotations"]
     return save_information
 
 

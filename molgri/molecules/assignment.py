@@ -91,8 +91,8 @@ def loop_fast_over_trajectories(u, u_ref, N_rotations, limit_to=None):
         run_per_frame = partial(_calc_distance_along_traj,
             u=u,
             reference_coordinates=u_ref.atoms.positions)
-        frame_values = np.arange(limit_to)  #len(trajectory_universe.trajectory)
-        with Pool(1) as worker_pool:
+        frame_values = np.arange(limit_to)
+        with Pool(3) as worker_pool:
             resulting_distances = worker_pool.map(run_per_frame,frame_values)
         resulting_distances = np.array(resulting_distances)
         all_rmsds[:, ts.frame] = resulting_distances
