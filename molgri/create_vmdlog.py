@@ -289,7 +289,6 @@ class VMDCreator:
         #display projection Orthographic
 
         self.total_file_text += f"""
-logfile /dev/null       
 mol delrep 0 0
 color Display Background white
 axes location Off
@@ -300,6 +299,45 @@ material add copy AOChalky
 material change shininess Material22 0.000000
 display resize 1800 1200
 """
+
+    def add_box(self, length_x, length_y, length_z) -> None:
+        self.total_file_text += f"""
+set mol top
+set x0 0.0
+set y0 0.0
+set z0 0.0
+set x1 {str(float(length_x))}
+set y1 {str(float(length_y))}
+set z1 {str(float(length_z))}
+
+# define corners
+set c000 [list $x0 $y0 $z0]
+set c100 [list $x1 $y0 $z0]
+set c010 [list $x0 $y1 $z0]
+set c110 [list $x1 $y1 $z0]
+set c001 [list $x0 $y0 $z1]
+set c101 [list $x1 $y0 $z1]
+set c011 [list $x0 $y1 $z1]
+set c111 [list $x1 $y1 $z1]
+
+# draw edges
+graphics $mol cylinder $c000 $c100 radius 0.1 resolution 20
+graphics $mol cylinder $c000 $c010 radius 0.1 resolution 20
+graphics $mol cylinder $c000 $c001 radius 0.1 resolution 20
+
+graphics $mol cylinder $c100 $c110 radius 0.1 resolution 20
+graphics $mol cylinder $c100 $c101 radius 0.1 resolution 20
+
+graphics $mol cylinder $c010 $c110 radius 0.1 resolution 20
+graphics $mol cylinder $c010 $c011 radius 0.1 resolution 20
+
+graphics $mol cylinder $c001 $c101 radius 0.1 resolution 20
+graphics $mol cylinder $c001 $c011 radius 0.1 resolution 20
+
+graphics $mol cylinder $c110 $c111 radius 0.1 resolution 20
+graphics $mol cylinder $c101 $c111 radius 0.1 resolution 20
+graphics $mol cylinder $c011 $c111 radius 0.1 resolution 20
+"""""
 
 
     def _add_representation(self, first_molecule: bool = False, second_molecule: bool = True, coloring: str = None,
@@ -440,9 +478,9 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         # for the rest add one red, one blue
         for pos_frames, neg_frames in zip(pos_eigenvector_frames, neg_eigenvector_frames):
             self._add_representation(first_molecule=False, second_molecule=True, coloring="ColorID", color="blue",
-                                     trajectory_frames=pos_frames)
+                                     trajectory_frames=pos_frames, representation="Licorice")
             self._add_representation(first_molecule=False, second_molecule=True, coloring="ColorID", color="red",
-                                     trajectory_frames= neg_frames)
+                                     trajectory_frames= neg_frames, representation="Licorice")
 
         self._add_rotations_translations()
 
@@ -585,7 +623,8 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
     foreach i $frames {{
         $sel frame $i
         set com [measure center $sel weight mass]
-        graphics top sphere $com radius 0.1
+        graphics top sphere $com radius 0.3
+        graphics top color red
     }}                                                                        
     """
 

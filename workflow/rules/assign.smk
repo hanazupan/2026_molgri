@@ -1,21 +1,110 @@
+"""
+Every rule here should save to assign/ directory.
+"""
+
+from MDAnalysis import Universe, Writer
+import numpy as np
+
+from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_multiple_atoms_to_cuboid_cell, wrap_to_cuboid_cell
+from molgri.molecules.assignment import assign_to_cartesian_translation_grid
+
+from workflow.helpers.io import get_num_atoms, get_atomgoup_m1, get_atomgoup_m2, read_object, write_object
+
+##################################### POSITION ASSIGNMENT ####################################################
+
+rule wrap_trajectory2cuboid_cell:
+    """
+    This rule takes a normal (already centered etc.) trajectory of two molecules and applies periodic boundary
+    conditions of the cuboid cell to the molecule2. This is useful so we can assign the best position.
+    """
+    input:
+        structure = f"<simulation>structure.<ext_str>",
+        trajectory = f"<simulation>trajectory.<ext_trj>",
+        structure1 = f"<simulation>molecule1.<ext_str>",
+    benchmark:
+        "<outputs_assignment>duration_wrapping_trajectory.txt"
+    output:
+        wrapped_trajectory = f"<outputs_assignment>wrapped_trajectory.<ext_trj>",
+    run:
+        n_mol1 = get_num_atoms(input.structure1)
+
+        u = Universe(input.structure,input.trajectory)
+        ag2 = u.select_atoms("all")
+        ag2 = ag2[n_mol1:]
+
+
+        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        print(side_lengths)
+
+        with Writer(output.wrapped_trajectory, u.atoms.n_atoms) as W:
+            for ts in u.trajectory:
+                ts.positions[n_mol1:] = wrap_multiple_atoms_to_cuboid_cell(ag2.center_of_mass(),
+                    ts.positions[n_mol1:],
+                    side_lengths,
+                    wrap_only_xy=True)
+
+                W.write(u.atoms)
+
+rule wrap_molecule2_COM:
+    input:
+        structure = f"<simulation>structure.<ext_str>",
+        trajectory = f"<simulation>trajectory.<ext_trj>",
+        structure1 = f"<simulation>molecule1.<ext_str>",
+    output:
+        com_m2 = f"<outputs_assignment>m2_com.npy",
+        com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
+    run:
+
+        # determine com of 2nd molecule
+        u = Universe(input.structure, input.trajectory)
+        ag_m2 = get_atomgoup_m2(u, input.structure1)
+        ag_m1 = get_atomgoup_m1(u, input.structure1)
+
+        com_array_m1 = np.zeros((len(u.trajectory), 3))
+        com_array_m2 = np.zeros((len(u.trajectory), 3))
+        for i, ts in enumerate(u.trajectory):
+            shift = ag_m1.center_of_mass()
+            u.atoms.translate(-shift)
+            com_array_m1[i] = ag_m1.center_of_mass()
+            com_array_m2[i] = ag_m2.center_of_mass()
+
+        write_object(com_array_m2, output.com_m2)
+        # assert com of m1 not changing
+        assert np.max(com_array_m1 - com_array_m1[0]) < 0.01, "Molecule 1 seems to be moving - is it not fitted to the reference or just very flexible?"
+
+
+        # determine cuboid cell
+        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        origin = np.zeros(3)
+
+        # wrap
+        wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_array_m2)
+        write_object(wrapped_com_m2, output.com_m2_wrapped)
+
 rule position_assignment_csv:
     input:
-        energy_csv = f"<outputs>energy.csv",
-        com_m2= f"<outputs_assignment>m2_com.npy",
+        energy_csv = f"<simulation>energy.csv",
+        com_m2 = f"<outputs_assignment>m2_com.npy",
+        com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
         grid_info= "<outputs_network>grid_info.yaml",
         indices_csv= f"<outputs_network>indices_interpretation.csv"
     output:
         assignment_csv =  f"<outputs_assignment>translation_assignment.csv",
         translation_assignment= f"<outputs_assignment>translation_assignment.npy",
     run:
-        from molgri.molecules.assignment import assign_to_cartesian_translation_grid
-        from workflow.helpers.io import read_object, write_object
+
         import pandas as pd
         import numpy as np
 
         com_m2 = read_object(input.com_m2)
+        com_m2_wrapped = read_object(input.com_m2_wrapped)
+
         energy = read_object(input.energy_csv)["Binding energy [kJ/mol]"]
-        df_indices = read_object(input.indices_csv)
+        df_indices = read_object(input.indices_csv, header=[0, 1])
+
+        df_indices.columns = [col[0] if col[1].startswith("Unnamed") else col[1] for col in df_indices.columns]
+
+
         df_indices = df_indices.loc[df_indices["Rotation index"] == 0]
 
         grid_info = read_object(input.grid_info)
@@ -24,12 +113,13 @@ rule position_assignment_csv:
         periodic_in = grid_info["periodic_in"]
         N_gridpoints = grid_info["subgrid_N_points"]
         data = assign_to_cartesian_translation_grid(com_m2, subgrids, subgrid_limits, periodic_in)
+        assigned_array = data[-1].astype(int).T
 
         df_assignments = pd.DataFrame(np.array(data).T, columns=["X index", "Y index", "Z index", "Total position index"], dtype=int)
 
-        df_assignments["Exact COM position"] = list(map(tuple, com_m2))
-
-        assigned_array = df_assignments["Total position index"].to_numpy()
+        df_assignments[["x_COM", "y_COM", "z_COM"]] = pd.DataFrame(list(map(tuple, np.round(com_m2, 5))),index=df_assignments.index)
+        df_assignments[
+            ["x_wCOM", "y_wCOM", "z_wCOM"]] = pd.DataFrame(list(map(tuple, np.round(com_m2_wrapped, 5))),index=df_assignments.index)
 
         rows = (
             df_indices
@@ -38,71 +128,65 @@ rule position_assignment_csv:
             .reset_index()
         )
 
-        df_assignments["Assigned position gridpoint"] = rows["Position"].to_numpy()
+        #position_array = rows[["x", "y", "z"]].to_numpy()
+        df_assignments["x"] = rows["x"]
+        df_assignments["y"] = rows["y"]
+        df_assignments["z"] = rows["z"]
+
+
+        #df_assignments["Assigned position gridpoint"] = list(map(tuple, np.round(position_array, 5)))
         df_assignments["Energy [kJ/mol]"] = energy.to_numpy()
 
-        print(df_assignments)
+        tuples = [
+            ("Direction indices", "X_index"),
+            ("Direction indices", "Y_index"),
+            ("Direction indices", "Z_index"),
+            ("Total position index", ""),
+            ("Exact COM position", "x_COM"),
+            ("Exact COM position", "y_COM"),
+            ("Exact COM position", "z_COM"),
+            ("Wrapped COM position", "x_wCOM"),
+            ("Wrapped COM position", "y_wCOM"),
+            ("Wrapped COM position", "z_wCOM"),
+            ("Assigned position gridpoint", "x"),
+            ("Assigned position gridpoint", "y"),
+            ("Assigned position gridpoint", "z"),
+            ("Energy [kJ/mol]", ""),
+        ]
+
+        df_assignments.columns = pd.MultiIndex.from_tuples(tuples)
 
         write_object(df_assignments, output.assignment_csv)
         write_object(np.array(data[3]), output.translation_assignment)
 
+##################################### ROTATION ASSIGNMENT ####################################################
 
-
-N_points_z_dir = int(config["grid"]["translation_subgrids_A"][-1][-1])
-
-rule plot_E_per_assigned_position_grids:
+rule trajectory_centered_at_m2_COM:
+    """
+    Write the whole trajectory translated in such a way that the COM of molecule 2 is at (0,0,0) in each frame and
+    molecule1 is not written. This is useful so we can later assign the best rotation.
+    """
     input:
-        structure1 = f"<outputs_gromacs>molecule1.<ext_str>",
-        assignment_csv =  f"<outputs_assignment>assignment.csv",
-        grid_info= "<outputs_network>grid_info.yaml",
+        trajectory = "{some_folder}trajectory.<ext_trj>",
+        structure="{some_folder}structure.<ext_str>",
+        index="{some_folder}index.ndx",
     output:
-        plot = expand("<outputs_other_plots>position_grid_energy_{i}.png", i=range(N_points_z_dir))
-    run:
-        import ast
-        from workflow.helpers.graphene_xylene_specific import plot_graphene
-        from molgri.plotting import draw_unit_cell
-        import plotly.graph_objects as go
-        from MDAnalysis import Universe
-
-        df = read_object(input.assignment_csv)
-        grid_info = read_object(input.grid_info)
-        subgrid_limits = grid_info["subgrid_limits_A"]
-        side_lengths = np.array([subgrid_limits[0][1], subgrid_limits[1][1]])
-
-        unique_z_indices = df["Z index"].unique()
-        unique_z_indices.sort()
-        for z_index in range(N_points_z_dir):
-            filtered_df = df[df["Z index"] == z_index]
-            position_gridpoints = np.array([ast.literal_eval(s) for s in filtered_df["Assigned position gridpoint"].to_numpy()])
-
-            fig = go.Figure()
-
-            trajectory_universe = Universe(input.structure1)
-            plot_graphene(trajectory_universe, fig, in_3d=False)
-
-            if len(position_gridpoints) >= 1:
-                x, y, z = position_gridpoints.T
-                fig.add_trace(go.Scatter(x=position_gridpoints.T[0], y=position_gridpoints.T[1],
-                    mode = "markers", opacity=0.7,
-                    marker=dict(color=filtered_df["Energy [kJ/mol]"], size=10,
-                        colorbar=dict(thickness=20, title="Energy [kJ/mol]", y=1.05,yanchor="top"),
-                        colorscale="RdBu_r", cmin=-61,cmax=-50)))
-            draw_unit_cell(fig, side_lengths, in_3d=False)
-            fig.write_image(output.plot[z_index])
-
-
-from workflow.helpers.io import get_atomgoup_m2, write_object
-from MDAnalysis import Universe
-
+        trajectory="{some_folder}m2_trajectory_centered.<ext_trj>",
+    shadow: "minimal"
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "3\n3\n" |  gmx22 trjconv  -s {input.structure}  -f {input.trajectory} -o {output.trajectory} -n {input.index} -center -boxcenter zero
+        """
 
 rule rotation_assignment:
     """
     The closest rotational fit of molecule 2 is found and reported as rotation index.
     """
     input:
-        structure2 = f"<outputs_gromacs>molecule2.<ext_str>",
-        trajectory=f"<outputs_gromacs>m2_trajectory_centered.<ext_trj>",
-        reference_pt = f"nobackup/<molecules><network>pseudosimulation/gromacs/m2_trajectory_centered.<ext_trj>"
+        structure2 = f"<pseudosimulation>molecule2.<ext_str>",
+        trajectory=f"<simulation>m2_trajectory_centered.<ext_trj>",
+        reference_pt = f"<pseudosimulation>m2_trajectory_centered.<ext_trj>"
     benchmark:
         repeat(f"<outputs_assignment>duration_rotational_assignment.txt",1)
     output:
@@ -112,14 +196,34 @@ rule rotation_assignment:
         trajectory_universe = Universe(input.structure2, input.trajectory)
         reference_universe = Universe(input.structure2, input.reference_pt)
 
+        # last_atom = trajectory_universe.atoms
+        #
+        # trajectory_universe.trajectory[83546]
+        # pos = last_atom.positions.copy()
+        #
+        # N_rotations = int(config["grid"]["N_rotations"])
+        #
+        # pos_ref = np.array([ts.positions.copy() for ts in reference_universe.trajectory[:N_rotations]])
+        #
+        # distances = np.empty(len(pos_ref))
+        # for i, ref_structure in enumerate(pos_ref):
+        #     distances_to_this_ref = np.linalg.norm(pos - ref_structure, axis=1)
+        #     print(distances_to_this_ref)
+        #     total_distances = distances_to_this_ref.sum(axis=0)
+        #     distances[i] = total_distances
+        #
+        # print(distances)
+
+
         N_rotations = int(config["grid"]["N_rotations"])
 
         #TODO if possible: use gromacs or similar to extract position array faster
 
-        # shape (N_frames, N_atoms, 3)
         pos = np.array([ts.positions.copy() for ts in trajectory_universe.trajectory])
         # shape (N_rotations, N_atoms, 3)
         pos_ref = np.array([ts.positions.copy() for ts in reference_universe.trajectory[:N_rotations]])
+
+        print(pos.shape, pos_ref.shape)
 
         # shape (N_rotations, N_frames)
         distances = np.empty((len(pos_ref), len(pos)))
@@ -131,8 +235,11 @@ rule rotation_assignment:
             total_distances = distances_to_this_ref.sum(axis=1)
             distances[i] = total_distances
 
+
         best_indices = np.argmin(distances.T, axis=1)
         write_object(best_indices, output.assigned_trajectory)
+
+##################################### FULL ASSIGNMENT ####################################################
 
 rule full_assignment:
     input:
@@ -146,36 +253,25 @@ rule full_assignment:
         translation_assignments = read_object(input.translation_assignment)
         grid_info = read_object(input.grid_info)
         N_rotations = int(grid_info["N_rotations"])
-        #N_translations = int(np.prod(grid_info["subgrid_N_points"]))
         full_assignments = translation_assignments * N_rotations + rotation_assignments
         print(full_assignments)
 
         write_object(full_assignments, output.full_assignment)
 
-rule see_assignments:
+rule print_assignment:
     input:
-        assigned_trajectory = f"<outputs_assignment>rotation_assignment.npy"
+        trans_csv = f"<outputs_assignment>translation_assignment.csv",
+        translation_assignment = f"<outputs_assignment>translation_assignment.npy",
+        rot_assignment = f"<outputs_assignment>rotation_assignment.npy",
+        full_assignment = f"<outputs_assignment>full_assignment.npy",
     run:
-        assignments = read_object(input.assigned_trajectory)
-        print(np.unique(assignments, return_counts=True))
+        my_assignments = read_object(input.rot_assignment)
+        print("Rot assignment: ", my_assignments[[5390, 44854, 83546]])
+        my_assignments = read_object(input.translation_assignment)
+        print("Trans assignment: ", my_assignments[[5390, 44854, 83546]])
+        my_assignments = read_object(input.full_assignment)
+        print(my_assignments[[5390, 44854, 83546]])
 
-
-rule trajectory_centered_at_m2_COM:
-    """
-    Write the whole trajectory translated in such a way that the COM of molecule 2 is at (0,0,0) in each frame.
-    This is useful so we can later assign the best rotation.
-    """
-    input:
-        trajectory = f"<outputs_gromacs>trajectory.<ext_trj>",
-        structure=f"<outputs_gromacs>structure.<ext_str>",
-        index=f"<outputs_gromacs>index.ndx",
-    output:
-        trajectory=f"<outputs_gromacs>m2_trajectory_centered.<ext_trj>",
-    shell:
-        """
-        initial_dir=$(pwd)
-        cd $(dirname {input.trajectory})
-        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        echo "3\n3\n" |  gmx22 trjconv  -s $(basename {input.structure})  -f $(basename {input.trajectory}) -o $(basename {output.trajectory}) -n $(basename {input.index}) -center -boxcenter zero
-        cd "$initial_dir" || exit
-        """
+        df = read_object(input.trans_csv, header = [0,1])
+        print(df)
+        print(df.loc[83546])

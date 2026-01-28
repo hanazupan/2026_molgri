@@ -74,6 +74,6 @@ def trim_images_with_common_bbox(input_paths, output_paths):
 
 def join_images(input_paths, output_path, flip=True):
     if flip:
-        subprocess.run(f"montage -flip {' '.join(input_paths)} {output_path}", shell=True)
+        subprocess.run(f"montage -flip {' '.join(input_paths)} -geometry +0+0 {output_path}", shell=True)
     else:
-        subprocess.run(f"montage -mode concatenate -tile 4x  {' '.join(input_paths)} {output_path}", shell=True)
+        subprocess.run(f"montage -mode concatenate -tile 2x  {' '.join(input_paths)} {output_path}", shell=True)

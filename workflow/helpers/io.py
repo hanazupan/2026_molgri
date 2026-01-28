@@ -38,7 +38,7 @@ def write_object(my_object, filename) -> None:
 
     function(my_object, filename)
 
-def read_object(filename):
+def read_object(filename, **kwargs):
     file_extension = os.path.splitext(filename)[1]
     if file_extension == ".npy":
         function = _read_array
@@ -58,18 +58,18 @@ def read_object(filename):
         function = _read_yaml
     else:
         raise TypeError(f"Cannot read object from file with extension {file_extension}")
-    return function(filename)
+    return function(filename, **kwargs)
 
 def _write_network(network, filename: str) -> nx.Graph:
     with open(filename, "wb") as f:
         pickle.dump(network, f)
 
-def _read_network(filename: str):
+def _read_network(filename: str, *args, **kwargs):
     with open(filename, "rb") as f:
         my_network = pickle.load(f)
     return my_network
 
-def _read_energy(filename: str):
+def _read_energy(filename: str, *args, **kwargs):
     def _get_column_names(filename) -> list:
         result = ["Time [ps]"]
         with open(filename, "r") as f:
@@ -96,7 +96,7 @@ def _write_txt(some_array: NDArray, filename: str):
 
     np.savetxt(filename, some_array, fmt=fmt)
 
-def _read_txt(filename: str) -> NDArray:
+def _read_txt(filename: str, *args, **kwargs) -> NDArray:
     array_or_num = np.loadtxt(filename)
     if np.issubdtype(array_or_num.dtype, np.integer) or np.issubdtype(array_or_num.dtype, float):
         array_or_num = np.array([array_or_num])
@@ -105,19 +105,19 @@ def _read_txt(filename: str) -> NDArray:
 def _write_csv(df, filename: str):
     df.to_csv(filename)
 
-def _read_csv(filename: str) -> pd.DataFrame:
-    return pd.read_csv(filename, index_col=0)
+def _read_csv(filename: str, *args, **kwargs) -> pd.DataFrame:
+    return pd.read_csv(filename, index_col=0, **kwargs)
 
 def _write_array(array, filename: str):
     np.save(filename, array)
 
-def _read_array(filename: str) -> NDArray:
+def _read_array(filename: str, *args, **kwargs) -> NDArray:
     return np.load(filename)
 
 def _write_sparse_array(sparse_array, filename: str) -> None:
     save_npz(filename, sparse_array)
 
-def _read_sparse_array(filename: str) -> sparray:
+def _read_sparse_array(filename: str, *args, **kwargs) -> sparray:
     return load_npz(filename)
 
 def _write_structure(universe, filename: str) -> None:
@@ -128,7 +128,7 @@ def _write_trajectory(universe, filename: str) -> None:
         for ts in universe.trajectory:
             W.write(universe.atoms)
 
-def _read_molecular_structure(filename: str) -> md.Universe:
+def _read_molecular_structure(filename: str, *args, **kwargs) -> md.Universe:
     return md.Universe(filename)
 
 def _write_yaml(dict_like_file, filename: str) -> None:
@@ -136,7 +136,7 @@ def _write_yaml(dict_like_file, filename: str) -> None:
     with open(filename, "w") as f:
         yaml.dump(dict_like_file, f, Dumper=FlowSeqDumper, sort_keys=False)
 
-def _read_yaml(filename: str) -> dict:
+def _read_yaml(filename: str, *args, **kwargs) -> dict:
     with open(filename) as f:
         data = yaml.safe_load(f)
     return data
@@ -190,3 +190,16 @@ def represent_flow_sequence(dumper, seq):
         seq,
         flow_style=True
     )
+
+
+def from_xvg_to_csv_energy(xvg_file, csv_file):
+    my_energy = read_object(xvg_file)
+    coulumb = my_energy["Coul-SR:MOL1-MOL2"].to_numpy()
+    lj = my_energy["LJ-SR:MOL1-MOL2"].to_numpy()
+
+    df = pd.DataFrame(np.array([coulumb, lj]).T,
+        columns=["Coulomb contribution [kJ/mol]", "Lennard-Jones contribution [kJ/mol]"])
+
+    df["Binding energy [kJ/mol]"] = df["Coulomb contribution [kJ/mol]"] + df["Lennard-Jones contribution [kJ/mol]"]
+    df.index.name = "Total index"
+    write_object(df,csv_file)

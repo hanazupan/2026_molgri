@@ -47,12 +47,12 @@ rule run_decomposition_msm:
         write_object(all_eigenval, output.eigenvalues)
         write_object(all_eigenvec,output.eigenvectors)
 
-TAUS = [1, 5, 10, 20, 30, 50, 100, 200]
+TAUS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200]
 
 rule get_implied_timescales:
     input:
         eigenvalues = f"<outputs_transitions>{{tau}}/eigenvalues.npy",
-        runfile=f"<outputs_gromacs>production.mdp"
+        runfile=f"<simulation>production.mdp"
     output:
         its = f"<outputs_transitions>{{tau}}/its.npy",
     run:
@@ -114,16 +114,16 @@ rule find_indices_dominant_eigenvectors:
 
 rule plot_vmd_eigenvectors:
     input:
-        structure = f"<outputs_gromacs>structure.<ext_str>",
-        structure1 = f"<outputs_gromacs>molecule1.<ext_str>",
-        trajectory = f"<outputs_gromacs>trajectory.<ext_trj>",
+        structure = f"<simulation>structure.<ext_str>",
+        structure1 = f"<simulation>molecule1.<ext_str>",
+        trajectory = f"<outputs_assignment>wrapped_trajectory.<ext_trj>",
         abs_e_indices=rules.find_indices_dominant_eigenvectors.output.abs_e_indices,
         pos_e_indices=rules.find_indices_dominant_eigenvectors.output.pos_e_indices,
         neg_e_indices=rules.find_indices_dominant_eigenvectors.output.neg_e_indices,
-        translation_rotation_script= f"<inputs_vmd>script1.log",
+        translation_rotation_script= f"<inputs_vmd>script3.log",
     output:
         vmdlog = f"<outputs_vmd>{{tau}}/eigenvectors.log",
-        plots = expand(f"<outputs_transition_plots>{{tau}}/eigenvector{{i}}.tga",
+        plots = expand(f"<outputs_molecular_plots>{{tau}}/eigenvector{{i}}.tga",
             i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True)
     run:
         from molgri.create_vmdlog import VMDCreator
@@ -152,15 +152,15 @@ rule plot_vmd_eigenvectors:
 
 rule for_tau1:
     input:
-        expand(f"<outputs_transition_plots>{{tau}}/eigenvector{{i}}.tga",i=range(config["msm"]["num_interesting_eigenvectors"]), tau=TAUS)
+        expand(f"<outputs_molecular_plots>{{tau}}/eigenvector{{i}}.tga",i=range(config["msm"]["num_interesting_eigenvectors"]), tau=TAUS)
 
 
 rule run_plot_its_msm:
     input:
         its = expand(f"<outputs_transitions>{{tau}}/its.npy", tau=TAUS),
-        runfile=f"<outputs_gromacs>production.mdp"
+        runfile=f"<simulation>production.mdp"
     output:
-        plot_its = f"<outputs_transitions>its.png"
+        plot_its = f"<outputs_other_plots>its.png"
     run:
         from plotly.subplots import make_subplots
 

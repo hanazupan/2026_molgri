@@ -1,36 +1,26 @@
 """
-Everything up to the introduction of molecules: get a full grid, adjacency matrix, surfaces, distances, volumes.
+All rules here should save to network/ folder.
 """
-from workflow.helpers.io import write_object, read_object
 import numpy as np
-
+import pandas as pd
 import matplotlib
+import plotly.graph_objects as go
+
+from molgri.network.generation import build_quaternion_network, build_translation_network, create_full_network
+from molgri.plotting import show_graph, show_array
+
+from workflow.helpers.io import write_object, read_object
+from workflow.helpers.build_subgrids import make_grid_base
+
+
 matplotlib.use('Agg')
-
-rule all_grid:
-    input:
-        expand("<outputs_network>{to_create}",
-            to_create =["network.pkl", "adjacency.npz", "distances.npz", "surfaces.npz", "edge_types.npz", "grid.npy", "volumes.npy"],
-            allow_missing=True),
-
-        # optional visualizations
-        expand("<outputs_network>{network_type}_network/{to_create}.{ending}",
-            ending = ["png"],
-            network_type = ["full", "rotation", "translation"],
-            to_create =["adjacency", "distances", "surfaces", "edge_types", "grid", "volumes", "network", "violin_plots"],
-            allow_missing=True)
-
 
 rule save_basic_grid_information:
     output:
         info_material = "<outputs_network>grid_info.yaml"
     run:
-        from workflow.helpers.build_subgrids import make_grid_base
-
         save_information = make_grid_base(config)
-
         write_object(save_information, output.info_material)
-
 
 rule create_rotation_network:
     input:
@@ -40,8 +30,6 @@ rule create_rotation_network:
     output:
         network_file = "<outputs_network>rotation_network/network.pkl"
     run:
-        from molgri.network.generation import build_quaternion_network, create_full_network
-
         grid_info = read_object(input.info_material)
         upper_quaternions = np.array(grid_info["quaternions"])
 
@@ -57,7 +45,6 @@ rule create_translation_network:
     output:
         network_file = "<outputs_network>translation_network/network.pkl"
     run:
-        from molgri.network.generation import build_translation_network
         grid_info = read_object(input.info_material)
         periodic_in = grid_info["periodic_in"]
         subgrids = grid_info["subgrid_points"]
@@ -74,7 +61,6 @@ rule create_full_network:
     output:
         network_file = f"<outputs_network>network.pkl"
     run:
-        from molgri.network.generation import create_full_network
         rotation_network = read_object(input.rotation_network_file)
         translation_network = read_object(input.translation_network_file)
         full_network = create_full_network(translation_network, rotation_network)
@@ -109,8 +95,6 @@ rule display_network:
     output:
         plot = "<outputs_network>network.png"
     run:
-        from molgri.plotting import show_graph
-
         my_network = read_object(input.network_file)
         show_graph(my_network,edge_property="distance", show=False, save_as=output.plot)
 
@@ -128,8 +112,6 @@ rule display_network_edge_matrices:
         distances = "<outputs_network>distances.png",
         surfaces = "<outputs_network>surfaces.png"
     run:
-        from molgri.plotting import show_array
-
         show_array(read_object(input.adjacency).toarray(), "Adjacency_type",
             save_as=output.adjacency, show=False)
         show_array(read_object(input.numerical_edge_type).toarray(),"Edge types",
@@ -154,35 +136,6 @@ rule display_network_node_attributes:
         draw_points(grid, custom_labels=np.round(volumes,2), save_as=output.volumes, marker_size=volumes,
             show=False)
 
-checkpoint all_rotations_first_position_indices:
-    """
-    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
-    """
-    input:
-        info_material = "<outputs_network>grid_info.yaml"
-    output:
-        indices= f"<outputs_indices>all_rotations_first_position.txt"
-    run:
-        info_grid = read_object(input.info_material)
-        rotation_points = info_grid["N_rotations"]
-        required_indices = np.array(list(range(0,rotation_points)))
-        write_object(required_indices, output.indices)
-
-checkpoint all_positions_first_rotation_indices:
-    """
-    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
-    """
-    input:
-        info_material = "<outputs_network>grid_info.yaml"
-    output:
-        indices= f"<outputs_indices>all_positions_first_rotation.txt"
-    run:
-        info_grid = read_object(input.info_material)
-        position_points = np.prod(info_grid["subgrid_N_points"])
-        rotation_points = info_grid["N_rotations"]
-        total_N_points = position_points * rotation_points
-        required_indices = np.array(list(range(0,total_N_points,rotation_points)))
-        write_object(required_indices, output.indices)
 
 rule create_index_csv:
     """
@@ -193,9 +146,6 @@ rule create_index_csv:
     output:
         energy_csv = f"<outputs_network>indices_interpretation.csv"
     run:
-        import pandas as pd
-        import numpy as np
-
         my_network = read_object(input.network)
 
         translation_indices = my_network.get_translation_indices()
@@ -207,13 +157,31 @@ rule create_index_csv:
         df = pd.DataFrame(np.array([translation_indices, rotation_indices]).T,
             columns=["Translation index", "Rotation index"])
 
-        df["Position"] = list(map(tuple, positions))
-        df["Quaternion"] = list(map(tuple, quaternions))
+
+        df[["x", "y", "z"]] = pd.DataFrame(list(map(tuple, positions.astype(float))),index=df.index)
+        df[["q_0", "q_1", "q_2", "q_3"]] = pd.DataFrame( list(map(tuple, quaternions.astype(float))),index=df.index)
+
+        tuples = [
+            ("Translation index", ""),
+            ("Rotation index", ""),
+            ("Position", "x"),
+            ("Position", "y"),
+            ("Position", "z"),
+            ("Quaternion", "q_0"),
+            ("Quaternion", "q_1"),
+            ("Quaternion", "q_2"),
+            ("Quaternion", "q_3"),
+        ]
+
         df.index.name = "Total index"
+
         # indices should be integers
         df["Translation index"] = df["Translation index"].astype("Int64")
         df["Rotation index"] = df["Rotation index"].astype("Int64")
 
+        df.columns = pd.MultiIndex.from_tuples(tuples)
+
+        print(df)
         write_object(df, output.energy_csv)
 
 
@@ -239,8 +207,6 @@ rule display_geometry_properties_with_violin_distributions:
     output:
         volumes = "<outputs_network>violin_plots.png"
     run:
-        import plotly.graph_objects as go
-
         volume_data = read_object(input.volumes)
         distance_data = read_object(input.distances).data
         surface_data = read_object(input.surfaces).data

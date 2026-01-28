@@ -1,6 +1,7 @@
 from itertools import product
 
 import plotly.graph_objects as go
+from MDAnalysis import Universe
 from ase.io import read
 from ase.io.rmc6f import ncols2style
 from numpy._typing import NDArray
@@ -216,6 +217,15 @@ def wrap_to_cuboid_cell(origin: NDArray, side_lengths: NDArray, coordinates:NDAr
         return np.column_stack((wrapped_2D, coordinates[:, 2]))
     return origin + np.mod(coordinates - origin, side_lengths)
 
+def wrap_multiple_atoms_to_cuboid_cell(com: NDArray, coordinates:NDArray, side_lengths: NDArray, wrap_only_xy: bool =
+False):
+    vector_com_to_atom = coordinates - com
+    com_wrapped = wrap_to_cuboid_cell(np.zeros((3,)), side_lengths, com[np.newaxis, :], wrap_only_xy)
+    if wrap_only_xy:
+        return np.column_stack((vector_com_to_atom[:, :2] + com_wrapped[:, :2], coordinates[:, 2]))
+    else:
+        return vector_com_to_atom + com_wrapped
+
 if __name__ == "__main__":
     """
     Here we have some very useful plotting to visualize the process:
@@ -224,23 +234,51 @@ if __name__ == "__main__":
     3) based on the supercell we find a rectangular lattice with the smallest volume that is repeatable
     """
     from molgri.plotting import draw_structure, draw_unit_cell
-    test_structure = "outputs/tests/output_shrunk.gro"
+    from MDAnalysis.analysis.base import AnalysisFromFunction
+    from workflow.helpers.io import write_object
+    from MDAnalysis import Writer
 
-    primitive_structure = find_primitive_cell(test_structure)
-    primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
+    my_path = "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs/"
 
-    supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
-    supercell_structure = AseAtomsAdaptor.get_structure(supercell_atoms)
+    structure = f"{my_path}structure.gro"
+    structure1 = f"{my_path}molecule1.gro"
+    trajectory = f"{my_path}trajectory.xtc"
 
-    rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
-                                                       numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
+    u = Universe(structure, trajectory)
+    ag2 = u.select_atoms("all")
+    ag2 = ag2[1056:]
 
-    print(rectangular_unit_structure)
+    side_lengths = get_rectangular_cell_side_lengths(structure1)
 
+    with Writer(f"{my_path}wrapped_trajectory.xtc", u.atoms.n_atoms) as W:
+        for ts in u.trajectory:
+            #print("before", ts.positions[1057])
+            ts.positions[1056:] = wrap_multiple_atoms_to_cuboid_cell(ag2.center_of_mass(),
+                                                                     ts.positions[1056:],
+                                                                     side_lengths,
+                                                                     wrap_only_xy=True)
+            #print("after", ts.positions[1057])
+            W.write(u.atoms)
+    #print(side_lengths)
 
-    fig = go.Figure()
-    draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
-    draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
-
-    draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
-    draw_structure(fig, test_structure, show=True)
+    #write_object(u, "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs
+    # /wrapped_trajectory.xtc")
+    # primitive_structure = find_primitive_cell(structure)
+    # primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
+    #
+    #
+    # supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
+    # supercell_structure = AseAtomsAdaptor.get_structure(supercell_atoms)
+    #
+    # rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
+    #                                                    numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
+    #
+    # print(rectangular_unit_structure)
+    #
+    #
+    # fig = go.Figure()
+    # draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
+    # draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
+    #
+    # draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
+    # draw_structure(fig, test_structure, show=True)

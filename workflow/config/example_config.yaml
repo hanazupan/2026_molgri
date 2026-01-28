@@ -1,13 +1,11 @@
-perform_simulation: True
-
 grid:
-  unique_network_name: "auto_20"
+  unique_network_name: "auto_120"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 30
+  N_rotations: 120
   translation_algorithm: "cartesian"
   periodic_in: [True, True, False]
-  translation_subgrids_A: [ [None, None, 15], [ None, None, 15], [1.5, 4, 20] ]
+  translation_subgrids_A: [ [None, None, 5], [ None, None, 5], [1.5, 4, 5] ]
 
 pseudotrajectory:
   molecule_1: "graphene"
@@ -15,15 +13,13 @@ pseudotrajectory:
   structure_ending: "gro"
   trajectory_ending: "xtc"
 
-energy:
+analysis:
   energy_program: GROMACS
-
-
-plotting:
+  length_shortened_trajectory_ns: 10
   upper_E_limit: 0
   analyse_first_N_frames: None
 
 msm:
   num_interesting_timescales: 4
   num_interesting_eigenvectors: 5
-  num_extremes_to_plot: 5
+  num_extremes_to_plot: 2

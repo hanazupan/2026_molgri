@@ -5,6 +5,6 @@ rule copy_config:
     The idea is to save the config_data file used in this run to some end directory.
     """
     log:
-        configfile_record = "<outputs>config_used.yaml"
+        configfile_record = "{some_folder}config_used.yaml"
     run:
         write_object(config, log.configfile_record)
