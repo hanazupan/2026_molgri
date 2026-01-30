@@ -112,6 +112,35 @@ rule find_indices_dominant_eigenvectors:
             write_object(np.array(pos_e[i]), output.pos_e_indices[i])
             write_object(np.array(neg_e[i]),output.neg_e_indices[i])
 
+rule plot_all_eigenvectors_as_lines:
+    input:
+        expand(f"<outputs_other_plots>eigenvectors_for_tau_{{tau}}.png", tau=TAUS)
+
+rule plot_vmd_eigenvectors_as_lines:
+    input:
+        eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
+    output:
+        plot = f"<outputs_other_plots>eigenvectors_for_tau_{{tau}}.png"
+    run:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+
+        eigenvector_array = read_object(input.eigenvectors)
+        print(eigenvector_array.shape)
+
+        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+
+        fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
+
+        for row in range(N_interesting_eigenvectors):
+            print(eigenvector_array.shape[0], eigenvector_array[:, row].shape)
+            fig.add_trace(
+                go.Scatter(x=np.arange(eigenvector_array.shape[0]),y=eigenvector_array[:, row], line=dict(color="black"),
+                    mode="lines"),row=1+row,col=1)
+
+        fig.write_image(output.plot, scale=3)
+
+
 rule plot_vmd_eigenvectors:
     input:
         structure = f"<simulation>structure.<ext_str>",
@@ -121,9 +150,10 @@ rule plot_vmd_eigenvectors:
         pos_e_indices=rules.find_indices_dominant_eigenvectors.output.pos_e_indices,
         neg_e_indices=rules.find_indices_dominant_eigenvectors.output.neg_e_indices,
         translation_rotation_script= f"<inputs_vmd>script3.log",
+        grid_info = "<outputs_network>grid_info.yaml",
     output:
-        vmdlog = f"<outputs_vmd>{{tau}}/eigenvectors.log",
-        plots = expand(f"<outputs_molecular_plots>{{tau}}/eigenvector{{i}}.tga",
+        vmdlog = f"<outputs_vmd>eigenvectors/{{tau}}/eigenvectors.log",
+        plots = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",
             i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True)
     run:
         from molgri.create_vmdlog import VMDCreator
@@ -144,6 +174,12 @@ rule plot_vmd_eigenvectors:
         n1 = get_num_atoms(input.structure1)
 
         my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
+
+        # drawing the rectangular box
+        grid_info = read_object(input.grid_info)
+        subgrid_limits = grid_info["subgrid_limits_A"]
+        my_vmd.add_box(subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1])
+
         my_vmd.load_translation_rotation_script(input.translation_rotation_script)
         my_vmd.prepare_eigenvector_script(all_abs, all_pos, all_neg, plot_names=output.plots)
         my_vmd.write_text_to_file(output.vmdlog)
@@ -152,7 +188,7 @@ rule plot_vmd_eigenvectors:
 
 rule for_tau1:
     input:
-        expand(f"<outputs_molecular_plots>{{tau}}/eigenvector{{i}}.tga",i=range(config["msm"]["num_interesting_eigenvectors"]), tau=TAUS)
+        expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",i=range(config["msm"]["num_interesting_eigenvectors"]), tau=TAUS)
 
 
 rule run_plot_its_msm:

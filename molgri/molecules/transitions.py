@@ -1,8 +1,10 @@
 from typing import Optional, Sequence, Tuple, Any
 from numpy.typing import NDArray
 import numpy as np
-from scipy.sparse import diags, dok_array
+from scipy.sparse import coo_array, csr_array, diags, dok_array
 from scipy.sparse.linalg import eigs
+
+from scipy.constants import k as kB, N_A
 
 
 def window(seq: Sequence, len_window: int, step: int = 1) -> Tuple[Any, Any]:
@@ -87,6 +89,51 @@ class MSM:
         for tau_i, tau in enumerate(taus):
             transition_matrix[tau_i] = self.get_one_tau_transition_matrix(tau, noncorrelated_windows=noncorrelated_windows)
         return transition_matrix
+
+
+
+class SQRA:
+
+    def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array):
+        self.energies = energies
+        self.volumes = volumes
+        self.distances = distances
+        self.surfaces = surfaces
+
+    def get_rate_matrix(self, D: float, T: float) -> csr_array:
+        # calculating rate matrix
+        # for sqra demand that each energy corresponds to exactly one cell
+        assert len(self.energies) == len(self.volumes), f"{len(self.energies)} != {len(self.volumes)}"
+        # you cannot multiply or divide directly in a coo format
+        transition_matrix = D * self.surfaces  #/ all_distances
+        print("data shape", self.surfaces.data.shape, self.distances.data.shape)
+        transition_matrix = transition_matrix.tocoo()
+        transition_matrix.data /= self.distances.tocoo().data
+        # Divide every row of transition_matrix with the corresponding volume
+        transition_matrix.data /= self.volumes[transition_matrix.row]
+        print("done volumes")
+        # multiply with sqrt(pi_j/pi_i) = e**((V_i-V_j)*1000/(2*k_B*N_A*T))
+        # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
+        diff_energies = self.energies[transition_matrix.row] - self.energies[transition_matrix.col]
+        # cannot allow more than 3 orders of magnitude difference
+        print(f"Warning! {len(np.where(diff_energies > 5e2)[0])} pairs of cells have a very large difference in "
+              f"energy, more than factor 500. This would lead to overflow, so these differences are capped to a "
+              f"factor 500. This might be a sign of poor discretisation or just the case of L-J overlap.")
+        #diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
+        print("DIFF", diff_energies.shape, self.volumes.shape, self.distances.shape, self.surfaces.shape)
+
+        pi_exponent = np.round(diff_energies,14) * 1000 / (2 * kB * N_A * T)
+
+
+        transition_matrix.data *= np.exp(pi_exponent)
+        # normalise rows
+        sums = transition_matrix.sum(axis=1)
+        sums = np.array(sums).squeeze()
+        all_i = np.arange(len(self.volumes))
+        diagonal_array = coo_array((-sums, (all_i, all_i)), shape=(len(all_i), len(all_i)))
+        transition_matrix = transition_matrix.tocsr() + diagonal_array.tocsr()
+        return transition_matrix
+
 
 class DecompositionTool:
 

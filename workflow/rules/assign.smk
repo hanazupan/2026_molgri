@@ -223,7 +223,6 @@ rule rotation_assignment:
         # shape (N_rotations, N_atoms, 3)
         pos_ref = np.array([ts.positions.copy() for ts in reference_universe.trajectory[:N_rotations]])
 
-        print(pos.shape, pos_ref.shape)
 
         # shape (N_rotations, N_frames)
         distances = np.empty((len(pos_ref), len(pos)))
@@ -275,3 +274,29 @@ rule print_assignment:
         df = read_object(input.trans_csv, header = [0,1])
         print(df)
         print(df.loc[83546])
+
+rule count_assignments:
+    input:
+        translation_assignment=f"<outputs_assignment>translation_assignment.npy",
+        rot_assignment=f"<outputs_assignment>rotation_assignment.npy",
+        full_assignment=f"<outputs_assignment>full_assignment.npy",
+    output:
+        translation_assignment = f"<outputs_other_plots>hist_translation_assignment.png",
+        rot_assignment = f"<outputs_other_plots>hist_rotation_assignment.png",
+        full_assignment = f"<outputs_other_plots>hist_full_assignment.png",
+    run:
+        import plotly.graph_objects as go
+        for input_file, output_file in zip(input, output):
+            data = read_object(input_file)
+            fig = go.Figure(
+                go.Histogram(
+                    x=data,
+                    xbins=dict(
+                        start=data.min() - 0.5,
+                        end=data.max() + 0.5,
+                        size=1)
+                )
+            )
+
+            fig.write_image(output_file, scale=3)
+

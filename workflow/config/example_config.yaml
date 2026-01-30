@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "auto_120"
+  unique_network_name: "450K_grid_larger_cell"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 120
+  N_rotations: 150
   translation_algorithm: "cartesian"
   periodic_in: [True, True, False]
-  translation_subgrids_A: [ [None, None, 5], [ None, None, 5], [1.5, 4, 5] ]
+  translation_subgrids_A: [ [-2.467006637598667, 2.467006637598667, 10], [ -4.272980838930551, 4.272980838930551, 20], [1.5, 4, 15] ]
 
 pseudotrajectory:
   molecule_1: "graphene"
@@ -22,4 +22,4 @@ analysis:
 msm:
   num_interesting_timescales: 4
   num_interesting_eigenvectors: 5
-  num_extremes_to_plot: 2
+  num_extremes_to_plot: 1

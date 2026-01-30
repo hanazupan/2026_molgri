@@ -60,29 +60,29 @@ view_i=[1]
 
 rule all:
     input:
-        # "<output_specific_molecule_network>config_used.yaml",
-        # # grids
-        # "<outputs_network>grid_info.yaml",
-        # "<outputs_network>grid.npy",
-        # # pseudotrajectory
-        # "<pseudosimulation>structure.gro",
-        # "<pseudosimulation>trajectory.xtc",
-        # # TODO: creating long simulation with curta etc
-        # # post-processing real simulation
-        # "<simulation>trajectory.<ext_trj>",
-        # # energy along trajectory and pseudotrajectory
-        # "<simulation>energy.csv",
-        # "<pseudosimulation>energy.csv",
-        # "<pseudosimulation>network_energy.pkl",
-        # # find interesting indices
-        # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
-        #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
-        # "<outputs_indices>all_positions_first_rotation.txt",
-        # "<outputs_indices>all_rotations_first_position.txt",
-        # # wrap and assign the trajectory
-        # "<outputs_assignment>wrapped_trajectory.<ext_trj>",
-        # "<outputs_assignment>rotation_assignment.npy",
-        # "<outputs_assignment>translation_assignment.npy",
+        "<output_specific_molecule_network>config_used.yaml",
+        # grids
+        "<outputs_network>grid_info.yaml",
+        "<outputs_network>grid.npy",
+        # pseudotrajectory
+        "<pseudosimulation>structure.gro",
+        "<pseudosimulation>trajectory.xtc",
+        # TODO: creating long simulation with curta etc
+        # post-processing real simulation
+        "<simulation>trajectory.<ext_trj>",
+        # energy along trajectory and pseudotrajectory
+        "<simulation>energy.csv",
+        "<pseudosimulation>energy.csv",
+        "<pseudosimulation>network_energy.pkl",
+        # find interesting indices
+        expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
+            traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
+        "<outputs_indices>all_positions_first_rotation.txt",
+        "<outputs_indices>all_rotations_first_position.txt",
+        # wrap and assign the trajectory
+        "<outputs_assignment>wrapped_trajectory.<ext_trj>",
+        "<outputs_assignment>rotation_assignment.npy",
+        "<outputs_assignment>translation_assignment.npy",
         "<outputs_assignment>full_assignment.npy",
         # # plotting molecular structures
         # expand("<outputs_frame_plots>{traj_or_pseudo}/frame_{num}_view{view_i}_both.tga",
@@ -91,11 +91,13 @@ rule all:
         # expand("<stacked_vmd_frames>pseudosimulation/all_rotations_first_position_{both}.tga", both=["both", "m2"]),
         expand("<outputs_assignment_plots>frame_{i}.tga", i=[5390, 44854, 83546, 27, 3567]), #
         # non-molecular plots
-        # expand("<outputs_other_plots>{traj_or_pseudo}_violin_plot_energies.png", traj_or_pseudo=["simulation", "pseudosimulation"]),
+        "<outputs_other_plots>hist_full_assignment.png",
+        expand("<outputs_other_plots>{traj_or_pseudo}_violin_plot_energies.png", traj_or_pseudo=["simulation", "pseudosimulation"]),
         # rules.plot_E_per_assigned_position_grids.output.plot
         # transitions
         expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
         "<outputs_other_plots>its.png",
+        #
 
         # specific plots for the system
 #             expand(f"<outputs_other_plots>ring_vector.png"),
