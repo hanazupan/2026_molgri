@@ -238,7 +238,7 @@ if __name__ == "__main__":
     from workflow.helpers.io import write_object
     from MDAnalysis import Writer
 
-    my_path = "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs/"
+    my_path = "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/pseudosimulation/"
 
     structure = f"{my_path}structure.gro"
     structure1 = f"{my_path}molecule1.gro"
@@ -247,38 +247,39 @@ if __name__ == "__main__":
     u = Universe(structure, trajectory)
     ag2 = u.select_atoms("all")
     ag2 = ag2[1056:]
-
-    side_lengths = get_rectangular_cell_side_lengths(structure1)
-
-    with Writer(f"{my_path}wrapped_trajectory.xtc", u.atoms.n_atoms) as W:
-        for ts in u.trajectory:
-            #print("before", ts.positions[1057])
-            ts.positions[1056:] = wrap_multiple_atoms_to_cuboid_cell(ag2.center_of_mass(),
-                                                                     ts.positions[1056:],
-                                                                     side_lengths,
-                                                                     wrap_only_xy=True)
-            #print("after", ts.positions[1057])
-            W.write(u.atoms)
-    #print(side_lengths)
-
-    #write_object(u, "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs
+    #
+    # side_lengths = get_rectangular_cell_side_lengths(structure1)
+    #
+    # with Writer(f"{my_path}wrapped_trajectory.xtc", u.atoms.n_atoms) as W:
+    #     for ts in u.trajectory:
+    #         #print("before", ts.positions[1057])
+    #         ts.positions[1056:] = wrap_multiple_atoms_to_cuboid_cell(ag2.center_of_mass(),
+    #                                                                  ts.positions[1056:],
+    #                                                                  side_lengths,
+    #                                                                  wrap_only_xy=True)
+    #         #print("after", ts.positions[1057])
+    #         W.write(u.atoms)
+    # print(side_lengths)
+    #
+    # write_object(u, "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs
     # /wrapped_trajectory.xtc")
-    # primitive_structure = find_primitive_cell(structure)
-    # primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
-    #
-    #
-    # supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
-    # supercell_structure = AseAtomsAdaptor.get_structure(supercell_atoms)
-    #
-    # rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
-    #                                                    numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
-    #
-    # print(rectangular_unit_structure)
-    #
-    #
-    # fig = go.Figure()
-    # draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
-    # draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
-    #
-    # draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
-    # draw_structure(fig, test_structure, show=True)
+    primitive_structure = find_primitive_cell(structure)
+    primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
+
+
+    supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
+    supercell_structure = AseAtomsAdaptor.get_structure(supercell_atoms)
+
+    rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
+                                                       numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
+
+    print(rectangular_unit_structure)
+
+
+    fig = go.Figure()
+    draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
+    draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
+
+    draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
+
+    draw_structure(fig, structure1, show=True)

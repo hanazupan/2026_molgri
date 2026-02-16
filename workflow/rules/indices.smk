@@ -33,7 +33,7 @@ checkpoint all_positions_first_rotation_indices:
         write_object(required_indices, output.indices)
 
 
-rule lowest_E_indices_pseudosimulation:
+checkpoint lowest_E_indices_pseudosimulation:
     """
     Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
     """
@@ -46,7 +46,7 @@ rule lowest_E_indices_pseudosimulation:
         required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Binding energy [kJ/mol]").index)
         write_object(required_indices, output.indices)
 
-rule lowest_E_indices:
+checkpoint lowest_E_indices:
     """
     Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
     """

@@ -240,7 +240,7 @@ rule rotation_assignment:
 
 ##################################### FULL ASSIGNMENT ####################################################
 
-rule full_assignment:
+checkpoint full_assignment:
     input:
         rotation_assignment = f"<outputs_assignment>rotation_assignment.npy",
         translation_assignment= f"<outputs_assignment>translation_assignment.npy",

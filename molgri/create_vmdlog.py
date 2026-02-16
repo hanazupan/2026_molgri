@@ -278,7 +278,7 @@ class VMDCreator:
         # in case we want to build another file after this one
         self._start_new_file()
 
-    def _add_box(self):
+    def _add_pbc_box(self):
         self.total_file_text += """pbc box\n"""
 
     def _add_pretty_plot_settings(self) -> None:
@@ -289,6 +289,7 @@ class VMDCreator:
         #display projection Orthographic
 
         self.total_file_text += f"""
+history keep 0
 mol delrep 0 0
 color Display Background white
 axes location Off
@@ -297,7 +298,12 @@ display shadows on
 display ambientocclusion on
 material add copy AOChalky
 material change shininess Material22 0.000000
-display resize 1800 1200
+display depthcue off
+display projection Orthographic
+color Type C gray
+display nearclip 0.001
+display farclip 1000.0
+display resize 1800 1800
 """
 
     def add_box(self, length_x, length_y, length_z) -> None:
@@ -339,9 +345,29 @@ graphics $mol cylinder $c101 $c111 radius 0.1 resolution 20
 graphics $mol cylinder $c011 $c111 radius 0.1 resolution 20
 """""
 
+    def _zoom_on_box(self, length_x, length_y, zoom_level=1):
+        self.total_file_text += f"""
+set xmin 0
+set ymin 0
+set xmax {length_x}
+set ymax  {length_y}
+
+set cx [expr {{($xmin + $xmax)/2.0}}]
+set cy [expr {{($ymin + $ymax)/2.0}}]
+
+molinfo top set center [list $cx $cy 0.0]
+
+set dx [expr {{$xmax - $xmin}}]
+set dy [expr {{$ymax - $ymin}}]
+set maxxy [expr {{max($dx, $dy)}}]
+
+scale to [expr {{ {zoom_level} * 0.1 / $maxxy}}]
+"""
+
 
     def _add_representation(self, first_molecule: bool = False, second_molecule: bool = True, coloring: str = None,
-                            color: str = None, representation: str = None, trajectory_frames: ArrayLike = None):
+                            color: str = None, representation: str = None, trajectory_frames: ArrayLike = None,
+                            periodic: str = None):
         """
         Use this to add a new representation of molecule 1, molecule 2 or both.
 
@@ -395,7 +421,22 @@ mol modcolor {self.num_representations} 0 {coloring}
 mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
         """
 
+        if periodic is not None:
+            self.total_file_text += f"""
+mol showperiodic 0 {self.num_representations} {periodic}
+mol numperiodic 0 {self.num_representations} 1
+            """
+
         self.num_representations += 1
+
+    def _add_dot(self, coordinate, radius=0.2):
+        self.total_file_text += f"""
+graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius {radius} resolution 12
+"""
+
+    def add_grid(self, coordinates, radius=0.2):
+        for coordinate in coordinates:
+            self._add_dot(coordinate, radius)
 
     def _render_representations(self, list_representation_indices: ArrayLike, plot_path: str) -> None: 
         """
@@ -445,6 +486,36 @@ mol drawframes 0 {self.num_representations} {{ {trajectory_frames_as_str} }}
             path_translation_rotation_script (str): the path to the VMD script
         """
         self.translations_rotations_script = path_translation_rotation_script
+        
+    def prepare_frame_script(self, vmd_name: str, plot_name: str, num_frames: int, box_limits: list,
+                             draw_m1: bool = True, draw_m2: bool = True, draw_rectangular_box: bool = True,
+                             gridpoints: NDArray = None, zoom_level: int = 1, translation_rotation_script: str = None):
+        """
+        Plot one or multiple (overlapping) frames. Assumes the script will be run with additional "structure" first 
+        frame which should be ignored (used for the reference so that the initial zoom level is always the same) and 
+        one or more additional frames that should all be plotted.
+        """
+        self._start_new_file()
+        if translation_rotation_script:
+            self.load_translation_rotation_script(translation_rotation_script)
+        if draw_m1:
+            # plot only one non-zero frame since they are all the same
+            self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
+                                       representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
+        if draw_m2:
+            # plot all provided frames except 0
+            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ",
+                                       representation="Licorice", trajectory_frames=list(range(1, num_frames+1)))
+        if draw_rectangular_box is not None:
+            self.add_box(*box_limits)
+        if gridpoints is not None:
+            self.add_grid(gridpoints)
+        if translation_rotation_script:
+            self._add_rotations_translations()
+        self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
+        # we only have two representations even if the second one potentially uses multiple frames
+        self._render_representations([0, 1], plot_path=plot_name)
+        self.write_text_to_file(vmd_name)
 
     def prepare_eigenvector_script(self, abs_eigenvector_frames: NDArray, pos_eigenvector_frames: NDArray,
                                    neg_eigenvector_frames: NDArray, plot_names: list) -> None:

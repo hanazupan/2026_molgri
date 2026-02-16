@@ -75,7 +75,7 @@ rule postprocess_gromacs:
     input:
         original_trajectory = f"<simulation>raw_trajectory.<ext_trj>",
         structure_tpr=f"<simulation>structure.tpr",
-        structure_gro=f"<simulation>structure.gro",
+        structure_gro=f"<pseudosimulation>structure.gro",
         index=f"<simulation>index.ndx",
     benchmark:
         repeat(f"<simulation>duration_gromacs_postprocessing.txt",1)
@@ -85,15 +85,11 @@ rule postprocess_gromacs:
         trajectory=f"<simulation>trajectory.<ext_trj>",
     shell:
         """
-        initial_dir=$(pwd)
-        cd $(dirname {input.original_trajectory})
         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
         # now fit to first frame
-        echo "0\n" |  gmx22 trjconv -f $(basename {input.original_trajectory}) -s  $(basename {input.structure_tpr}) -pbc mol -boxcenter tric -o $(basename {output.centered_trajectory}) -n $(basename {input.index})
-        echo "4\n0\n" |  gmx22 trjconv -fit trans -f $(basename {output.centered_trajectory}) -o $(basename {output.trajectory}) -s  $(basename {input.structure_gro}) -n $(basename {input.index})
-        cd "$initial_dir" || exit
+        echo "0\n" |  gmx22 trjconv -f {input.original_trajectory} -s {input.structure_tpr} -pbc mol -boxcenter tric -o {output.centered_trajectory} -n {input.index}
+        echo "4\n0\n" |  gmx22 trjconv -fit trans -f {output.centered_trajectory} -o {output.trajectory} -s  {input.structure_gro} -n {input.index}
         """
-    #-box 2.467006637598667 4.272980838930551 4.0
 
 rule shortened_trajectory_gromacs:
     """
@@ -119,6 +115,31 @@ rule shortened_trajectory_gromacs:
         echo "0\n" |  gmx22 trjconv -f $(basename {input.trajectory}) -s  $(basename {input.structure_tpr}) -o $(basename {output.trajectory}) -n $(basename {input.index}) -e {params.length_shortened_trajectory_ps}
  cd "$initial_dir" || exit
         """
+
+rule trajectory_slice_gromacs:
+    """
+    This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
+    instead of trajectory in input.
+    """
+    input:
+        trajectory=f"<simulation>trajectory.<ext_trj>",
+        structure_tpr=f"<simulation>structure.tpr",
+        index=f"<simulation>index.ndx",
+        runfile=f"<simulation>production.mdp"
+    benchmark:
+        repeat("<simulation_traj_slices>duration_frame_{frame_i}.txt",1)
+    shadow: "minimal"
+    output:
+        frame_gro="<simulation_traj_slices>frame_{frame_i}.<ext_str>",
+    run:
+        from workflow.helpers.io import read_from_mdrun
+        writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
+        time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
+        selected_time = int(wildcards.frame_i) * writeout * time_step_ps
+        shell("""
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.frame_gro} -n {input.index} -dump {selected_time}
+        """)
 
 checkpoint create_energy_csv_trajectory:
     """

@@ -1,7 +1,8 @@
 import numpy as np
 from plotly.tools import DEFAULT_PLOTLY_COLORS
+from sympy.physics.units import volts, volume
 
-from molgri.molecules.transitions import MSM
+from molgri.molecules.transitions import MSM, SQRA
 from workflow.helpers.io import read_object, write_object, read_from_mdrun, get_num_atoms
 
 
@@ -20,6 +21,32 @@ rule make_msm:
         my_msm = MSM(full_assignments, N_gridpoints)
         transition_matrix = my_msm.get_one_tau_transition_matrix(int(wildcards.tau), noncorrelated_windows=False)
         write_object(transition_matrix, output.msm)
+
+rule make_sqra:
+    input:
+        energies = "<pseudosimulation>energy.csv",
+        volumes = "<outputs_network>volumes.npy",
+        distances= "<outputs_network>distances.npz",
+        surfaces= "<outputs_network>surfaces.npz"
+    output:
+        rate_matrix = f"<outputs_transitions>sqra.npz",
+    params:
+        T_in_K = 293,
+        diffusion_coefficient = 1,
+    run:
+        my_energy = read_object(input.energies)
+        my_energy_array = my_energy["Binding energy [kJ/mol]"].to_numpy()
+        volumes = read_object(input.volumes)
+        distances = read_object(input.distances)
+        surfaces = read_object(input.surfaces)
+
+        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces)
+
+        rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K)
+        print(np.max(rate_matrix.data),np.min(rate_matrix.data),np.max(-rate_matrix.data),np.min(-rate_matrix.data))
+        # saving to file
+        write_object(rate_matrix, output.rate_matrix)
+
 
 rule run_decomposition_msm:
     """
@@ -126,14 +153,12 @@ rule plot_vmd_eigenvectors_as_lines:
         from plotly.subplots import make_subplots
 
         eigenvector_array = read_object(input.eigenvectors)
-        print(eigenvector_array.shape)
 
         N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
 
         fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
 
         for row in range(N_interesting_eigenvectors):
-            print(eigenvector_array.shape[0], eigenvector_array[:, row].shape)
             fig.add_trace(
                 go.Scatter(x=np.arange(eigenvector_array.shape[0]),y=eigenvector_array[:, row], line=dict(color="black"),
                     mode="lines"),row=1+row,col=1)

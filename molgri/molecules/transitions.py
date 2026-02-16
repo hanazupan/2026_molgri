@@ -1,4 +1,6 @@
 from typing import Optional, Sequence, Tuple, Any
+
+import pandas as pd
 from numpy.typing import NDArray
 import numpy as np
 from scipy.sparse import coo_array, csr_array, diags, dok_array
@@ -119,11 +121,13 @@ class SQRA:
         print(f"Warning! {len(np.where(diff_energies > 5e2)[0])} pairs of cells have a very large difference in "
               f"energy, more than factor 500. This would lead to overflow, so these differences are capped to a "
               f"factor 500. This might be a sign of poor discretisation or just the case of L-J overlap.")
-        #diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
+        diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
+
         print("DIFF", diff_energies.shape, self.volumes.shape, self.distances.shape, self.surfaces.shape)
 
         pi_exponent = np.round(diff_energies,14) * 1000 / (2 * kB * N_A * T)
 
+        print(pd.DataFrame(pi_exponent).describe())
 
         transition_matrix.data *= np.exp(pi_exponent)
         # normalise rows

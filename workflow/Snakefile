@@ -29,10 +29,12 @@ pathvars:
 
     # output simulation
     simulation = f"<output_specific_molecule>SIMULATION/",
+    simulation_traj_slices = f"<simulation>trajectory_slices/",
     analysis_simulation = f"<output_specific_molecule_network>simulation/",
 
     # output related to specific grid
     pseudosimulation = f"<output_specific_molecule_network>pseudosimulation/",
+    pseudosimulation_traj_slices = f"<pseudosimulation>trajectory_slices/",
     outputs_indices = f"<output_specific_molecule_network>important_indices/",
     outputs_assignment = f"<output_specific_molecule_network>assignment/",
     outputs_molecular_plots = f"<output_specific_molecule_network>molecular_plots/",
@@ -50,9 +52,9 @@ include: "rules/indices.smk"
 include: "rules/assign.smk"
 include: "rules/molecular_visualizations.smk"
 include: "rules/plots.smk"
-# include: "rules/graphene_xylene_specific.smk"
-#
 include: "rules/transitions.smk"
+include: "rules/graphene_xylene_specific.smk"
+
 
 
 N=[1, 5, 10, 50]
@@ -61,73 +63,62 @@ view_i=[1]
 rule all:
     input:
         "<output_specific_molecule_network>config_used.yaml",
+        "<simulation_traj_slices>frame_15.<ext_str>",
+        expand("<outputs_frame_plots>{folder}/frame_{frame_index}_zoom{i}_view{view_index}.png", frame_index=[0, 1, 2, 3, 9114, 10000], i=[1], #1, 3, 5, 10
+            folder = ["simulation", "pseudosimulation"], view_index=[1,2]),
+        # expand(f"<overlayed_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}.png",
+        #     folder = ["simulation", "pseudosimulation"], zoom_level=2,
+        #     file_name=["lowest_50_energies"]),
+        expand(f"<overlayed_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png",
+               folder =["pseudosimulation"], zoom_level=2,
+               file_name=["all_rotations_first_position"], view_index=[1,2]),
+        expand(f"<stacked_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png",
+               folder =["pseudosimulation"], zoom_level=2,
+               file_name=["lowest_50_energies"], view_index=[1,2]),
         # grids
-        "<outputs_network>grid_info.yaml",
-        "<outputs_network>grid.npy",
-        # pseudotrajectory
-        "<pseudosimulation>structure.gro",
-        "<pseudosimulation>trajectory.xtc",
-        # TODO: creating long simulation with curta etc
-        # post-processing real simulation
-        "<simulation>trajectory.<ext_trj>",
-        # energy along trajectory and pseudotrajectory
-        "<simulation>energy.csv",
-        "<pseudosimulation>energy.csv",
-        "<pseudosimulation>network_energy.pkl",
-        # find interesting indices
-        expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
-            traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
-        "<outputs_indices>all_positions_first_rotation.txt",
-        "<outputs_indices>all_rotations_first_position.txt",
-        # wrap and assign the trajectory
-        "<outputs_assignment>wrapped_trajectory.<ext_trj>",
-        "<outputs_assignment>rotation_assignment.npy",
-        "<outputs_assignment>translation_assignment.npy",
-        "<outputs_assignment>full_assignment.npy",
-        # # plotting molecular structures
-        # expand("<outputs_frame_plots>{traj_or_pseudo}/frame_{num}_view{view_i}_both.tga",
-        #     num=[0,1,22], view_i=[1,3], traj_or_pseudo=["simulation", "pseudosimulation"]),
-        # "<overlayed_vmd_frames>pseudosimulation/all_rotations_first_position_view3_full.tga",
-        # expand("<stacked_vmd_frames>pseudosimulation/all_rotations_first_position_{both}.tga", both=["both", "m2"]),
-        expand("<outputs_assignment_plots>frame_{i}.tga", i=[5390, 44854, 83546, 27, 3567]), #
-        # non-molecular plots
-        "<outputs_other_plots>hist_full_assignment.png",
-        expand("<outputs_other_plots>{traj_or_pseudo}_violin_plot_energies.png", traj_or_pseudo=["simulation", "pseudosimulation"]),
-        # rules.plot_E_per_assigned_position_grids.output.plot
-        # transitions
-        expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
-        "<outputs_other_plots>its.png",
-        #
-
-        # specific plots for the system
-#             expand(f"<outputs_other_plots>ring_vector.png"),
-#             expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
-
-
-
-# if config["perform_simulation"]:
-#     rule all:
-#         input:
-#             expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
-#             expand("<outputs_other_plots>position_grid_energy_{i}.png", i=range(20)),
-#             "<outputs_network>grid_info.yaml",
-#             f"<outputs_network>grid.npy",
-#             f"<outputs_assignment>full_assignment.npy",
-#             f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
-#             #f"<outputs_other_plots>ring_vector.png",
-#             expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
-#             f"<outputs_other_plots>violin_plot_energies.png",
-#             expand(f"<overlayed_vmd_frames>lowest_{{N}}_binding_energies_view{{view_i}}_full.tga",N=N,view_i=view_i),
-#             f"<outputs_frame_plots>frame_22_view1_both.tga",
+        # "<outputs_network>grid_info.yaml",
+        # "<outputs_network>grid.npy",
+        # # pseudotrajectory
+        # "<pseudosimulation>structure.gro",
+        # "<pseudosimulation>trajectory.xtc",
+        # # # TODO: creating long simulation with curta etc
+        # # # post-processing real simulation
+        # # "<simulation>trajectory.<ext_trj>",
+        # # # energy along trajectory and pseudotrajectory
+        # "<simulation>energy.csv",
+        # "<pseudosimulation>energy.csv",
+        # # "<pseudosimulation>network_energy.pkl",
+        # # # find interesting indices
+        # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
+        #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
+        # # "<outputs_indices>all_positions_first_rotation.txt",
+        # # "<outputs_indices>all_rotations_first_position.txt",
+        # # # wrap and assign the trajectory
+        # # "<outputs_assignment>wrapped_trajectory.<ext_trj>",
+        # # "<outputs_assignment>rotation_assignment.npy",
+        # # "<outputs_assignment>translation_assignment.npy",
+        # "<outputs_assignment>full_assignment.npy",
+        # # # # plotting molecular structures
+        # # # expand("<outputs_frame_plots>{traj_or_pseudo}/frame_{num}_view{view_i}_both.tga",
+        # # #     num=[0,1,22], view_i=[1,3], traj_or_pseudo=["simulation", "pseudosimulation"]),
+        # # # "<overlayed_vmd_frames>pseudosimulation/all_rotations_first_position_view3_full.tga",
+        # # # expand("<stacked_vmd_frames>pseudosimulation/all_rotations_first_position_{both}.tga", both=["both", "m2"]),
+        # expand("<outputs_assignment_plots>frame_{i}.tga", i=[5390, 44854, 83546, 27, 3567]), #
+        # # # non-molecular plots
+        # "<outputs_other_plots>hist_full_assignment.png",
+        # # #expand("<outputs_other_plots>{traj_or_pseudo}_violin_plot_energies.png", traj_or_pseudo=["simulation", "pseudosimulation"]),
+        # # # rules.plot_E_per_assigned_position_grids.output.plot
+        # # # transitions
+        # expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
+        # "<outputs_other_plots>its.png",
+        # rules.for_tau1.input,
+        # rules.plot_all_eigenvectors_as_lines.input,
+        # # # sqra
+        # # f"<outputs_transitions>sqra.npz",
+        # #
+        # # # specific plots for the system
+        # #expand("<outputs_other_plots>{which}/ring_vector.png", which=["simulation", "pseudosimulation"]),
+        # expand("<outputs_other_plots>{which}/ring_position_lowest_{N}.png", N=[1, 3, 10, 100, 250, 500], which=["simulation", "pseudosimulation"]),
 
 
-# else:
-#     rule all:
-#         input:
-#             expand(f"<outputs_other_plots>ring_vector.png"),
-#             expand(f"<outputs_other_plots>ring_position_lowest_{{N}}.png", N=[1, 3, 10, 100, 250, 500]),
-#             f"<outputs_network>indices_interpretation.csv",
-#             f"<outputs_other_plots>violin_plot_energies.png",
-#             expand(f"<overlayed_vmd_frames>lowest_{{N}}_binding_energies_view{{view_i}}.tga", N=N, view_i=view_i),
-#             f"<outputs_frame_plots>frame_22_view1_both.tga",
-#             expand(f"<outputs_indices>lowest_{{N}}_binding_energies.txt", N=N),
+

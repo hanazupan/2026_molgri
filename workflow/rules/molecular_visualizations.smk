@@ -15,109 +15,152 @@ pathvars:
 
 ##################################### GENERAL FUNCTIONS ####################################################
 
-def get_input_plot_frame(wc):
-    if wc.simulation_or_pseudo == "simulation":
-        path = "<simulation>"
-    elif wc.simulation_or_pseudo == "pseudosimulation":
-        path = "<pseudosimulation>"
-    else:
-        raise ValueError(f"Cannot understand this wildcard: {wc.simulation_or_pseudo}, should be simulation or pseudosimulation")
-
-    if wc.both_or_m2 == "wrapped":
-        trajectory_name = "<outputs_assignment>wrapped_trajectory"
-    else:
-        trajectory_name = f"{path}trajectory"
-
-    print("Using trajectory ", trajectory_name)
-
-    return {"structure": f"{path}structure.gro",
-            "trajectory": f"{trajectory_name}.xtc",
-            "structure1": f"{path}molecule1.gro",
+def input_base(wc):
+    return {"structure": "<pseudosimulation>structure.gro",
+            "structure1": "<pseudosimulation>molecule1.gro",
             "grid_info": "<outputs_network>grid_info.yaml",
-            "translation_rotation_script": f"<inputs_vmd>script{wc.view_i}.log"}
+            "translation_rotation_script": f"<inputs_vmd>script{wc.view_index}.log",
+            "grid": "<outputs_network>grid.npy"}
 
-rule plot_one_frame:
-    """
-    Plot one specific frame and save it to molecular_plots/
-    """
-    input:
-        unpack(get_input_plot_frame)
-    output:
-        vmdlog=f"<outputs_vmd>{{simulation_or_pseudo}}/frame_{{frame_index}}_view{{view_i}}_{{both_or_m2}}",
-        frame_plot=f"<outputs_frame_plots>{{simulation_or_pseudo}}/frame_{{frame_index}}_view{{view_i}}_{{both_or_m2}}.tga"
-    run:
-        from molgri.create_vmdlog import VMDCreator
-        from workflow.helpers.io import get_num_atoms, read_object
-
-        n1 = get_num_atoms(input.structure1)
-
-        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
-        my_vmd.load_translation_rotation_script(input.translation_rotation_script)
-
-        # drawing the rectangular box
-        grid_info = read_object(input.grid_info)
-        subgrid_limits = grid_info["subgrid_limits_A"]
-        my_vmd.add_box(subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1])
-
-        index_to_plot = [int(wildcards.frame_index) + 1]
-
-        # my_vmd.plot_multiple_overlappig_frames(index_to_plot,output.frame_plot,only_COM_of_m2=True)
-
-        if wildcards.both_or_m2 == "m2":
-            my_vmd.plot_m2_frames_individually(index_to_plot,[output.frame_plot])
-        else:
-            my_vmd.plot_frames_individually(index_to_plot,[output.frame_plot])
-
-
-        my_vmd.write_text_to_file(output.vmdlog)
-
-
-        shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
-
-def get_input_plot_multiple_frames(wc):
-    result = get_input_plot_frame(wc)
-    result["indices"] = f"<outputs_indices>{wc.file_name}.txt"
+def input_one_frame(wc):
+    result = input_base(wc)
+    if wc.sim_pseudo_wrapped == "wrapped":
+        pass # TODO
+    elif wc.sim_pseudo_wrapped == "simulation":
+        result["frame_gro"] = f"<simulation_traj_slices>frame_{wc.frame_index}.<ext_str>"
+    elif wc.sim_pseudo_wrapped == "pseudosimulation":
+        result["frame_gro"] = f"<pseudosimulation_traj_slices>frame_{wc.frame_index}.<ext_str>"
+    else:
+        raise ValueError("Folder must be 'wrapped', 'simulation' or 'pseudosimulation'.")
     return result
 
-rule plot_overlay_frames:
-    """
-    Plot multiple frames at the same time (eg. 10 lowest E structures, but this is a general rule).
-    """
+rule new_vmd_plot_one_frame:
     input:
-        unpack(get_input_plot_multiple_frames)
+        unpack(input_one_frame)
     output:
-        vmdlog=f"<outputs_vmd>{{simulation_or_pseudo}}/{{file_name}}_view{{view_i}}_{{both_or_m2}}",
-        frame_plot=f"<overlayed_vmd_frames>{{simulation_or_pseudo}}/{{file_name}}_view{{view_i}}_{{both_or_m2}}.tga"
+        vmdlog=f"<outputs_vmd>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}",
+        frame_plot=f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.tga",
+        frame_plot_png = f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png"
+    params:
+        draw_m1 = True,
+        draw_m2 = True,
+        draw_rectangular_box = True,
+        draw_gridpoints = True,
+        center_on_box = True
     run:
         from molgri.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms, read_object
 
-        indices = read_object(input.indices)
+        n1 = get_num_atoms(input.structure1)
+        grid_info = read_object(input.grid_info)
+        subgrid_limits = grid_info["subgrid_limits_A"]
+        N_rotations = int(grid_info["N_rotations"])
+
+
+        if params.draw_gridpoints:
+            #print()
+            my_grid = read_object(input.grid)[:, :3]
+            my_grid = my_grid[::N_rotations]
+            gridpoints = my_grid
+        else:
+            gridpoints = None
+
+        box_limits = [subgrid_limits[0][1],subgrid_limits[1][1],subgrid_limits[2][1]]
+
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+        my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot, num_frames=1,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
+            draw_rectangular_box=params.draw_rectangular_box, gridpoints=gridpoints,
+            zoom_level=int(wildcards.zoom_level), translation_rotation_script=input.translation_rotation_script)
+
+        shell("vmd  -dispdev text {input.structure} {input.frame_gro} < {output.vmdlog}")
+        shell("convert {output.frame_plot} {output.frame_plot_png}")
+
+
+def input_multiple_overlapping_frames(wc):
+    result = input_base(wc)
+    if str(wc.file_name) == "all_rotations_first_position":
+        indices_file = checkpoints.all_rotations_first_position_indices.get().output.indices
+    elif str(wc.file_name) == "all_positions_first_rotation":
+        indices_file = checkpoints.all_positions_first_rotation_indices.get().output.indices
+    elif str(wc.file_name).startswith("lowest") and wc.sim_pseudo_wrapped == "pseudosimulation":
+        N = int(wc.file_name.split("_")[1])
+        indices_file = checkpoints.lowest_E_indices_pseudosimulation.get(N=N).output.indices
+    elif str(wc.file_name).startswith("lowest") and wc.sim_pseudo_wrapped != "pseudosimulation":
+        N = int(wc.file_name.split("_")[1])
+        indices_file = checkpoints.lowest_E_indices.get(N=N).output.indices
+    indices = read_object(indices_file).astype(int)
+
+    if wc.sim_pseudo_wrapped == "wrapped":
+        pass # TODO
+    elif wc.sim_pseudo_wrapped == "simulation":
+        result["all_frame_gros"] = tuple([f"<simulation_traj_slices>frame_{frame_index}.<ext_str>" for frame_index in indices])
+    elif wc.sim_pseudo_wrapped == "pseudosimulation":
+        result["all_frame_gros"] = tuple([f"<pseudosimulation_traj_slices>frame_{frame_index}.<ext_str>" for frame_index in indices])
+    else:
+        raise ValueError("Folder must be 'wrapped', 'simulation' or 'pseudosimulation'.")
+    return result
+
+rule new_vmd_plot_multiple_overlapping_frames:
+    input:
+        unpack(input_multiple_overlapping_frames)
+    output:
+        vmdlog=f"<outputs_vmd>{{sim_pseudo_wrapped}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}",
+        frame_plot=f"<overlayed_vmd_frames>{{sim_pseudo_wrapped}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.tga",
+        frame_plot_png = f"<overlayed_vmd_frames>{{sim_pseudo_wrapped}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png"
+    params:
+        draw_m1 = True,
+        draw_m2 = True,
+        draw_rectangular_box = True,
+        draw_gridpoints = True,
+        center_on_box = True
+    run:
+        print(input)
+        from molgri.create_vmdlog import VMDCreator
+        from workflow.helpers.io import get_num_atoms, read_object
 
         n1 = get_num_atoms(input.structure1)
+        grid_info = read_object(input.grid_info)
+        subgrid_limits = grid_info["subgrid_limits_A"]
+        N_rotations = int(grid_info["N_rotations"])
+        my_grid = read_object(input.grid)[:, :3]
+        my_grid = my_grid[::N_rotations]
 
-        my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
-        my_vmd.load_translation_rotation_script(input.translation_rotation_script)
-
-        index_to_plot = [int(i) + 1 for i in indices]
-
-        if wildcards.both_or_m2=="COM":
-            plot_COM = True
+        if params.draw_gridpoints:
+            gridpoints = my_grid
         else:
-            plot_COM = False
+            gridpoints = None
 
-        my_vmd.plot_multiple_overlappig_frames(index_to_plot,output.frame_plot, only_COM_of_m2=plot_COM)
-        my_vmd.write_text_to_file(output.vmdlog)
+        box_limits = [subgrid_limits[0][1],subgrid_limits[1][1],subgrid_limits[2][1]]
 
-        shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+        my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
+            num_frames=len(input.all_frame_gros),
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
+            draw_rectangular_box=params.draw_rectangular_box, gridpoints=gridpoints,
+            zoom_level=int(wildcards.zoom_level), translation_rotation_script=input.translation_rotation_script)
+
+        names_all_frames = ' '.join(input.all_frame_gros)
+        shell("vmd  -dispdev text {input.structure} {names_all_frames} < {output.vmdlog}")
+        shell("convert {output.frame_plot} {output.frame_plot_png}")
+
+
 
 def get_frame_indices(wc):
     if str(wc.file_name) == "all_rotations_first_position":
         indices_file = checkpoints.all_rotations_first_position_indices.get().output.indices
     elif str(wc.file_name) == "all_positions_first_rotation":
         indices_file = checkpoints.all_positions_first_rotation_indices.get().output.indices
+    elif str(wc.file_name).startswith("lowest") and wc.sim_pseudo_wrapped == "pseudosimulation":
+        N = int(wc.file_name.split("_")[1])
+        indices_file = checkpoints.lowest_E_indices_pseudosimulation.get(N=N).output.indices
+    elif str(wc.file_name).startswith("lowest") and wc.sim_pseudo_wrapped != "pseudosimulation":
+        N = int(wc.file_name.split("_")[1])
+        indices_file = checkpoints.lowest_E_indices.get(N=N).output.indices
     indices = read_object(indices_file).astype(int)
-    file_names = [f"<outputs_frame_plots>{wc.simulation_or_pseudo}/frame_{frame_index}_view3_{wc.both_or_m2}.tga" for frame_index in indices]
+    file_names = [f"<outputs_frame_plots>{wc.sim_pseudo_wrapped}/frame_{frame_index}_zoom{wc.zoom_level}_view{wc.view_index}.png" for frame_index in indices]
     return file_names
 
 
@@ -128,7 +171,7 @@ rule stack_vmd_frames:
     input:
         get_frame_indices
     output:
-        joint_image = f"<stacked_vmd_frames>{{simulation_or_pseudo}}/{{file_name}}_{{both_or_m2}}.tga"
+        joint_image = f"<stacked_vmd_frames>{{sim_pseudo_wrapped}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png"
     shadow: "minimal"
     run:
         from molgri.images.modifying_images import trim_images_with_common_bbox, join_images
@@ -179,7 +222,7 @@ def get_input_trajectory_frame_i_find_pt_frame(wc):
     plot_trajectory_frame = f"<outputs_frame_plots>simulation/frame_{wc.i}_view3_wrapped.tga"
 
     # find the assignment_i
-    all_assignments = read_object(f"{wc.path}assignment/full_assignment.npy")
+    all_assignments = read_object(checkpoints.full_assignment.get().output.full_assignment) #f"{wc.path}assignment/full_assignment.npy"
     assignment_i = int(all_assignments[int(wc.i)])
     print(f"For simulation frame {int(wc.i)} I am plotting assigned frame {assignment_i}.")
 

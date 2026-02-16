@@ -10,21 +10,31 @@ def get_ring_carbons(u):
     ring_carbons = ring_carbons[has_ring_coordinates ]
     return ring_carbons
 
+def get_input_sim_or_not(wc):
+    if wc.sim_or_not == "simulation":
+        path = "<simulation>"
+        trajectory_name = "<outputs_assignment>wrapped_trajectory"
+    elif wc.sim_or_not == "pseudosimulation":
+        path = "<pseudosimulation>"
+        trajectory_name = f"{path}trajectory"
+    else:
+        raise ValueError(f"Cannot understand this wildcard: {wc.sim_or_not}, should be simulation or pseudosimulation")
+
+    return {"structure": f"{path}structure.gro",
+            "trajectory": f"{trajectory_name}.xtc",
+            "structure1": f"{path}molecule1.gro",
+            "energy_csv": f"{path}energy.csv",
+            }
 
 rule get_xylene_ring_normal:
     input:
-        structure=f"<outputs_gromacs>structure.gro",
-        trajectory=f"<outputs_gromacs>trajectory.xtc",
-        structure1=f"<outputs_gromacs>molecule1.gro",
-        structure2=f"<outputs_gromacs>molecule2.gro",
-        energy_csv=f"<outputs>energy.csv"
+        unpack(get_input_sim_or_not)
     output:
-        plot=f"<outputs_other_plots>ring_vector.png"
+        plot="<outputs_other_plots>{sim_or_not}/ring_vector.png"
     run:
         from molgri.utils.spheres import angle_between_vectors
 
         n1 = get_num_atoms(input.structure1)
-        n2 = get_num_atoms(input.structure2)
         u = Universe(input.structure,input.trajectory)
 
         first_molecule = u.select_atoms(f"type C")
@@ -38,7 +48,7 @@ rule get_xylene_ring_normal:
         df = read_object(input.energy_csv)
         all_energies = df["Binding energy [kJ/mol]"]
 
-        max_energy = config['plotting']['upper_E_limit']
+        max_energy = config['analysis']['upper_E_limit']
         colors = df["Binding energy [kJ/mol]"]
         colors[colors > max_energy] = max_energy
 
@@ -94,12 +104,10 @@ rule get_xylene_ring_normal:
 
 rule wrap_ring_center:
     input:
-        structure = f"<outputs_gromacs>structure.<ext_str>",
-        trajectory = f"<outputs_gromacs>trajectory.<ext_trj>",
-        structure1=f"<outputs_gromacs>molecule1.<ext_str>",
+        unpack(get_input_sim_or_not)
     output:
-        com_m2 = f"<outputs_assignment>ring_center.npy",
-        com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_ring_center.npy",
+        com_m2 = "<outputs_assignment>{sim_or_not}/ring_center.npy",
+        com_m2_wrapped = "<outputs_assignment>{sim_or_not}/cuboid_wrapped_ring_center.npy",
     run:
         from workflow.helpers.io import write_object
         from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_to_cuboid_cell
@@ -122,15 +130,16 @@ rule wrap_ring_center:
         wrapped_com_m2 = wrap_to_cuboid_cell(origin, side_lengths, com_ring)
         write_object(wrapped_com_m2, output.com_m2_wrapped)
 
+def get_also_wrapped_ring_center(wc):
+    result = get_input_sim_or_not(wc)
+    result["com_m2_wrapped"] = f"<outputs_assignment>{wc.sim_or_not}/cuboid_wrapped_ring_center.npy"
+    return result
 
 rule plot_xylene_ring_center:
     input:
-        structure1=f"<outputs_gromacs>molecule1.gro",
-        energy_csv= f"<outputs>energy.csv",
-        #com_m2= f"<outputs_assignment>m2_com.npy",
-        com_m2_wrapped= f"<outputs_assignment>cuboid_wrapped_ring_center.npy",
+        unpack(get_also_wrapped_ring_center)
     output:
-        plot=f"<outputs_other_plots>ring_position_lowest_{{N}}.png"
+        plot="<outputs_other_plots>{sim_or_not}/ring_position_lowest_{N}.png"
     run:
         from molgri.plotting import draw_line_between
         from MDAnalysis import Universe
