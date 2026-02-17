@@ -44,9 +44,9 @@ class FullNode(AbstractNode):
 
     def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
         # first the rotation
-        rotated_points = self.rotation_node.apply_transform_on(molecular_coordinates)
+        rotated_points = self.rotation_node.apply_transform_on(molecular_coordinates, weights=weights)
         # afterwards the translation
-        translated_points = self.translation_node.apply_transform_on(rotated_points)
+        translated_points = self.translation_node.apply_transform_on(rotated_points, weights=weights)
         return translated_points
 
 

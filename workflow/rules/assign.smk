@@ -98,6 +98,8 @@ rule position_assignment_csv:
 
         com_m2 = read_object(input.com_m2)
         com_m2_wrapped = read_object(input.com_m2_wrapped)
+        print(pd.DataFrame(com_m2).describe())
+        print(pd.DataFrame(com_m2_wrapped).describe())
 
         energy = read_object(input.energy_csv)["Binding energy [kJ/mol]"]
         df_indices = read_object(input.indices_csv, header=[0, 1])
@@ -112,7 +114,7 @@ rule position_assignment_csv:
         subgrid_limits = grid_info["subgrid_limits_A"]
         periodic_in = grid_info["periodic_in"]
         N_gridpoints = grid_info["subgrid_N_points"]
-        data = assign_to_cartesian_translation_grid(com_m2, subgrids, subgrid_limits, periodic_in)
+        data = assign_to_cartesian_translation_grid(com_m2_wrapped, subgrids, subgrid_limits, periodic_in)
         assigned_array = data[-1].astype(int).T
 
         df_assignments = pd.DataFrame(np.array(data).T, columns=["X index", "Y index", "Z index", "Total position index"], dtype=int)
@@ -128,7 +130,6 @@ rule position_assignment_csv:
             .reset_index()
         )
 
-        #position_array = rows[["x", "y", "z"]].to_numpy()
         df_assignments["x"] = rows["x"]
         df_assignments["y"] = rows["y"]
         df_assignments["z"] = rows["z"]
@@ -158,6 +159,8 @@ rule position_assignment_csv:
 
         write_object(df_assignments, output.assignment_csv)
         write_object(np.array(data[3]), output.translation_assignment)
+
+
 
 ##################################### ROTATION ASSIGNMENT ####################################################
 
@@ -253,7 +256,7 @@ checkpoint full_assignment:
         grid_info = read_object(input.grid_info)
         N_rotations = int(grid_info["N_rotations"])
         full_assignments = translation_assignments * N_rotations + rotation_assignments
-        print(full_assignments)
+        print(full_assignments[27], rotation_assignments[27], translation_assignments[27])
 
         write_object(full_assignments, output.full_assignment)
 

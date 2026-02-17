@@ -517,8 +517,9 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         self._render_representations([0, 1], plot_path=plot_name)
         self.write_text_to_file(vmd_name)
 
-    def prepare_eigenvector_script(self, abs_eigenvector_frames: NDArray, pos_eigenvector_frames: NDArray,
-                                   neg_eigenvector_frames: NDArray, plot_names: list) -> None:
+    def prepare_eigenvector_script(self, num_red: int, num_blue: int, vmd_name: str, plot_name: str, box_limits: list,
+                             draw_m1: bool = True, draw_m2: bool = True, draw_rectangular_box: bool = True,
+                             gridpoints: NDArray = None, zoom_level: int = 1, translation_rotation_script: str = None) -> None:
         """
         Everything you need to plot eigenvectors:
         - make plotting pretty
@@ -537,33 +538,31 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
                 ith eigenvector with i=1,2,3... Must have same length as pos_eigenvector_frames.
             plot_names (list): file paths for all the renders. Must have the length of neg_eigenvector_frames + 1
         """
-        assert len(pos_eigenvector_frames) == len(neg_eigenvector_frames)
-        assert len(plot_names) == len(neg_eigenvector_frames) + 1
-
-        # add first molecule without any special colors etc
-        self._add_representation(first_molecule=True, second_molecule=False, trajectory_frames=1)
-
-        # add zeroth eigenvector without any special colors
-        self._add_representation(first_molecule=False, second_molecule=True, trajectory_frames=abs_eigenvector_frames, representation="Licorice")
-
-        # for the rest add one red, one blue
-        for pos_frames, neg_frames in zip(pos_eigenvector_frames, neg_eigenvector_frames):
-            self._add_representation(first_molecule=False, second_molecule=True, coloring="ColorID", color="blue",
-                                     trajectory_frames=pos_frames, representation="Licorice")
-            self._add_representation(first_molecule=False, second_molecule=True, coloring="ColorID", color="red",
-                                     trajectory_frames= neg_frames, representation="Licorice")
-
-        self._add_rotations_translations()
-
-        # render the zeroth eigenvector
-        self._render_representations([0, 1], plot_names[0])
-
-        # render the rest of eigenvectors
-        last_used_representation = 1
-        for i, plot_name in enumerate(plot_names[1:]):
-            # each render contains first molecule in representation 0 and second molecule in representation 1, 2, 3 ...
-            self._render_representations([0, last_used_representation+1, last_used_representation+2], plot_name)
-            last_used_representation += 2
+        self._start_new_file()
+        if translation_rotation_script:
+            self.load_translation_rotation_script(translation_rotation_script)
+        if draw_m1:
+            # plot only one non-zero frame since they are all the same
+            self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
+                                       representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
+        if draw_m2:
+            # plot red frames
+            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ", color="red",
+                                       representation="Licorice", trajectory_frames=list(range(1, num_red+1)))
+            # plot blue frames
+            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ", color="blue",
+                                     representation="Licorice",
+                                     trajectory_frames=list(range(num_red+1, num_red + num_blue + 1)))
+        if draw_rectangular_box is not None:
+            self.add_box(*box_limits)
+        if gridpoints is not None:
+            self.add_grid(gridpoints)
+        if translation_rotation_script:
+            self._add_rotations_translations()
+        self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
+        # we only have two representations even if the second one potentially uses multiple frames
+        self._render_representations([0, 1], plot_path=plot_name)
+        self.write_text_to_file(vmd_name)
 
     def prepare_evec_0(self, num_structures: int, plot_name: str) -> None:
         """

@@ -93,53 +93,25 @@ rule create_pseudotrajectory:
 
         network = read_object(input.network)
         weights = m2.atoms.masses
+        print("weights are ", weights)
         coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions, weights)
 
         pt = get_bimolecular_pseudotrajectory(m1, m2, coordinates)
         write_object(pt, output.trajectory)
 
 
-rule gromacs_rerun:
-    """
-    This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
-    energies.
-    """
-    input:
-        structure = f"<pseudosimulation>structure.<ext_str>",
-        trajectory = f"<pseudosimulation>trajectory.<ext_trj>",
-        runfile = f"<pseudosimulation>production.mdp",
-        topology = f"<pseudosimulation>topol.top",
-        index=f"<pseudosimulation>index.ndx",
-        select_energy = f"<pseudosimulation>select_energy",
-        force_field_stuff = f"<pseudosimulation>force_field_stuff/"
-    shadow: "minimal"
-    log:
-        log = f"<pseudosimulation>logging_gromacs.log"
-    benchmark:
-        repeat(f"<pseudosimulation>gromacs_benchmark.txt", 1)
-    output:
-        energy = f"<pseudosimulation>energy.xvg",
-    shell:
-        """
-        initial_dir=$(pwd)
-        cd $(dirname {input.runfile})
-        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -r $(basename {input.structure}) -p $(basename {input.topology}) -o result.tpr  -n $(basename {input.index})
-        gmx22 mdrun -s result.tpr -rerun $(basename {input.trajectory}) -g $(basename {log.log})
-        gmx22 energy -f ener.edr -o $(basename {output.energy}) < $(basename {input.select_energy})
-        cd "$initial_dir" || exit
-        """
 
-checkpoint create_energy_csv_pseudotrajectory:
-    """
-    For the pseudotrajectory, read the energy of each frame.
-    """
-    input:
-        energy="<pseudosimulation>energy.xvg",
-    output:
-        energy_csv = "<pseudosimulation>energy.csv"
-    run:
-        from_xvg_to_csv_energy(input.energy, output.energy_csv)
+
+# checkpoint create_energy_csv_pseudotrajectory:
+#     """
+#     For the pseudotrajectory, read the energy of each frame.
+#     """
+#     input:
+#         energy="<pseudosimulation>energy.xvg",
+#     output:
+#         energy_csv = "<pseudosimulation>energy.csv"
+#     run:
+#         from_xvg_to_csv_energy(input.energy, output.energy_csv)
 
 rule read_in_energies:
     """
@@ -157,48 +129,30 @@ rule read_in_energies:
         my_network.add_node_properties(my_energy_array,"binding_energy")
         write_object(my_network, output.network_energy)
 
-rule add_timesteps_to_pt:
-    input:
-        trajectory = f"<pseudosimulation>trajectory.<ext_trj>",
-        structure_tpr = f"<pseudosimulation>structure.gro",
-        index = f"<pseudosimulation>index.ndx",
-        runfile = f"<pseudosimulation>production.mdp"
-    output:
-        trajectory = f"<pseudosimulation>trajectory_with_timesteps.<ext_trj>",
-    run:
-        from workflow.helpers.io import read_from_mdrun
-        writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
-        time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
-        timesteps = writeout * time_step_ps
-        print("timestep is ", timesteps)
-        shell("""
-        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.trajectory} -n {input.index} -timestep {timesteps}
-        
-        """)
 
 
-rule pseudotrajectory_slice_gromacs:
-    """
-    This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
-    instead of trajectory in input.
-    """
-    input:
-        trajectory=f"<pseudosimulation>trajectory_with_timesteps.<ext_trj>",
-        structure_tpr=f"<pseudosimulation>structure.gro",
-        index=f"<pseudosimulation>index.ndx",
-        runfile=f"<pseudosimulation>production.mdp"
-    benchmark:
-        repeat("<pseudosimulation_traj_slices>duration_frame_{frame_i}.txt",1)
-    shadow: "minimal"
-    output:
-        frame_gro="<pseudosimulation_traj_slices>frame_{frame_i}.<ext_str>",
-    run:
-        from workflow.helpers.io import read_from_mdrun
-        writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
-        time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
-        selected_time = int(wildcards.frame_i) * writeout * time_step_ps
-        shell("""
-        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.frame_gro} -n {input.index} -dump {selected_time}
-        """)
+
+# rule pseudotrajectory_slice_gromacs:
+#     """
+#     This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
+#     instead of trajectory in input.
+#     """
+#     input:
+#         trajectory=f"<pseudosimulation>trajectory_with_timesteps.<ext_trj>",
+#         structure_tpr=f"<pseudosimulation>structure.gro",
+#         index=f"<pseudosimulation>index.ndx",
+#         runfile=f"<pseudosimulation>production.mdp"
+#     benchmark:
+#         repeat("<pseudosimulation_traj_slices>duration_frame_{frame_i}.txt",1)
+#     shadow: "minimal"
+#     output:
+#         frame_gro="<pseudosimulation_traj_slices>frame_{frame_i}.<ext_str>",
+#     run:
+#         from workflow.helpers.io import read_from_mdrun
+#         writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
+#         time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
+#         selected_time = int(wildcards.frame_i) * writeout * time_step_ps
+#         shell("""
+#         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+#         echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.frame_gro} -n {input.index} -dump {selected_time}
+#         """)

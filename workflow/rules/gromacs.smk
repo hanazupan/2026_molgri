@@ -1,0 +1,254 @@
+import numpy as np
+import pandas as pd
+from numpy.typing import NDArray
+from MDAnalysis import Universe, Writer, Merge
+
+from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_multiple_atoms_to_cuboid_cell
+from workflow.helpers.io import read_object, write_object, get_num_atoms, from_xvg_to_csv_energy
+
+wildcard_constraints:
+    path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
+
+rule add_timesteps_to_pt:
+    input:
+        trajectory=f"<pseudosimulation>trajectory.<ext_trj>",
+        structure_tpr=f"<pseudosimulation>structure.gro",
+        index=f"<pseudosimulation>index.ndx",
+        runfile=f"<pseudosimulation>production.mdp"
+    output:
+        trajectory=f"<pseudosimulation>trajectory_with_timesteps.<ext_trj>",
+    run:
+        from workflow.helpers.io import read_from_mdrun
+
+        writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
+        time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
+        timesteps = writeout * time_step_ps
+        print("timestep is ",timesteps)
+        shell("""
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.trajectory} -n {input.index} -timestep {timesteps}
+
+        """)
+
+
+def input_function_trajectory_slice(wc):
+    if "assignment" in wc.path:
+        trajectory_name = "wrapped_trajectory"
+        path_other_files = "<simulation>"
+    elif "pseudosimulation" in wc.path:
+        trajectory_name = "trajectory_with_timesteps"
+        path_other_files = wc.path
+    else:
+        trajectory_name = "trajectory"
+        path_other_files = wc.path
+    return {"trajectory": f"{wc.path}{trajectory_name}.<ext_trj>",
+            "structure_tpr": f"{path_other_files}structure.<ext_str>",
+            "index": f"{path_other_files}index.ndx",
+            "runfile": f"{path_other_files}production.mdp"}
+
+rule trajectory_slice:
+    """
+    This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
+    instead of trajectory in input.
+    """
+    input:
+        unpack(input_function_trajectory_slice)
+    benchmark:
+        repeat("{path}trajectory_slices/duration_frame_{frame_i}.txt",1)
+    shadow: "minimal"
+    output:
+        frame_gro="{path}trajectory_slices/frame_{frame_i}.<ext_str>",
+    run:
+        from workflow.helpers.io import read_from_mdrun
+        writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
+        time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
+        selected_time = int(wildcards.frame_i) * writeout * time_step_ps
+        shell("""
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.frame_gro} -n {input.index} -dump {selected_time}
+        """)
+
+rule shortened_trajectory:
+    """
+    This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
+    instead of trajectory in input.
+    """
+    input:
+        unpack(input_function_trajectory_slice)
+    benchmark:
+        repeat("{path}duration_gromacs_shortening.txt",1)
+    shadow: "minimal"
+    params:
+        length_shortened_trajectory_ps = int(1000 * float(config["analysis"]["length_shortened_trajectory_ns"]))
+    output:
+        trajectory="{path}shortened_trajectory.<ext_trj>",
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.trajectory} -n {input.index} -e {params.length_shortened_trajectory_ps}
+        """
+
+
+checkpoint create_energy_csv_trajectory:
+    """
+    For the pseudotrajectory, read the energy of each frame.
+    """
+    input:
+        energy="{path}energy.xvg",
+    output:
+        energy_csv = "{path}energy.csv"
+    run:
+        from_xvg_to_csv_energy(input.energy, output.energy_csv)
+
+# rule gromacs_equilibration:
+#     """
+#     This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
+#     energies.
+#     """
+#     input:
+#         structure=f"<outputs_gromacs>structure.<ext_str>",
+#         runfile_minim=f"<outputs_gromacs>minim.mdp",
+#         runfile_nvt=f"<outputs_gromacs>nvt.mdp",
+#         index=f"<outputs_gromacs>index.ndx",
+#         topology=f"<outputs_gromacs>topol.top",
+#         force_field_stuff=f"<outputs_gromacs>force_field_stuff/"
+#     shadow: "minimal"
+#     output:
+#         energy=f"<outputs_gromacs>nvt.gro",
+#     shell:
+#         """
+#         initial_dir=$(pwd)
+#         cd $(dirname {input.runfile_minim})
+#         echo $(pwd)
+#         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+#         gmx22 grompp -f $(basename {input.runfile_minim}) -c $(basename {input.structure}) -p $(basename {input.topology}) -o em.tpr -r $(basename {input.structure})
+#         gmx22 mdrun -v -deffnm em
+#
+#         gmx22 grompp -f $(basename {input.runfile_nvt}) -c em.gro -r em.gro -p $(basename {input.topology}) -o nvt.tpr -n $(basename {input.index})
+#         gmx22 mdrun -v -deffnm nvt
+#
+#         cd "$initial_dir" || exit
+#         """
+#
+#
+# rule gromacs_production:
+#     """
+#     This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
+#     energies.
+#     """
+#     input:
+#         structure=f"<outputs_gromacs>nvt.<ext_str>",
+#         runfile=f"<outputs_gromacs>production.mdp",
+#         topology=f"<outputs_gromacs>topol.top",
+#         select_energy=f"<outputs_gromacs>select_energy",
+#         force_field_stuff=f"<outputs_gromacs>force_field_stuff/",
+#         index=f"<outputs_gromacs>index.ndx",
+#     log:
+#         log=f"<outputs_gromacs>logging_gromacs.log"
+#     benchmark:
+#         repeat(f"<outputs_gromacs>gromacs_benchmark.txt",1)
+#     shadow: "minimal"
+#     output:
+#         structure_tpr=f"<outputs_gromacs>structure.tpr",
+#         energy=f"<outputs_gromacs>energy.xvg",
+#         original_trajectory=f"<outputs_gromacs>raw_trajectory.<ext_trj>"
+#     shell:
+#         """
+#         initial_dir=$(pwd)
+#         cd $(dirname {input.runfile})
+#         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+#         gmx22 grompp -f $(basename {input.runfile}) -c $(basename {input.structure}) -r $(basename {input.structure}) -p $(basename {input.topology}) -o $(basename {output.structure_tpr}) -n $(basename {input.index})
+#         gmx22 mdrun -v -deffnm structure -g $(basename {log.log})
+#         mv structure.xtc $(basename {output.original_trajectory})
+#         gmx22 energy -f structure.edr -o $(basename {output.energy}) < $(basename {input.select_energy})
+#         cd "$initial_dir" || exit
+#         """
+
+
+rule postprocess_gromacs:
+    input:
+        original_trajectory = f"<simulation>raw_trajectory.<ext_trj>",
+        structure_tpr=f"<simulation>structure.tpr",
+        structure_gro=f"<pseudosimulation>structure.gro",
+        index=f"<simulation>index.ndx",
+    benchmark:
+        repeat(f"<simulation>duration_gromacs_postprocessing.txt",1)
+    shadow: "minimal"
+    output:
+        centered_trajectory = f"<simulation>centered_trajectory.<ext_trj>",
+        trajectory=f"<simulation>trajectory.<ext_trj>",
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        # now fit to first frame
+        echo "0\n" |  gmx22 trjconv -f {input.original_trajectory} -s {input.structure_tpr} -pbc mol -boxcenter tric -o {output.centered_trajectory} -n {input.index}
+        echo "4\n0\n" |  gmx22 trjconv -fit trans -f {output.centered_trajectory} -o {output.trajectory} -s  {input.structure_gro} -n {input.index}
+        """
+
+rule gromacs_rerun:
+    """
+    This rule gets structure, trajectory, topology and gromacs run file as input, as output we are only interested in
+    energies.
+    """
+    input:
+        structure = f"<pseudosimulation>structure.<ext_str>",
+        trajectory = f"<pseudosimulation>trajectory.<ext_trj>",
+        runfile = f"<pseudosimulation>production.mdp",
+        topology = f"<pseudosimulation>topol.top",
+        index=f"<pseudosimulation>index.ndx",
+        select_energy = f"<pseudosimulation>select_energy",
+        force_field_stuff = f"<pseudosimulation>force_field_stuff/"
+    shadow: "minimal"
+    log:
+        log = f"<pseudosimulation>logging_gromacs.log"
+    benchmark:
+        repeat(f"<pseudosimulation>gromacs_benchmark.txt", 1)
+    output:
+        energy = f"<pseudosimulation>energy.xvg",
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        gmx22 grompp -f {input.runfile} -c {input.structure} -r {input.structure} -p {input.topology} -o result.tpr  -n {input.index}
+        gmx22 mdrun -s result.tpr -rerun {input.trajectory} -g {log.log}
+        gmx22 energy -f ener.edr -o {output.energy} < {input.select_energy}
+        """
+
+rule trajectory_slice_m1:
+    input:
+        structure = rules.trajectory_slice.output.frame_gro,
+        index = "<pseudosimulation>index.ndx",
+    output:
+        trajectory = "{path}trajectory_slices/m1_frame_{frame_i}.<ext_str>",
+    shadow: "minimal"
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "2\n" | gmx22 trjconv -f {input.structure} -n {input.index} -s {input.structure} -o {output.trajectory}
+        """
+
+rule trajectory_slice_com_m2:
+    input:
+        structure = rules.trajectory_slice.output.frame_gro,
+        index = "<pseudosimulation>index.ndx",
+    output:
+        trajectory = "{path}trajectory_slices/COM_m2_frame_{frame_i}.<ext_str>",
+    shadow: "minimal"
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "3\n" | gmx22 traj -f {input.structure} -s {input.structure} -n {input.index} -com -oxt {output.trajectory}
+        """
+
+rule combine_m1_com_m2:
+    input:
+        structure_m1 = rules.trajectory_slice_m1.output.trajectory,
+        structure_com_m2 = rules.trajectory_slice_com_m2.output.trajectory,
+    output:
+        structure = "{path}trajectory_slices/m1_COM_m2_frame_{frame_i}.<ext_str>",
+    run:
+        m1 = read_object(input.structure_m1)
+        m2 = read_object(input.structure_com_m2)
+
+        merged = Merge(m1.atoms,m2.atoms)
+        merged.dimensions = m1.dimensions
+        merged.atoms.write(output.structure)

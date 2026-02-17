@@ -4,14 +4,10 @@ This file deals with assigning trajectory frames to their closest grid positions
 from functools import partial
 from multiprocessing import Pool
 
-import pandas as pd
 from MDAnalysis import Universe
 from MDAnalysis.lib.distances import calc_bonds
 from numpy.typing import NDArray
 import numpy as np
-
-from molgri.utils.quaternions import assign_closest_quaternion
-
 
 def assign_1D(points_to_assign: NDArray, grid_points: NDArray, limits: list, is_periodic: bool):
     """
@@ -26,7 +22,7 @@ def assign_1D(points_to_assign: NDArray, grid_points: NDArray, limits: list, is_
 
     """
     N_gridpoints = len(grid_points)
-    distance_gridpoints = np.array(grid_points[1]-grid_points[0])
+    distance_gridpoints = np.array(np.abs(grid_points[1]-grid_points[0]))
 
     if is_periodic:
         periodic_box_len = np.abs(limits[1] - limits[0])
@@ -34,6 +30,7 @@ def assign_1D(points_to_assign: NDArray, grid_points: NDArray, limits: list, is_
         assigned_indices = np.floor(points_to_assign / distance_gridpoints + 0.5) % N_gridpoints
     else:
         assigned_indices = np.argmin(np.abs(np.subtract.outer(points_to_assign, grid_points)), axis=1)
+    print(points_to_assign[27], grid_points, assigned_indices[27], limits, is_periodic)
     return assigned_indices
 
 

@@ -101,7 +101,7 @@ rule get_implied_timescales:
 
         write_object(its, output.its)
 
-rule find_indices_dominant_eigenvectors:
+checkpoint find_indices_dominant_eigenvectors:
     """
     For each eigenvector find the structures that contribute the most to the eigenvector.
     """
@@ -166,50 +166,50 @@ rule plot_vmd_eigenvectors_as_lines:
         fig.write_image(output.plot, scale=3)
 
 
-rule plot_vmd_eigenvectors:
-    input:
-        structure = f"<simulation>structure.<ext_str>",
-        structure1 = f"<simulation>molecule1.<ext_str>",
-        trajectory = f"<outputs_assignment>wrapped_trajectory.<ext_trj>",
-        abs_e_indices=rules.find_indices_dominant_eigenvectors.output.abs_e_indices,
-        pos_e_indices=rules.find_indices_dominant_eigenvectors.output.pos_e_indices,
-        neg_e_indices=rules.find_indices_dominant_eigenvectors.output.neg_e_indices,
-        translation_rotation_script= f"<inputs_vmd>script3.log",
-        grid_info = "<outputs_network>grid_info.yaml",
-    output:
-        vmdlog = f"<outputs_vmd>eigenvectors/{{tau}}/eigenvectors.log",
-        plots = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",
-            i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True)
-    run:
-        from molgri.create_vmdlog import VMDCreator
-
-        all_abs = np.array(read_object(input.abs_e_indices[0]))
-        all_pos = []
-        for pos_file in input.pos_e_indices:
-            all_pos.append(read_object(pos_file))
-        all_pos = np.array(all_pos)
-        all_neg = []
-        for neg_file in input.neg_e_indices:
-            all_neg.append(read_object(neg_file))
-        all_neg = np.array(all_neg)
-
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
-        N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
-
-        n1 = get_num_atoms(input.structure1)
-
-        my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
-
-        # drawing the rectangular box
-        grid_info = read_object(input.grid_info)
-        subgrid_limits = grid_info["subgrid_limits_A"]
-        my_vmd.add_box(subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1])
-
-        my_vmd.load_translation_rotation_script(input.translation_rotation_script)
-        my_vmd.prepare_eigenvector_script(all_abs, all_pos, all_neg, plot_names=output.plots)
-        my_vmd.write_text_to_file(output.vmdlog)
-
-        shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
+# rule plot_vmd_eigenvectors:
+#     input:
+#         structure = f"<simulation>structure.<ext_str>",
+#         structure1 = f"<simulation>molecule1.<ext_str>",
+#         trajectory = f"<outputs_assignment>wrapped_trajectory.<ext_trj>",
+#         abs_e_indices=rules.find_indices_dominant_eigenvectors.output.abs_e_indices,
+#         pos_e_indices=rules.find_indices_dominant_eigenvectors.output.pos_e_indices,
+#         neg_e_indices=rules.find_indices_dominant_eigenvectors.output.neg_e_indices,
+#         translation_rotation_script= f"<inputs_vmd>script3.log",
+#         grid_info = "<outputs_network>grid_info.yaml",
+#     output:
+#         vmdlog = f"<outputs_vmd>eigenvectors/{{tau}}/eigenvectors.log",
+#         plots = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",
+#             i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True)
+#     run:
+#         from molgri.create_vmdlog import VMDCreator
+#
+#         all_abs = np.array(read_object(input.abs_e_indices[0]))
+#         all_pos = []
+#         for pos_file in input.pos_e_indices:
+#             all_pos.append(read_object(pos_file))
+#         all_pos = np.array(all_pos)
+#         all_neg = []
+#         for neg_file in input.neg_e_indices:
+#             all_neg.append(read_object(neg_file))
+#         all_neg = np.array(all_neg)
+#
+#         N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+#         N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
+#
+#         n1 = get_num_atoms(input.structure1)
+#
+#         my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
+#
+#         # drawing the rectangular box
+#         grid_info = read_object(input.grid_info)
+#         subgrid_limits = grid_info["subgrid_limits_A"]
+#         my_vmd.add_box(subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1])
+#
+#         my_vmd.load_translation_rotation_script(input.translation_rotation_script)
+#         my_vmd.prepare_eigenvector_script(all_abs, all_pos, all_neg, plot_names=output.plots)
+#         my_vmd.write_text_to_file(output.vmdlog)
+#
+#         shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
 
 rule for_tau1:
     input:
@@ -248,6 +248,7 @@ rule run_plot_its_msm:
                     xs = xs[:5]
                     its = its[:5]
                     fig.update_xaxes(range=[np.min(xs), np.max(xs)], row=1, col=col)
+                    fig.update_yaxes(range=[np.min(xs), np.max(xs)],row=1,col=col)
                 fig.add_scatter(x=xs, y=its, mode="lines+markers", line=dict(width=2, color=cols[i]), row=1,
                                      col=col)
         fig.write_image(output.plot_its)
