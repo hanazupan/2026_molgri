@@ -1,13 +1,18 @@
+"""
+This is the general version of nodes and networks I use to create grids. The Translation- and Rotation- -Nodes and
+-Networks will inherit from these abstract objects.
+"""
+
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
 from copy import copy
 from functools import cached_property
 from itertools import combinations
+from typing import Any
 
 import networkx as nx
 import numpy as np
-from numpy._typing import NDArray
 from numpy.typing import NDArray
 from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
@@ -18,6 +23,10 @@ from molgri.utils.arrays import all_rows_unique, k_argmin_in_array, which_row_is
 
 class AbstractNode(ABC):
 
+    """
+    Nodes of my networks, e.g. RotationNode or TranslationNode are all objects that inherit from this one.
+    """
+
     @abstractmethod
     def __lt__(self, other: "AbstractNode") -> bool:
         pass
@@ -27,17 +36,43 @@ class AbstractNode(ABC):
     def hull(self) -> NDArray:
         pass
 
-    def get_node_property(self, property_name: str):
+    def get_node_property(self, property_name: str) -> Any:
+        """
+        Just a simple getter for any node properties. Useful if e.g. getting this property for the full network.
+
+        Args:
+            property_name (str): the name of the property, eg to access self.coordinate write "coordinate"
+
+        Returns:
+            the value of the property, can be almost anything
+        """
         return self.__dict__[property_name]
 
     @abstractmethod
     def apply_transform_on(self, molecular_coordinates: NDArray, weights: NDArray = None) -> NDArray:
+        """
+        Gives a prescription how this node should modify the molecular coordinates. E.g. translation node will
+        translate all coordinates, rotation node will rotate them around the center of mass (or geometry if weights
+        not given).
+
+        Args:
+            molecular_coordinates (NDArray): array of shape (N_atoms, 3) that will be modified
+            weights (NDArray): array of shape (N_atoms,) that might be needed for transformation if it relates to the
+                               center of mass
+
+        Returns:
+            array of shape (N_atoms, 3) of modified coordinates
+        """
         pass
 
 class AbstractNetwork(nx.Graph, ABC):
 
     """
     Just a bit enhanced networkx Graph that I use for my RotationNetwork, TranslationNetwork and FullNetwork.
+
+    Important for all networks: use self.sorted_nodes in setters and getters since the ordering of nodes should be
+    respected.
+
     The assumptions are:
         - all nodes are objects that can be sorted (have implemented __lt__)
         - all nodes have the properties hull and volume
@@ -52,28 +87,69 @@ class AbstractNetwork(nx.Graph, ABC):
             self.calculate_all_edge_properties()
 
     def create_pseudotrajectory_coordinates_from(self, moving_coordinates: NDArray, weights: NDArray = None) -> list:
+        """
+        This is the method that applies the effects of each node to the given coordinates in the sorted order so that we
+        get a list of transformed coordinates, each one transformed by a different node.
+
+        Args:
+            moving_coordinates (NDArray): array of shape (N_atoms, 3) that will be modified by each node
+            weights (NDArray): array of shape (N_atoms,) containing the masses of atoms
+
+        Returns:
+            a list of lengths (N_nodes, ), each containing a (N_atoms, 3) array transformed in the specific way,
+            the order is the order of gridpoints
+        """
         nodes = [node.apply_transform_on(moving_coordinates, weights=weights) for node in sorted(self.nodes)]
         return nodes
 
-    def add_node_properties(self, sorted_values_list: list, property_name: str):
+    def add_node_properties(self, sorted_values_list: list, property_name: str) -> None:
+        """
+        General setter of properties for all nodes in the network.
+
+        It is important to use setters and getters because the order of nodes is very important! (Nodes in a network
+        are in general not sorted).
+
+        Args:
+            sorted_values_list (list): a list of length N_nodes, each element will be set to a corresponding node
+            property_name (str): the name of the property, e.g. to set self.coordinate write "coordinate"
+        """
         for node_i, node in enumerate(self.sorted_nodes):
             node.__dict__[property_name] = sorted_values_list[node_i]
 
-    def get_node_properties(self, property_name: str) -> NDArray:
+    def get_node_properties(self, property_name: str) -> list:
+        """
+        General getter of properties for all nodes in the network.
+
+        It is important to use setters and getters because the order of nodes is very important! (Nodes in a network
+        are in general not sorted).
+
+        Args:
+            property_name (str): the name of the property, e.g. to set self.coordinate write "coordinate"
+        Returns:
+            a list of length N_nodes, each element the property of one node
+        """
         chosen_property = [node.get_node_property(property_name) for node in self.sorted_nodes]
-        chosen_property = np.array(chosen_property, dtype=float)
         return chosen_property
 
-    def _get_node_indices_by_property(self, property_condition):
-        return [i for i, node in enumerate(self.sorted_nodes) if property_condition(node)]
+    def get_node_indices_N_lowest_energies(self, N: int) -> NDArray:
+        """
+        Get the indices of N sorted_nodes that have the smallest value of property energy.
 
-    def get_node_indices_N_lowest_energies(self, N: int):
-        all_energies = self.get_node_properties("energy")
+        Args:
+            N (int): how many nodes should be returned
+
+        Returns:
+            an array of shape (N,) containing indices (as integers) of relevant nodes
+        """
+        all_energies = np.array(self.get_node_properties("energy"))
         return k_argmin_in_array(all_energies, N)
 
 
     @cached_property
     def sorted_nodes(self):
+        """
+        This is the property that saves nodes in the desired order (order is determined by the __lt__ method of nodes).
+        """
         nodes = [node for node in sorted(self.nodes)]
         return nodes
 
@@ -116,9 +192,12 @@ class AbstractNetwork(nx.Graph, ABC):
         """
         pass
 
-    def calculate_all_edge_properties(self):
+    def calculate_all_edge_properties(self) -> None:
+        """
+        This is the high-level function that calculates different properties of edges. This will be run automatically
+        when creating new networks, so a new desired edge property should be recorded here.
+        """
         df_edges = nx.to_pandas_edgelist(self)
-        #print(df_edges)
         # now list all properties to be calculated
         df_edges["numerical_edge_type"] = df_edges.apply(
             lambda row: self._numerical_edge_type(row.to_dict())[row["edge_type"]], axis=1)
@@ -149,12 +228,12 @@ class AbstractNetwork(nx.Graph, ABC):
 
 class ReducedSphericalVoronoi(SphericalVoronoi):
     """
-    This layer on top of SphericalVoronoi has two purposes:
-    - removing vertices that repeat
-    - allowing the choice of exactly one spherical point
+    This layer on top of SphericalVoronoi is only there to remove repeating vertices in the typical scipy
+    SphericalVoronoi, since they can cause errors in our determination of neighbourhood and dividing areas between
+    neighbours.
     """
 
-    def __init__(self, points, radius=1.0, threshold=10 ** -UNIQUE_TOL):
+    def __init__(self, points: NDArray, radius: float = 1.0, threshold: float = 10 ** -UNIQUE_TOL):
         assert len(points.shape) == 2, "Must provide a 2D array of points"
         self.num_dimensions = points.shape[1]
         num_points = len(points)
@@ -164,6 +243,7 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
 
         super().__init__(points, radius=radius, threshold=threshold)
         if self.num_dimensions == 3:
+            # this is saved in order to be accessible later since the scipy function assumes redundant vertices
             self.areas = super().calculate_areas()
         self._purge_redundant_voronoi_vertices()
         # make sure no repeated vertices now
@@ -180,7 +260,12 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
 
     def get_adjacency_matrix(self) -> coo_array:
         """
-        Adjacent points share at least dimension-1 vertices.
+        Create a (N_points, N_points) boolean sparse matrix that has an entry of 0 at row i, column j (and row j
+        column i) if points i and j aren't neighbours, 1 if they are.
+
+        How is neighbourhood (adjacency) determined? Adjacent points share at least dimension-1 vertices. This means
+        that two points on a sphere (3D points) are neighbours if they share at least 2 vertices and two points on a
+        hypersphere (4D points - quaternions) are neighbours if they share at least 3 vertices.
         """
         if len(self.points) == 1:
             return coo_array(np.zeros((1,1)))

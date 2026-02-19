@@ -286,7 +286,6 @@ class VMDCreator:
         Delete the initial default representation. Don't add any representations yet.
         Additionally, some nice settings so that pictures look good.
         """
-        #display projection Orthographic
 
         self.total_file_text += f"""
 history keep 0
@@ -504,7 +503,7 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
                                        representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
         if draw_m2:
             # plot all provided frames except 0
-            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ",
+            self._add_representation(first_molecule=False, second_molecule=True, periodic="zZ",
                                        representation="Licorice", trajectory_frames=list(range(1, num_frames+1)))
         if draw_rectangular_box is not None:
             self.add_box(*box_limits)

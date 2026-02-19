@@ -239,6 +239,21 @@ rule trajectory_slice_com_m2:
         echo "3\n" | gmx22 traj -f {input.structure} -s {input.structure} -n {input.index} -com -oxt {output.trajectory}
         """
 
+rule full_trajectory_com_m2:
+    input:
+        structure = "{path}structure.<ext_str>",
+        trajectory = "{path}trajectory.<ext_trj>",
+        index = "{path}index.ndx",
+    output:
+        trajectory = "{path}COM_m2.<ext_trj>",
+        positions = "{path}COM_m2.xvg",
+    shadow: "minimal"
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "3\n" | gmx22 traj -f {input.trajectory} -s {input.structure} -n {input.index} -com -oxt {output.trajectory} -ox {output.positions}
+        """
+
 rule combine_m1_com_m2:
     input:
         structure_m1 = rules.trajectory_slice_m1.output.trajectory,

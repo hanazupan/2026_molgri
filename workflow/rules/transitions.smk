@@ -245,8 +245,8 @@ rule run_plot_its_msm:
 
             for i, its in enumerate(all_its.T):
                 if col==2:
-                    xs = xs[:5]
-                    its = its[:5]
+                    xs = xs[:7]
+                    its = its[:7]
                     fig.update_xaxes(range=[np.min(xs), np.max(xs)], row=1, col=col)
                     fig.update_yaxes(range=[np.min(xs), np.max(xs)],row=1,col=col)
                 fig.add_scatter(x=xs, y=its, mode="lines+markers", line=dict(width=2, color=cols[i]), row=1,

@@ -63,11 +63,12 @@ view_index=[1, 4, 5]
 rule all:
     input:
         "<output_specific_molecule_network>config_used.yaml",
+        expand("<simulation>trajectory_slices/m1_COM_m2_frame_{i}.gro", i=[8550891, 9472648, 8584358, 9641038, 11979713]),
         # expand("<outputs_frame_plots>{folder}/frame_{frame_index}_zoom{i}_view{view_index}.png", frame_index=[0, 1, 2, 3, 9114, 10000], i=[10], #1, 3, 5, 10
         #     folder = ["pseudosimulation_COM", "wrapped"], view_index=[1, 4, 5]),
-        # expand(f"<overlayed_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png",
-        #        folder =["pseudosimulation", "simulation", "pseudosimulation_COM", "simulation_COM", "wrapped"], zoom_level=[2, 10],
-        #        file_name=["lowest_5_energies"], view_index=[1, 4, 5]),
+        expand(f"<overlayed_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png",
+               folder =["pseudosimulation", "simulation", "pseudosimulation_COM", "wrapped_COM", "wrapped"], zoom_level=[2, 10],
+               file_name=["lowest_5_energies"], view_index=[1, 4, 5]),
         # expand(f"<overlayed_vmd_frames>{{folder}}/{{file_name}}_zoom{{zoom_level}}_view{{view_index}}.png",
         #        folder =["pseudosimulation"], zoom_level=2,
         #        file_name=["all_rotations_first_position"], view_index=[1,2]),
@@ -103,18 +104,18 @@ rule all:
         # # # "<overlayed_vmd_frames>pseudosimulation/all_rotations_first_position_view3_full.tga",
         # # # expand("<stacked_vmd_frames>pseudosimulation/all_rotations_first_position_{both}.tga", both=["both", "m2"]),
         expand("<outputs_molecular_plots>compare_to_assignment/frame_{i}_zoom10_view{view_i}_{which}.png",
-            i=[27], view_i=[1,4,5], which=["com", "full"]), #5390, 44854, 83546, 27, 3567
-        expand("<pseudosimulation>trajectory_slices/m1_COM_m2_frame_{frame_i}.<ext_str>", frame_i = [80, 160, 240, 320, 480, 560, 640, 720, 800, 880, 960, 1040]),
+            i=[27, 5390, 44854, 83546, 27, 3567], view_i=[1,4,5], which=["com", "full"]), #5390, 44854, 83546, 27, 3567
+        # expand("<pseudosimulation>trajectory_slices/m1_COM_m2_frame_{frame_i}.<ext_str>", frame_i = [80, 160, 240, 320, 480, 560, 640, 720, 800, 880, 960, 1040]),
         # # # non-molecular plots
         # "<outputs_other_plots>hist_full_assignment.png",
         # # #expand("<outputs_other_plots>{traj_or_pseudo}_violin_plot_energies.png", traj_or_pseudo=["simulation", "pseudosimulation"]),
         # # # rules.plot_E_per_assigned_position_grids.output.plot
         # transitions
         #expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
-        #"<outputs_other_plots>its.png",
+        "<outputs_other_plots>its.png",
         # rules.for_tau1.input,
         # rules.get_zeroth_eigenvector_plot.input,
-        #rules.plot_all_eigenvectors_as_lines.input,
+        rules.plot_all_eigenvectors_as_lines.input,
         #rules.get_higher_eigenvector_plot.input,
         # # # sqra
         # # f"<outputs_transitions>sqra.npz",

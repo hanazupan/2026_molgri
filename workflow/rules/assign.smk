@@ -16,6 +16,8 @@ rule wrap_trajectory2cuboid_cell:
     """
     This rule takes a normal (already centered etc.) trajectory of two molecules and applies periodic boundary
     conditions of the cuboid cell to the molecule2. This is useful so we can assign the best position.
+    
+    This is tested - you can look at frame_i of wrapped trajectory and frame_i of simulation to confirm.
     """
     input:
         structure = f"<simulation>structure.<ext_str>",
@@ -47,31 +49,17 @@ rule wrap_trajectory2cuboid_cell:
 
 rule wrap_molecule2_COM:
     input:
-        structure = f"<simulation>structure.<ext_str>",
-        trajectory = f"<simulation>trajectory.<ext_trj>",
+        com_m2 = f"<simulation>COM_m2.xvg",
         structure1 = f"<simulation>molecule1.<ext_str>",
     output:
         com_m2 = f"<outputs_assignment>m2_com.npy",
         com_m2_wrapped = f"<outputs_assignment>cuboid_wrapped_m2_com.npy",
     run:
-
-        # determine com of 2nd molecule
-        u = Universe(input.structure, input.trajectory)
-        ag_m2 = get_atomgoup_m2(u, input.structure1)
-        ag_m1 = get_atomgoup_m1(u, input.structure1)
-
-        com_array_m1 = np.zeros((len(u.trajectory), 3))
-        com_array_m2 = np.zeros((len(u.trajectory), 3))
-        for i, ts in enumerate(u.trajectory):
-            shift = ag_m1.center_of_mass()
-            u.atoms.translate(-shift)
-            com_array_m1[i] = ag_m1.center_of_mass()
-            com_array_m2[i] = ag_m2.center_of_mass()
+        com_m2 = read_object(input.com_m2)
+        # NEED TO CONVERT TO ANGSTROM
+        com_array_m2 = 10 * com_m2.to_numpy()[:, -3:]
 
         write_object(com_array_m2, output.com_m2)
-        # assert com of m1 not changing
-        assert np.max(com_array_m1 - com_array_m1[0]) < 0.01, "Molecule 1 seems to be moving - is it not fitted to the reference or just very flexible?"
-
 
         # determine cuboid cell
         side_lengths = get_rectangular_cell_side_lengths(input.structure1)
@@ -98,8 +86,6 @@ rule position_assignment_csv:
 
         com_m2 = read_object(input.com_m2)
         com_m2_wrapped = read_object(input.com_m2_wrapped)
-        print(pd.DataFrame(com_m2).describe())
-        print(pd.DataFrame(com_m2_wrapped).describe())
 
         energy = read_object(input.energy_csv)["Binding energy [kJ/mol]"]
         df_indices = read_object(input.indices_csv, header=[0, 1])
@@ -114,7 +100,7 @@ rule position_assignment_csv:
         subgrid_limits = grid_info["subgrid_limits_A"]
         periodic_in = grid_info["periodic_in"]
         N_gridpoints = grid_info["subgrid_N_points"]
-        data = assign_to_cartesian_translation_grid(com_m2_wrapped, subgrids, subgrid_limits, periodic_in)
+        data = assign_to_cartesian_translation_grid(com_m2, subgrids, subgrid_limits, periodic_in)
         assigned_array = data[-1].astype(int).T
 
         df_assignments = pd.DataFrame(np.array(data).T, columns=["X index", "Y index", "Z index", "Total position index"], dtype=int)
