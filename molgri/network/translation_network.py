@@ -5,7 +5,9 @@ from itertools import product
 import numpy as np
 from numpy.typing import NDArray
 
-from molgri.network.abstract import AbstractNetwork, AbstractNode, find_shared_vertices, circular_sector_area
+from molgri.network.abstract import AbstractNetwork, AbstractNode, find_shared_vertices
+from molgri.utils.spheres import circular_sector_area
+
 
 class OneDimTranslationNode:
 

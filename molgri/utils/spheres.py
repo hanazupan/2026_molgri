@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy.constants import pi
@@ -137,3 +139,25 @@ def exact_area_of_spherical_polygon(vertices: NDArray, r: float = 1) -> float:
         area = 4 * pi * r**2 - area
     assert area >= 0, f"Area cannot be negative!"
     return area
+
+
+def circular_sector_area(shared_upper_vertices: NDArray, shared_lower_vertices: NDArray) -> float:
+    """
+    Find the area of either circular sector or a difference between a smaller and bigger circular sector (same angle,
+    two different radii).
+
+    Args:
+        shared_upper_vertices (NDArray): coordinates of the upper arch, should be exactly two
+        shared_lower_vertices (NDArray): coordinates of the lower arch, should be exactly two or one if it is (0,0,0)
+
+    Returns:
+        area in Angstrom^2
+    """
+    assert shared_upper_vertices.shape == (2, 3)
+    assert shared_lower_vertices.shape == (2, 3) or np.allclose(shared_lower_vertices, 0.0)
+
+    radius_smaller = np.linalg.norm(shared_lower_vertices[0])
+    radius_larger = np.linalg.norm(shared_upper_vertices[0])
+    angle = angle_between_vectors(shared_upper_vertices[0], shared_upper_vertices[1])
+
+    return (radius_larger ** 2 - radius_smaller ** 2) * angle / 2

@@ -218,7 +218,7 @@ rule for_tau1:
 
 rule run_plot_its_msm:
     input:
-        its = expand(f"<outputs_transitions>{{tau}}/its.npy", tau=TAUS),
+        its = expand(f"<outputs_transitions>{{tau}}/its.npy", tau=config["msm"]["taus"]),
         runfile=f"<simulation>production.mdp"
     output:
         plot_its = f"<outputs_other_plots>its.png"
@@ -228,7 +228,7 @@ rule run_plot_its_msm:
         writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
         time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
 
-        xs = np.array(TAUS) * writeout * time_step_ps
+        xs = np.array(config["msm"]["taus"]) * writeout * time_step_ps
         all_its = np.array([read_object(its_file) for its_file in input.its])
 
 
@@ -245,10 +245,10 @@ rule run_plot_its_msm:
 
             for i, its in enumerate(all_its.T):
                 if col==2:
-                    xs = xs[:7]
-                    its = its[:7]
-                    fig.update_xaxes(range=[np.min(xs), np.max(xs)], row=1, col=col)
-                    fig.update_yaxes(range=[np.min(xs), np.max(xs)],row=1,col=col)
+                    xs = xs[:9]
+                    its = its[:9]
+                    fig.update_xaxes(range=[0, np.max(xs)], row=1, col=col)
+                    fig.update_yaxes(range=[0, 20],row=1,col=col)
                 fig.add_scatter(x=xs, y=its, mode="lines+markers", line=dict(width=2, color=cols[i]), row=1,
                                      col=col)
         fig.write_image(output.plot_its)

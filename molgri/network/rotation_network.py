@@ -1,3 +1,14 @@
+"""
+Here we introduce RotationNode and RotationNetwork.
+
+RotationNode has a single quaternion as a core and provides access to other properties such as the hull of this quaternion.
+
+RotationNetwork contains all RotationNodes of the grid and through edges provides access to their relationships, eg.
+which ones are neighbours and how far away they are.
+
+In a FullNetwork, each FullNode consists of one RotationNode and one TranslationNode.
+"""
+from __future__ import annotations
 from functools import cached_property
 
 import numpy as np
@@ -14,11 +25,11 @@ from molgri.utils.quaternions import (find_shared_quaternions,
 class RotationNode(AbstractNode):
 
     """
-    This class is a single container node with sub-nodes x, y and z, representing one particular
-    translation.
+    This class is built around a single quaternion, representing one particular rotation.
     """
 
-    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull=None, hull_volume=None):
+    def __init__(self, rotation_index: int, quaternion: NDArray, hypersphere_hull: NDArray = None,
+                 hull_volume: float = None):
         self.index = rotation_index
         self.coordinate = quaternion
         self.hull = hypersphere_hull
@@ -30,17 +41,14 @@ class RotationNode(AbstractNode):
     def __str__(self):
         return f'quat={self.index}'
 
-    def __lt__(self, other):
+    def __lt__(self, other: RotationNode):
         """
-        How do we know a node is "larger" (should come later in sorting)
-        - first we compare the radial index
-        - if both are the same, we compare the spherical index
-        - if both are the same, we compare the rotation index
+       We know a node is "larger" (should come later in sorting) if its index is larger.
         """
         return self.index < other.index
 
 
-    def apply_transform_on(self, molecular_coordinates: NDArray, weights=None) -> NDArray:
+    def apply_transform_on(self, molecular_coordinates: NDArray, weights: NDArray = None) -> NDArray:
         """
         Appy the rotation of this node onto the rigid body defined by given molecular coordinates. If weights are not
         provided,the rotation is done around geometrical center, otherwise around the center of mass.
@@ -62,17 +70,47 @@ class RotationNode(AbstractNode):
 
 class RotationNetwork(AbstractNetwork):
 
+    """
+    The network that only describes rotations in the grid. We can e.g. see which rotations are neighbours by looking
+    at the edges of this graph.
+    """
+
     @cached_property
-    def grid(self):
+    def grid(self) -> NDArray:
+        """
+        Grid is here a (N_rotations, 4)-shaped array containing quaternions.
+        """
         coordinates = [node.coordinate for node in self.sorted_nodes]
         return np.array(coordinates)
 
-    def _distances(self, edge_dict) -> dict:
+    def _distances(self, edge_dict: dict) -> dict:
+        """
+        This is an efficient way to set the function used to calculate distance. The distance is not actually
+        calculated yet, this only happens when calculate_all_edge_properties is called.
+
+        Args:
+            edge_dict (dict): contains all information about a particular edge, especially source and target,
+            the two nodes that the edge connects
+
+        Returns:
+            edge dict with a function that can calculate a float (here distance between nodes)
+        """
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         return {"rotational": distance_between_quaternions(node1.coordinate, node2.coordinate)}
 
-    def _surfaces(self, edge_dict) -> dict:
+    def _surfaces(self, edge_dict: dict) -> dict:
+        """
+        This is an efficient way to set the function used to calculate surfaces. The surface is not actually
+        calculated yet, this only happens when calculate_all_edge_properties is called.
+
+        Args:
+            edge_dict (dict): contains all information about a particular edge, especially source and target,
+            the two nodes that the edge connects
+
+        Returns:
+            edge dict with a function that can calculate a float (here surface between nodes)
+        """
         node1 = edge_dict["source"]
         node2 = edge_dict["target"]
         shared_vertices = find_shared_quaternions(node1.hull, node2.hull)
@@ -83,5 +121,17 @@ class RotationNetwork(AbstractNetwork):
             area = 0.0
         return  {"rotational": area}
 
-    def _numerical_edge_type(self, edge_dict) -> dict:
+    def _numerical_edge_type(self, edge_dict: dict) -> dict:
+        """
+        Here we set that rotational edges always have a numerical edge type 4. This has no particular meaning,
+        it is just useful that each edge type has some unique number in case we want to plot adjacency (or surface,
+        distance ...) matrices and differentiate them based on edge type.
+
+        Args:
+            edge_dict (dict): contains all information about a particular edge, especially source and target,
+            the two nodes that the edge connects
+
+        Returns:
+            always number 4 for rotational edges.
+        """
         return  {"rotational": 4}

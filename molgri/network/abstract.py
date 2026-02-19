@@ -1,6 +1,10 @@
 """
 This is the general version of nodes and networks I use to create grids. The Translation- and Rotation- -Nodes and
 -Networks will inherit from these abstract objects.
+
+We also introduce ReducedSphericalVoronoi, which is the same as scipy's SphericalVoronoi, just that no vertices are
+duplicated. Any time we want to use spherical voronois in our program we should access them through the function
+get_spherical_voronoi().
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
 
 from molgri.constants import UNIQUE_TOL
-from molgri.utils.arrays import all_rows_unique, k_argmin_in_array, which_row_is_k, angle_between_vectors
+from molgri.utils.arrays import all_rows_unique, k_argmin_in_array, which_row_is_k
 
 
 class AbstractNode(ABC):
@@ -288,10 +292,17 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
         adj_matrix = coo_array((elements, (rows, columns)), shape=(num_points, num_points))
         return adj_matrix
 
-    def get_hulls(self):
+    def get_hulls(self) -> list:
+        """
+        For each Voronoi cell we want to know which vertices limit it (form a hull). We need to overwrite scipy
+        function since we have changed the number of vertices, therefore the indices change.
+        """
         return [self.vertices[region] for region in self.regions]
 
     def _purge_redundant_voronoi_vertices(self):
+        """
+        The main method of this class. Only keep unique vertices. Update which vertices belong to which region.
+        """
         original_vertices = copy(self.vertices)
         # correctly determines which lines to use
         indexes = np.unique(original_vertices, axis=0, return_index=True)[1]
@@ -315,10 +326,13 @@ class ReducedSphericalVoronoi(SphericalVoronoi):
 class MikroVoronoi(ReducedSphericalVoronoi):
     """
     This is a class mocking spherical voronoi cells for very small numbers of points (when it's impossible to
-    actually get voronoi cells).
+    actually get Voronoi cells). Mostly useful if we have just a single rotation but we want our code to run.
     """
 
     def __init__(self, points, **kwargs):
+        """
+        Note: we don't want to cal super().__init__ since we are just mocking the class.
+        """
         assert len(points.shape) == 2, "Must provide a 2D array of points"
         self.num_dimensions = points.shape[1]
         assert self.num_dimensions in [3, 4]
@@ -353,8 +367,18 @@ class MikroVoronoi(ReducedSphericalVoronoi):
 
 
 
+def get_spherical_voronoi(points, **kwargs) -> ReducedSphericalVoronoi:
+    """
+    Just a little function that determines whether we get a normal ReducedSphericalVoronoi or a MikroVoronoi. This
+    should be the access to all spherical Voronois we want to use in our program.
 
-def get_spherical_voronoi(points, **kwargs):
+    Args:
+        points (NDArray): the points that determine centers of Voronoi cells, either shape (N_points, 3) or (N_points, 4)
+        **kwargs: any other arguments e.g. radius, shouldn't normally be needed.
+
+    Returns:
+        a spherical voronoi object without duplicated vertices
+    """
     if len(points) <= 4 and points.shape[1] == 3:
         return MikroVoronoi(points, **kwargs)
     elif len(points) <= 8 and points.shape[1] == 4:
@@ -382,24 +406,3 @@ def find_shared_vertices(vertices1: NDArray, vertices2: NDArray) -> NDArray:
     border_vertices = np.array(list(set(vertices_point1).intersection(set(vertices_point2))))
     return border_vertices
 
-
-def circular_sector_area(shared_upper_vertices: NDArray, shared_lower_vertices: NDArray) -> float:
-    """
-    Find the area of either circular sector or a difference between a smaller and bigger circular sector (same angle,
-    two different radii).
-
-    Args:
-        shared_upper_vertices (NDArray): coordinates of the upper arch, should be exactly two
-        shared_lower_vertices (NDArray): coordinates of the lower arch, should be exactly two or one if it is (0,0,0)
-
-    Returns:
-        area in Angstrom^2
-    """
-    assert shared_upper_vertices.shape == (2, 3)
-    assert shared_lower_vertices.shape == (2, 3) or np.allclose(shared_lower_vertices, 0.0)
-
-    radius_smaller = np.linalg.norm(shared_lower_vertices[0])
-    radius_larger = np.linalg.norm(shared_upper_vertices[0])
-    angle = angle_between_vectors(shared_upper_vertices[0], shared_upper_vertices[1])
-
-    return (radius_larger ** 2 - radius_smaller ** 2) * angle / 2
