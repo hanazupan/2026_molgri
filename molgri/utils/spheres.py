@@ -1,3 +1,8 @@
+"""
+Here we collect functions that are generally useful and have something to do with spheres, points on spheres,
+spherical arches and angles, spherical polygons ...
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -9,8 +14,8 @@ from molgri.utils.arrays import angle_between_vectors, norm_per_axis, normalise_
 
 def dist_on_sphere(vector1: np.ndarray, vector2: np.ndarray) -> np.ndarray:
     """
-    Distance between two points on a sphere is a product of the radius (has to be the same for both) and angle
-    between them.
+    Distance between two points on a sphere is a product of the radius (has to be the same radius for both  points) and
+    angle between them.
 
     Args:
         vector1: vector shape (n1, d) or (d,)
@@ -32,7 +37,8 @@ def dist_on_sphere(vector1: np.ndarray, vector2: np.ndarray) -> np.ndarray:
 
 def random_sphere_points(n: int = 1000) -> NDArray:
     """
-    Create n points that are truly randomly distributed across the sphere.
+    Create n points that are randomly distributed across the sphere. There are better ways to do this, this is just a
+    quick and easy generation scheme.
 
     Args:
         n: number of points
@@ -72,7 +78,6 @@ def sort_points_on_sphere_ccw(points: NDArray) -> NDArray:
         #
         return np.dot(np.cross(v_c - v_0, v_i - v_c), v_i) < 0
 
-    #all_row_norms_equal_k(points, 1), "Not points on a unit sphere"
     vector_center = normalise_vectors(np.average(points, axis=0), length=np.linalg.norm(points, axis=1)[0])
     N = len(points)
     # angle between first point, center point, and each additional point
@@ -160,4 +165,4 @@ def circular_sector_area(shared_upper_vertices: NDArray, shared_lower_vertices: 
     radius_larger = np.linalg.norm(shared_upper_vertices[0])
     angle = angle_between_vectors(shared_upper_vertices[0], shared_upper_vertices[1])
 
-    return (radius_larger ** 2 - radius_smaller ** 2) * angle / 2
+    return float((radius_larger ** 2 - radius_smaller ** 2) * angle / 2)

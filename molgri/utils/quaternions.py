@@ -1,7 +1,12 @@
+"""
+Here we collect functions that are generally useful and have something to do with quaternions.
+"""
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.constants import pi
 from scipy.linalg import svd
+from scipy.spatial.transform import Slerp, Rotation
 
 from molgri.utils.arrays import angle_between_vectors, is_array_with_d_dim_r_rows_c_columns
 
@@ -36,8 +41,8 @@ def distance_between_quaternions(q1: NDArray, q2: NDArray) -> ArrayLike:
     Calculate the distance between two unit quaternions or the pairwise distances between two arrays of unit
     quaternions. Quaternion distance is like hypersphere distance, but also considers double coverage.
     Args:
-        q1 (): array either of shape (4,) or (N, 4), every row has unit length
-        q2 (): array either of shape (4,) or (N, 4), every row has unit length
+        q1 (NDArray): array either of shape (4,) or (N, 4), every row has unit length
+        q2 (NDArray): array either of shape (4,) or (N, 4), every row has unit length
 
     Returns:
         Float or an array of shape (N,) containing distances between unit quaternions.
@@ -52,11 +57,10 @@ def distance_between_quaternions(q1: NDArray, q2: NDArray) -> ArrayLike:
     return np.where(theta > pi / 2, pi-theta, theta)
 
 
-def hemisphere_quaternion_set(quaternions: NDArray, upper=True) -> NDArray:
+def hemisphere_quaternion_set(quaternions: NDArray, upper: bool = True) -> NDArray:
     """
     Select only the "upper half"/"bottom half" of hyperspherical points (quaternions that may be repeating).
-    How selection is done:
-    for all points select either q or -q, depending which is in the right hemisphere
+    How selection is done: for all points select either q or -q, depending on which is in the right hemisphere
 
     Args:
         quaternions: array (N, 4), each row a coordinate
@@ -114,7 +118,8 @@ def remove_bottom_half_quaternions(quaternions: NDArray) -> NDArray:
 
 def double_coverage_from_upper_quaternions(quaternions: NDArray) -> NDArray:
     """
-    For each q in quaternions also get -q so that the resulting list is twice as long.
+    For each q in quaternions also get -q so that the resulting list is twice as long. We don't check whether this
+    creates repetition.
     """
     N_points = quaternions.shape[0]
     all_points = np.zeros((2 * N_points, 4))
@@ -136,7 +141,7 @@ def q_in_upper_sphere(q: NDArray) -> bool:
         q: a vector/coordinate to be tested
 
     Returns:
-
+        True if q in upper hemisphere, else False
     """
     assert len(q.shape) == 1
     for i, q_i in enumerate(q):
@@ -186,7 +191,18 @@ def two_sets_of_quaternions_equal(quat1: NDArray, quat2: NDArray) -> bool:
     return True
 
 
-def find_shared_quaternions(array_1: NDArray, array_2: NDArray) -> ArrayLike:
+def find_shared_quaternions(array_1: NDArray, array_2: NDArray) -> NDArray:
+    """
+    Between two arrays containing quaternions, select only the quaternions that occur in both arrays. If they occur as q
+    in one array and -q in second one, they still occur in both arrays.
+
+    Args:
+        array_1 (NDArray): array of shape (N1, 4)
+        array_2 (NDArray): array of shape (N2, 4)
+
+    Returns:
+        an array of shared quaternions of shape (N_shared, 4)
+    """
     shared_vertices = []
     for row in array_1:
         if quaternion_in_array(row, array_2):
@@ -196,10 +212,12 @@ def find_shared_quaternions(array_1: NDArray, array_2: NDArray) -> ArrayLike:
 
 def random_quaternions(n: int = 1000, only_upper=False, rotation_random_seed: float = None) -> NDArray:
     """
-    Create n random quaternions
+    Create n random quaternions. This is a proper algorithm for truly random quaternions.
 
     Args:
         n: number of points
+        only_upper: convert all generated quaternions into upper hemisphere quaternions
+        rotation_random_seed: a seed to control and replicate the random selection
 
     Returns:
         an array of grid points, shape (n, 4)
@@ -224,12 +242,13 @@ def random_quaternions(n: int = 1000, only_upper=False, rotation_random_seed: fl
 
 def project_quaternions_to_3D(quaternion_array: NDArray) -> NDArray:
     """
-    This is only for visualization, it is not volume-preserving
+    This is only for visualization, it is not volume-preserving.
+
     Args:
-        quaternion_array ():
+        quaternion_array (NDArray): array of shape (N_quaternions, 4)
 
     Returns:
-
+        An array of shape (N_quaternions, 3) where the last component is cut away and the first thee normalized.
     """
     three_components = quaternion_array[:, :3]
     for i, q in enumerate(quaternion_array):
@@ -238,8 +257,18 @@ def project_quaternions_to_3D(quaternion_array: NDArray) -> NDArray:
     return three_components
 
 
-def additional_vertices_hyprsphere_polygons(current_vertices, n_per_line: int = 10):
-    from scipy.spatial.transform import Slerp, Rotation
+def additional_vertices_hypersphere_polygons(current_vertices: NDArray, n_per_line: int = 10):
+    """
+    This should be used for plotting. We have vertices of spherical polygons and want to interpolate additional
+    points between them.
+
+    Args:
+        current_vertices (NDArray): hypersphere vertices of shape (N_vertices, 4)
+        n_per_line (int): number of interpolation points between neighbouring vertices
+
+    Returns:
+        a longer list of hypersphere vertices including all newly generated points.
+    """
     additional_points = []
     for index_1, point1 in enumerate(current_vertices):
         for point2 in current_vertices[index_1 + 1:]:
@@ -254,21 +283,44 @@ def additional_vertices_hyprsphere_polygons(current_vertices, n_per_line: int = 
     return all_hull_points
 
 
-def assign_closest_quaternion(points: NDArray, available_quaternions) -> NDArray:
+def assign_closest_quaternion(points: NDArray, available_quaternions: NDArray) -> NDArray:
     """
+    Among a set of available quaternions, find the closest match to each quaternion in the points array. Used for
+    numerical integration on hypersphere.
+
+    This function DOES NOT take double coverage into account. It is assumed that quaternions in available_quaternions
+    cover the entire sphere. Assignment of rotated structures to a set of rotational structures is done in a
+    different way.
+
     Args:
-        points ():
-        available_quaternions ():
+        points (NDArray): array of shape (N_points, 4), each row a quaternion to be assigned
+        available_quaternions (NDArray): array of shape (N_rotations, 4), each row a "gridpoint" quaternion that is
+            available as assignment reference
 
     Returns:
-
+        an array of indices corresponding to the closest matching quaternions
     """
     # dot product of each sample with each site
-    dots = points @ available_quaternions.T           # shape (N, k)
-    return np.argmax(dots, axis=1)   # closest site (max dot = smallest angle)
+    dots = points @ available_quaternions.T
+    return np.argmax(dots, axis=1)   # closest site (max dot product = smallest angle)
 
 
-def cut_off_constant_dimension_quat(my_array: NDArray):
+def cut_off_constant_dimension_quat(my_array: NDArray) -> NDArray:
+    """
+    Sometimes we have two or more quaternions that share a constant coordinate - for example in a hypercube all
+    quaternions that belong to one cube. (Like in a normal cube, all points of one side are sharing x,
+    y or z coordinate - or if the cube is tilted, we can rotate the whole cube so that they are sharing a coordinate
+    afterwards.)
+
+    This tool rotates the points until their last coordinate is equal, then cuts the last coordinate off.
+
+    Args:
+        my_array (NDArray): array of shape (N_points, 4), each row a quaternion, the assumption is they lie in the
+        same subspace
+
+    Returns:
+        array of shape (N_points, 3), the last dimension cut off.
+    """
     u, s, vh = svd(my_array)
     rotated_points = np.dot(my_array, vh.T)
     # rotate till last dimension is only zeros, then cut off the redundant dimension. Now we can correctly
