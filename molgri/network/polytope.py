@@ -1,9 +1,12 @@
 """
-In this file, the only goal is creating and selecting points on (hyper) spheres - we do not do any hulls, spherical
-Voronois etc.
+In this file, the only goal is creating points on (hyper)spheres - we do not do any hulls, spherical Voronois, grids etc.
+
+The idea that is implemented here is using a polygon in 3D or polytope in 4D to produce evenly distributed points.
+Afterwards, the points can be added by further subdividing the "faces" of the polytope (for hypercube the "faces" are
+cubes).
 
 The main algorithm that may be subject to change in the future is select_a_node_to_delete, a system to decide which
-nodes should be removed first.
+nodes should be removed first if we don't want the exact number of nodes produced by a perfect division of a level.
 """
 
 from abc import ABC, abstractmethod
@@ -168,7 +171,7 @@ class NewPolytope(ABC):
 
 
     def _add_edges_of_len(self, edge_len: list, wished_levels: List[int] = None, only_seconds: bool = True,
-                          only_face: bool = True):
+                          only_face: bool = True) -> None:
         """
         Finds and adds all possible edges of specifies length between existing nodes (optionally only between nodes
         fulfilling face/level/second neighbour condition to save computational time).

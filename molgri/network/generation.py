@@ -1,5 +1,9 @@
 """
-Here we build Network objects from simple (1D or unit sphere) grids.
+Usually, the full Network needs to be created from all possible combinations of sub-grids. This is what is done here
+using the functionality of nx.cartesian_product.
+
+For example, we start from 1D grids in x-, y- and z-direction and all their combinations give us a
+TranslationNetwork. Afterwards, we combine each translation vector with each rotation quaternion to get a FullNetwork.
 """
 
 from typing import Tuple
@@ -20,7 +24,7 @@ from molgri.utils.quaternions import double_coverage_from_upper_quaternions, hyp
 
 def build_quaternion_network(upper_quaternions: NDArray) -> RotationNetwork:
     """
-    This is the function to use to build a network (including info like adjacency, volumes ...) from saved quaternions.
+    This is the function to build a network (including info like adjacency, volumes ...) from saved quaternions.
 
     Args:
         upper_quaternions (NDArray): a (N_rot, 4)-shaped array of unit quaternions
@@ -44,6 +48,19 @@ def build_quaternion_network(upper_quaternions: NDArray) -> RotationNetwork:
     return my_network
 
 def build_translation_network(subgrids: tuple, periodic_in) -> TranslationNetwork:
+    """
+    This is a high-level function that builds a translation network regardless of translation type (Cartesian or
+    spherical).
+
+    Args:
+        subgrids (tuple): if the network is cartesian, there will be three elements corresponding to x-,
+            y- and z-direction; if spherical, two elements corresponding to radial and unit sphere subgrids
+        periodic_in (tuple): only makes sense for the Cartesian grids, a 3-element tuple that encodes whether the
+            gridshould be considered periodic in x, y and/or z-direction.
+
+    Returns:
+        a TranslationNetwork object
+    """
     if len(subgrids) == 2:
         # spherical grid requires 2 subgrids (radial and unit sphere)
         return _build_spherical_network(subgrids)
@@ -53,6 +70,16 @@ def build_translation_network(subgrids: tuple, periodic_in) -> TranslationNetwor
         raise KeyError(f"The subgrids don't fit a cartesian nor a spherical translation algorithm.")
 
 def _build_spherical_network(subgrids: tuple) -> SphericalTranslationNetwork:
+    """
+    This function should be only accessed through build_translation_network. It builds the TranslationNetwork
+    specifically for spheric coordinates.
+
+    Args:
+        subgrids (tuple): a tuple of two elements, first is the 2D unit sphere grid, the second one a 1D radial grid
+
+    Returns:
+        a TranslationNetwork object
+    """
     spherical_grid, r_grid = subgrids
     spherical_grid = np.array(spherical_grid)
     r_grid = np.array(r_grid)
@@ -95,6 +122,20 @@ def _build_spherical_network(subgrids: tuple) -> SphericalTranslationNetwork:
 
 
 def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> CartesianTranslationNetwork:
+    """
+    This function should be only accessed through build_translation_network. It builds the TranslationNetwork
+    specifically for Cartesian coordinates.
+
+    It is able to handle periodicity, e.g. if the x-direction is periodic, the first and last element are neighbours
+    (otherwise not).
+
+    Args:
+        xyz_subgrids (tuple): a three-element tuple, each element is a 1D grid (in x, y and z-directions)
+        periodic_in (tuple): a three-element tuple, each element tells whether this direction is periodic
+
+    Returns:
+        a TranslationNetwork object
+    """
     sub_networks = []
     labels = ("x", "y", "z")
     for i in range(3):
@@ -109,7 +150,7 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
         # now add edges to these sub-graphs - this is without periodicity
         for node_1, node_2 in zip(nodes[:-1], nodes[1:]):
             G.add_edge(node_1, node_2, edge_type=labels[i])
-        # possible periodicity - add edge between first and last element
+        # if periodic - add edge between first and last element
         if periodic_in[i]:
             G.add_edge(nodes[0], nodes[-1], edge_type=labels[i])
         sub_networks.append(G)
@@ -145,6 +186,7 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
     hulls = unit_spherical_voronoi.get_hulls()
     try:
         volumes = hypersphere_voronoi_cell_volumes(double_coverage_points)
+    # for very large numbers of points, the numerical integration might fail due to memory limity
     except MemoryError:
         volumes = [None] * N_upper_points
 
@@ -176,6 +218,18 @@ def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple
 
 
 def create_full_network(translation_network: TranslationNetwork, rotation_network: RotationNetwork) -> FullNetwork:
+    """
+    This is the last step to get a FullNetwork. We simply combine all translation node options with all rotation node
+    options. Two nodes in FullNetwork are neighbours if they are either rotational neighbours (with same translation
+    node) or translational neighbours (with same rotation node).
+
+    Args:
+        translation_network (TranslationNetwork): a fully generated TranslationNetwork with all translational edges
+        rotation_network (RotationNetwork): a fully generated RotationNetwork with all rotational edges
+
+    Returns:
+        a FullNetwork
+    """
     full_network = nx.cartesian_product(translation_network, rotation_network)
     mapping = {(trans, rot): FullNode(trans, rot) for (trans, rot) in full_network.nodes}
     full_network = nx.relabel_nodes(full_network, mapping)
