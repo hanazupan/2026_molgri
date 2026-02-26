@@ -5,10 +5,10 @@ Every rule here should save to assign/ directory.
 from MDAnalysis import Universe, Writer
 import numpy as np
 
-from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths, wrap_multiple_atoms_to_cuboid_cell, wrap_to_cuboid_cell
-from molgri.molecules.assignment import assign_to_cartesian_translation_grid
+from molgri.molecules.find_unit_cell import get_cuboid_cell_side_lengths, wrap_multiple_atoms_to_cuboid_cell, wrap_to_cuboid_cell
+from molgri.molecules.assignment import assign_to_cartesian_translation_grid, assign_to_best_orientation
 
-from workflow.helpers.io import get_num_atoms, get_atomgoup_m1, get_atomgoup_m2, read_object, write_object
+from workflow.helpers.io import get_num_atoms, read_object, write_object
 
 ##################################### POSITION ASSIGNMENT ####################################################
 
@@ -35,8 +35,7 @@ rule wrap_trajectory2cuboid_cell:
         ag2 = ag2[n_mol1:]
 
 
-        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
-        print(side_lengths)
+        side_lengths = get_cuboid_cell_side_lengths(input.structure1)
 
         with Writer(output.wrapped_trajectory, u.atoms.n_atoms) as W:
             for ts in u.trajectory:
@@ -62,7 +61,7 @@ rule wrap_molecule2_COM:
         write_object(com_array_m2, output.com_m2)
 
         # determine cuboid cell
-        side_lengths = get_rectangular_cell_side_lengths(input.structure1)
+        side_lengths = get_cuboid_cell_side_lengths(input.structure1)
         origin = np.zeros(3)
 
         # wrap
@@ -185,46 +184,18 @@ rule rotation_assignment:
         trajectory_universe = Universe(input.structure2, input.trajectory)
         reference_universe = Universe(input.structure2, input.reference_pt)
 
-        # last_atom = trajectory_universe.atoms
-        #
-        # trajectory_universe.trajectory[83546]
-        # pos = last_atom.positions.copy()
-        #
-        # N_rotations = int(config["grid"]["N_rotations"])
-        #
-        # pos_ref = np.array([ts.positions.copy() for ts in reference_universe.trajectory[:N_rotations]])
-        #
-        # distances = np.empty(len(pos_ref))
-        # for i, ref_structure in enumerate(pos_ref):
-        #     distances_to_this_ref = np.linalg.norm(pos - ref_structure, axis=1)
-        #     print(distances_to_this_ref)
-        #     total_distances = distances_to_this_ref.sum(axis=0)
-        #     distances[i] = total_distances
-        #
-        # print(distances)
-
+        # TODO: move this to a function
 
         N_rotations = int(config["grid"]["N_rotations"])
 
         #TODO if possible: use gromacs or similar to extract position array faster
 
+        # shape (N_frames, N_atoms, 3)
         pos = np.array([ts.positions.copy() for ts in trajectory_universe.trajectory])
         # shape (N_rotations, N_atoms, 3)
         pos_ref = np.array([ts.positions.copy() for ts in reference_universe.trajectory[:N_rotations]])
 
-
-        # shape (N_rotations, N_frames)
-        distances = np.empty((len(pos_ref), len(pos)))
-
-        # TODO: see if using worker pool could be helpful here
-
-        for i, ref_structure in enumerate(pos_ref):
-            distances_to_this_ref = np.linalg.norm(pos - ref_structure, axis=2)
-            total_distances = distances_to_this_ref.sum(axis=1)
-            distances[i] = total_distances
-
-
-        best_indices = np.argmin(distances.T, axis=1)
+        best_indices = assign_to_best_orientation(pos, pos_ref)
         write_object(best_indices, output.assigned_trajectory)
 
 ##################################### FULL ASSIGNMENT ####################################################
@@ -242,27 +213,8 @@ checkpoint full_assignment:
         grid_info = read_object(input.grid_info)
         N_rotations = int(grid_info["N_rotations"])
         full_assignments = translation_assignments * N_rotations + rotation_assignments
-        print(full_assignments[27], rotation_assignments[27], translation_assignments[27])
-
         write_object(full_assignments, output.full_assignment)
 
-rule print_assignment:
-    input:
-        trans_csv = f"<outputs_assignment>translation_assignment.csv",
-        translation_assignment = f"<outputs_assignment>translation_assignment.npy",
-        rot_assignment = f"<outputs_assignment>rotation_assignment.npy",
-        full_assignment = f"<outputs_assignment>full_assignment.npy",
-    run:
-        my_assignments = read_object(input.rot_assignment)
-        print("Rot assignment: ", my_assignments[[5390, 44854, 83546]])
-        my_assignments = read_object(input.translation_assignment)
-        print("Trans assignment: ", my_assignments[[5390, 44854, 83546]])
-        my_assignments = read_object(input.full_assignment)
-        print(my_assignments[[5390, 44854, 83546]])
-
-        df = read_object(input.trans_csv, header = [0,1])
-        print(df)
-        print(df.loc[83546])
 
 rule count_assignments:
     input:

@@ -1,6 +1,5 @@
 import numpy as np
 from plotly.tools import DEFAULT_PLOTLY_COLORS
-from sympy.physics.units import volts, volume
 
 from molgri.molecules.transitions import MSM, SQRA
 from workflow.helpers.io import read_object, write_object, read_from_mdrun, get_num_atoms
@@ -43,7 +42,7 @@ rule make_sqra:
         sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces)
 
         rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K)
-        print(np.max(rate_matrix.data),np.min(rate_matrix.data),np.max(-rate_matrix.data),np.min(-rate_matrix.data))
+        #print(np.max(rate_matrix.data),np.min(rate_matrix.data),np.max(-rate_matrix.data),np.min(-rate_matrix.data))
         # saving to file
         write_object(rate_matrix, output.rate_matrix)
 
@@ -101,47 +100,84 @@ rule get_implied_timescales:
 
         write_object(its, output.its)
 
-checkpoint find_indices_dominant_eigenvectors:
-    """
-    For each eigenvector find the structures that contribute the most to the eigenvector.
-    """
-    input:
-        eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
-    output:
-        abs_e_indices = expand(f"<outputs_indices>{{tau}}/0_eigenvector_{{j}}_largest_abs_values.txt",
-            j=config["msm"]["num_extremes_to_plot"], allow_missing=True),
-        pos_e_indices = expand(f"<outputs_indices>{{tau}}/{{i}}_eigenvector_{{j}}_most_positive.txt",
-            i=range(1, config["msm"]["num_interesting_eigenvectors"]), j=config["msm"]["num_extremes_to_plot"],
-            allow_missing=True),
-        neg_e_indices= expand(f"<outputs_indices>{{tau}}/{{i}}_eigenvector_{{j}}_most_negative.txt",
-            i=range(1,config["msm"]["num_interesting_eigenvectors"]),j=config["msm"]["num_extremes_to_plot"],
-            allow_missing=True)
-    run:
-        from molgri.create_vmdlog import TrajectoryIndexingTool
 
-        eigenvectors = read_object(input.eigenvectors)
-
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
-        N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
-
-        tit = TrajectoryIndexingTool()
-        tit.set_eigenvectors(eigenvectors.T)
-
-        # the shape of abs_e is (2*N_extremes_to_plot)
-        # the shapes of pos_e and neg_e are (N_interesting_eigenvectors - 1, N_extremes_to_plot)
-        abs_e, pos_e, neg_e = tit.get_all_dominant_structures(N_extremes_to_plot, N_interesting_eigenvectors)
-
-        # save the absolute
-        write_object(np.array(abs_e),output.abs_e_indices[0])
-
-        # save the positive and negative indices
-        for i in range(N_interesting_eigenvectors - 1):
-            write_object(np.array(pos_e[i]), output.pos_e_indices[i])
-            write_object(np.array(neg_e[i]),output.neg_e_indices[i])
 
 rule plot_all_eigenvectors_as_lines:
     input:
-        expand(f"<outputs_other_plots>eigenvectors_for_tau_{{tau}}.png", tau=TAUS)
+        expand(f"<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_{{tau}}.png", tau=[10])
+
+rule plot_vmd_eigenvectors_as_lines_grouped_by_z_coo:
+    input:
+        eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
+        grid_info= rules.save_basic_grid_information.output.info_material
+    output:
+        plot = f"<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_{{tau}}.png"
+    run:
+        import plotly.graph_objects as go
+        import numpy as np
+        from plotly.subplots import make_subplots
+
+        grid_info = read_object(input.grid_info)
+        N_rotations = grid_info["N_rotations"]
+        N_translations = grid_info["N_translations"]
+        subgrids = grid_info["subgrid_points"]
+        len_x, len_y, len_z = len(subgrids[0]), len(subgrids[1]), len(subgrids[2])
+        print(len_x, len_y, len_z)
+
+        eigenvector_array = read_object(input.eigenvectors)
+        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+
+        groups_by_rotation_index = np.repeat(np.arange(len_z), N_rotations*len_x*len_y)
+        print(groups_by_rotation_index)
+
+        fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
+
+        for row in range(N_interesting_eigenvectors):
+            eigenvector = eigenvector_array[:, row]
+            out = np.bincount(groups_by_rotation_index ,weights=eigenvector,minlength=len_z)
+            fig.add_trace(
+                go.Bar(x=np.arange(len_z),y=out, text=[f"{i:>2}" for i in np.arange(N_rotations)]),row=1+row,col=1)
+        fig.update_layout(showlegend=False, plot_bgcolor="white", paper_bgcolor="white")
+        #fig.update_yaxes(range=[-5, 5])
+        #fig.update_yaxes(range=[-5, 0], row=1, col=1)
+        fig.update_xaxes(showticklabels=False)
+        fig.write_image(output.plot, scale=3)
+
+rule plot_vmd_eigenvectors_as_lines_grouped_by_rotation:
+    input:
+        eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
+        grid_info= rules.save_basic_grid_information.output.info_material
+    output:
+        plot = f"<outputs_other_plots>grouped_by_rotation_eigenvectors_for_tau_{{tau}}.png"
+    run:
+        import plotly.graph_objects as go
+        import numpy as np
+        from plotly.subplots import make_subplots
+
+        grid_info = read_object(input.grid_info)
+        N_rotations = grid_info["N_rotations"]
+        N_translations = grid_info["N_translations"]
+
+
+        eigenvector_array = read_object(input.eigenvectors)
+        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+
+        groups_by_rotation_index = np.tile(np.arange(N_rotations), N_translations)
+
+
+        fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
+
+        for row in range(N_interesting_eigenvectors):
+            eigenvector = eigenvector_array[:, row]
+            out = np.bincount(groups_by_rotation_index ,weights=eigenvector,minlength=N_rotations)
+            fig.add_trace(
+                go.Bar(x=np.arange(N_rotations),y=out, text=[f"{i:>2}" for i in np.arange(N_rotations)]),row=1+row,col=1)
+        fig.update_layout(showlegend=False, plot_bgcolor="white", paper_bgcolor="white")
+        fig.update_yaxes(range=[-5, 5])
+        fig.update_yaxes(range=[-5, 0], row=1, col=1)
+        fig.update_xaxes(showticklabels=False)
+        fig.write_image(output.plot, scale=3)
+
 
 rule plot_vmd_eigenvectors_as_lines:
     input:
@@ -164,57 +200,6 @@ rule plot_vmd_eigenvectors_as_lines:
                     mode="lines"),row=1+row,col=1)
 
         fig.write_image(output.plot, scale=3)
-
-
-# rule plot_vmd_eigenvectors:
-#     input:
-#         structure = f"<simulation>structure.<ext_str>",
-#         structure1 = f"<simulation>molecule1.<ext_str>",
-#         trajectory = f"<outputs_assignment>wrapped_trajectory.<ext_trj>",
-#         abs_e_indices=rules.find_indices_dominant_eigenvectors.output.abs_e_indices,
-#         pos_e_indices=rules.find_indices_dominant_eigenvectors.output.pos_e_indices,
-#         neg_e_indices=rules.find_indices_dominant_eigenvectors.output.neg_e_indices,
-#         translation_rotation_script= f"<inputs_vmd>script3.log",
-#         grid_info = "<outputs_network>grid_info.yaml",
-#     output:
-#         vmdlog = f"<outputs_vmd>eigenvectors/{{tau}}/eigenvectors.log",
-#         plots = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",
-#             i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True)
-#     run:
-#         from molgri.create_vmdlog import VMDCreator
-#
-#         all_abs = np.array(read_object(input.abs_e_indices[0]))
-#         all_pos = []
-#         for pos_file in input.pos_e_indices:
-#             all_pos.append(read_object(pos_file))
-#         all_pos = np.array(all_pos)
-#         all_neg = []
-#         for neg_file in input.neg_e_indices:
-#             all_neg.append(read_object(neg_file))
-#         all_neg = np.array(all_neg)
-#
-#         N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
-#         N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
-#
-#         n1 = get_num_atoms(input.structure1)
-#
-#         my_vmd = VMDCreator(f"index < {n1}", f"index >= {n1}")
-#
-#         # drawing the rectangular box
-#         grid_info = read_object(input.grid_info)
-#         subgrid_limits = grid_info["subgrid_limits_A"]
-#         my_vmd.add_box(subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1])
-#
-#         my_vmd.load_translation_rotation_script(input.translation_rotation_script)
-#         my_vmd.prepare_eigenvector_script(all_abs, all_pos, all_neg, plot_names=output.plots)
-#         my_vmd.write_text_to_file(output.vmdlog)
-#
-#         shell("vmd  -dispdev text {input.structure} {input.trajectory} < {output.vmdlog}")
-
-rule for_tau1:
-    input:
-        expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/eigenvector{{i}}.tga",i=range(config["msm"]["num_interesting_eigenvectors"]), tau=TAUS)
-
 
 rule run_plot_its_msm:
     input:

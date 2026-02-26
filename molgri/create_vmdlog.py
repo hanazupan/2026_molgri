@@ -505,7 +505,7 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
             # plot all provided frames except 0
             self._add_representation(first_molecule=False, second_molecule=True, periodic="zZ",
                                        representation="Licorice", trajectory_frames=list(range(1, num_frames+1)))
-        if draw_rectangular_box is not None:
+        if draw_rectangular_box:
             self.add_box(*box_limits)
         if gridpoints is not None:
             self.add_grid(gridpoints)
@@ -546,21 +546,22 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
                                        representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
         if draw_m2:
             # plot red frames
-            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ", color="red",
-                                       representation="Licorice", trajectory_frames=list(range(1, num_red+1)))
+            self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ",
+                                     coloring= "ColorID", color="red",
+                                    representation="Licorice", trajectory_frames=list(range(1, num_red+1)))
             # plot blue frames
             self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ", color="blue",
-                                     representation="Licorice",
+                                     representation="Licorice", coloring="ColorID",
                                      trajectory_frames=list(range(num_red+1, num_red + num_blue + 1)))
-        if draw_rectangular_box is not None:
+        if draw_rectangular_box:
             self.add_box(*box_limits)
         if gridpoints is not None:
             self.add_grid(gridpoints)
         if translation_rotation_script:
             self._add_rotations_translations()
         self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
-        # we only have two representations even if the second one potentially uses multiple frames
-        self._render_representations([0, 1], plot_path=plot_name)
+        # we always have three representations (first molecule, second in red, second in blue
+        self._render_representations([0, 1, 2], plot_path=plot_name)
         self.write_text_to_file(vmd_name)
 
     def prepare_evec_0(self, num_structures: int, plot_name: str) -> None:

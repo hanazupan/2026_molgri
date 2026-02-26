@@ -1,10 +1,19 @@
+"""
+When we have periodic molecules as part of the system (molecule 1) we face a particular challenge: the simulation cell
+must be pretty large so that molecule 2 doesn't interact with itself, but the unit cell is much smaller.
+
+We want our grid to only fill out the unit cell. Actually, for simplicity we want the smallest cuboid unit cell
+- a rhomboid might form a smaller unit cell but then we would need to adapt our translation grid. Therefore, in the
+function find_cuboid_cell we automatically search which combination of unit vectors form a cuboid repeating
+cell.
+"""
+
 from itertools import product
 
 import plotly.graph_objects as go
 from MDAnalysis import Universe
 from ase.io import read
-from ase.io.rmc6f import ncols2style
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -14,11 +23,18 @@ from scipy.spatial import cKDTree
 
 
 
-def is_orthorhombic(lattice: NDArray, ang_tol_deg=1e-2):
+def is_orthorhombic(lattice: NDArray, ang_tol_deg=1e-2) -> bool:
     """
     This is a simple check that a lattice defined by a 3x3 lattice where each row is a basis vector is (
-    approximately) orthogonal. The test could be simpler, but because we want to control the numerical error,
-    we calculate the three angles directly.
+    approximately) orthogonal. The test could be simpler using linear algebra, but because we want to control the
+    numerical error, we calculate the three angles directly.
+
+    Args:
+        lattice (NDAarray): lattice array of hape (3,3), each row is a basis vector
+        ang_tol_deg (float): allowing the angles between vectors to not be perfect 90° angles
+
+    Returns:
+        True if the provided lattice is close enough to a orthogonal vector set, else False
     """
     a, b, c = lattice[0], lattice[1], lattice[2]
     def angle(u, v):
@@ -32,7 +48,7 @@ def is_orthorhombic(lattice: NDArray, ang_tol_deg=1e-2):
             abs(beta  - 90.0) <= ang_tol_deg and
             abs(gamma - 90.0) <= ang_tol_deg)
 
-def is_periodic(positions: NDArray, candidate_lattice: NDArray, pos_tol=0.01) -> bool:
+def is_periodic(positions: NDArray, candidate_lattice: NDArray, pos_tol: float = 0.01) -> bool:
     """
     Check if 'candidate_lattice' yields a repeating cell for the given Cartesian positions.
 
@@ -71,10 +87,10 @@ def is_periodic(positions: NDArray, candidate_lattice: NDArray, pos_tol=0.01) ->
     dists, idx = tree.query(positions, k=1)
     return bool(np.all(dists <= pos_tol))
 
-def find_rectangular_cell(ase_cell: list, ase_positions: NDArray, numerator_options =(-2,-1,0,1,2),
+def find_cuboid_cell(ase_cell: list, ase_positions: NDArray, numerator_options =(-2,-1,0,1,2),
                           denominator_options = (1,2,4), ang_tol_deg=1e-2, pos_tol=1e-3) -> NDArray:
     """
-    Find the lattice vectors that describe the smallest rectangular cell that describe the periodic molecule provided in
+    Find the lattice vectors that describe the smallest cuboid cell that describe the periodic molecule provided in
     positions.
 
     How this works:
@@ -99,7 +115,7 @@ def find_rectangular_cell(ase_cell: list, ase_positions: NDArray, numerator_opti
         pos_tol (float): tolerance for not perfectly symmetric structure
 
     Returns:
-        an array in which each row is a lattice vector of a rectangular cell
+        an array in which each row is a lattice vector of a cuboid cell
     """
     L = np.array( ase_cell, dtype=float)
     results = []
@@ -158,7 +174,7 @@ def find_rectangular_cell(ase_cell: list, ase_positions: NDArray, numerator_opti
 
 def find_primitive_cell(path_structure: str, precision: float = 0.01) -> Structure:
     """
-    Find the smallest (but not necessarily rectangular) unit cell of structure at path_structure.
+    Find the smallest (but not necessarily cuboid) unit cell of structure at path_structure.
 
     Args:
         path_structure (str): where to find the structure file (eg .gro file) of a periodic molecule
@@ -177,14 +193,15 @@ def find_primitive_cell(path_structure: str, precision: float = 0.01) -> Structu
 def get_x_y_grid_inputs(structure_path: str, num_x_points: int, num_y_points: int) -> tuple[list, list]:
     """
     This is a high-level function to automatically set x and y grid parameters for a repeating molecular structure
-    provided in structure_path. The grid starts at (0, 0) and extends to the smallest repeatable rectangular cell.
+    provided in structure_path. The grid starts at (0, 0) and extends to the smallest repeatable cuboid cell.
 
     How this is done:
-    1) we first determine the (often non-rectangular) primitive cell
+    1) we first determine the (often non-cuboid) primitive cell
     2) we then tile the primitive cell in xy direction to get a supercell
-    3) based on the supercell we find a rectangular lattice with the smallest volume that is repeatable
+    3) based on the supercell we find a cuboid lattice with the smallest volume that is repeatable
 
-    When you are using this for a new system, you MUST TEST that the assignment of rectangular cell is correct.
+    When you are using this for a new system, you MUST TEST that the assignment of cuboid cell is correct by
+    visualizing the cuboid cell on the structure - see molecular_visualizations.smk
 
     Args:
         structure_path (str): path to the structure file (gro file)
@@ -194,31 +211,63 @@ def get_x_y_grid_inputs(structure_path: str, num_x_points: int, num_y_points: in
     Returns:
         [[x_min, x_max, x_step], [y_min, y_max, y_step]]
     """
-    max_x, max_y, max_z = get_rectangular_cell_side_lengths(structure_path)
+    max_x, max_y, max_z = get_cuboid_cell_side_lengths(structure_path)
     return [0, max_x, num_x_points], [0, max_y, num_y_points]
 
-def get_rectangular_cell_side_lengths(structure_path: str):
+def get_cuboid_cell_side_lengths(structure_path: str):
     primitive_structure = find_primitive_cell(structure_path)
     primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
 
     supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
 
-    rectangular_lattice = find_rectangular_cell(supercell_atoms.get_cell(), np.array(supercell_atoms.get_positions()),
+    cuboid_lattice = find_cuboid_cell(supercell_atoms.get_cell(), np.array(supercell_atoms.get_positions()),
                                                 numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
 
-    Lx = float(rectangular_lattice[0][0])
-    Ly = float(rectangular_lattice[1][1])
-    Lz = float(rectangular_lattice[2][2])
+    Lx = float(cuboid_lattice[0][0])
+    Ly = float(cuboid_lattice[1][1])
+    Lz = float(cuboid_lattice[2][2])
     return np.array([Lx, Ly, Lz])
 
-def wrap_to_cuboid_cell(origin: NDArray, side_lengths: NDArray, coordinates:NDArray, wrap_only_xy: bool = False):
+def wrap_to_cuboid_cell(origin: NDArray, side_lengths: NDArray, coordinates: NDArray,
+                        wrap_only_xy: bool = False) -> NDArray:
+    """
+    A simulation is done in a larger simulation cell. However, since the cuboid cell is infinitely repeating,
+    each coordinate outside the cuboid cell can be "wrapped" to a corresponding position within the cell. This
+    function returns the coordinates wrapped to the cuboid cell. This is done using the modulo operator.
+
+    Args:
+        origin (NDArray): an array of shape (3,) describing where the unit cell starts - typically (0,0,0)
+        side_lengths (NDArray): an array of shape (3,) describing the length of the cell in each direction
+        coordinates (NDArray): an array of shape (N_points, 3) of coordinates that might be inside or outside the
+            cuboid cell
+        wrap_only_xy (bool): if True, leave the z-coordinate as-is and only wrap x and y coordinates
+
+    Returns:
+        an array of shape (N_points, 3) where each point of input coordinates is transformed so that it lies at a
+        corresponding position in the cuboid cell
+    """
     if wrap_only_xy:
         wrapped_2D = origin[:2] + np.mod(coordinates[:,:2] - origin[:2], side_lengths[:2])
         return np.column_stack((wrapped_2D, coordinates[:, 2]))
     return origin + np.mod(coordinates - origin, side_lengths)
 
-def wrap_multiple_atoms_to_cuboid_cell(com: NDArray, coordinates:NDArray, side_lengths: NDArray, wrap_only_xy: bool =
-False):
+def wrap_multiple_atoms_to_cuboid_cell(com: NDArray, coordinates: NDArray, side_lengths: NDArray,
+                                       wrap_only_xy: bool = False) -> NDArray:
+    """
+    Similar to wrap_to_cuboid_cell, but the coordinates are not independent, all belong to the same construct,
+    e.g. same molecule. Therefore, they should be wrapped together. This method ensures that the center of mass lies
+    inside the cuboid cell, but some of the individual coordinates might lie slightly outside of it.
+
+    Args:
+        com (NDArray): an array of shape (3,) for center of mass of given coordinates
+        coordinates (NDArray): an array of shape (N_points, 3) for coordinates that should be wrapped
+        side_lengths (NDArray): an array of shape (3,) describing the length of the cell in each direction
+        wrap_only_xy (bool): if True, leave the z-coordinate as-is and only wrap x and y coordinates
+
+    Returns:
+        an array of shape (N_points, 3) where each point of input coordinates is transformed by the same vector so
+        that COM lies inside the cuboid cell
+    """
     vector_com_to_atom = coordinates - com
     com_wrapped = wrap_to_cuboid_cell(np.zeros((3,)), side_lengths, com[np.newaxis, :], wrap_only_xy)
     if wrap_only_xy:
@@ -229,14 +278,11 @@ False):
 if __name__ == "__main__":
     """
     Here we have some very useful plotting to visualize the process:
-    1) we first determine the (often non-rectangular) primitive cell
+    1) we first determine the (often non-cuboid) primitive cell
     2) we then tile the primitive cell in xy direction to get a supercell
-    3) based on the supercell we find a rectangular lattice with the smallest volume that is repeatable
+    3) based on the supercell we find a cuboid lattice with the smallest volume that is repeatable
     """
     from molgri.plotting import draw_structure, draw_unit_cell
-    from MDAnalysis.analysis.base import AnalysisFromFunction
-    from workflow.helpers.io import write_object
-    from MDAnalysis import Writer
 
     my_path = "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/pseudosimulation/"
 
@@ -247,22 +293,7 @@ if __name__ == "__main__":
     u = Universe(structure, trajectory)
     ag2 = u.select_atoms("all")
     ag2 = ag2[1056:]
-    #
-    # side_lengths = get_rectangular_cell_side_lengths(structure1)
-    #
-    # with Writer(f"{my_path}wrapped_trajectory.xtc", u.atoms.n_atoms) as W:
-    #     for ts in u.trajectory:
-    #         #print("before", ts.positions[1057])
-    #         ts.positions[1056:] = wrap_multiple_atoms_to_cuboid_cell(ag2.center_of_mass(),
-    #                                                                  ts.positions[1056:],
-    #                                                                  side_lengths,
-    #                                                                  wrap_only_xy=True)
-    #         #print("after", ts.positions[1057])
-    #         W.write(u.atoms)
-    # print(side_lengths)
-    #
-    # write_object(u, "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/simulation/gromacs
-    # /wrapped_trajectory.xtc")
+
     primitive_structure = find_primitive_cell(structure)
     primitive_atoms = AseAtomsAdaptor.get_atoms(primitive_structure)
 
@@ -270,16 +301,16 @@ if __name__ == "__main__":
     supercell_atoms = make_supercell(primitive_atoms, np.diag([2,2,1]))
     supercell_structure = AseAtomsAdaptor.get_structure(supercell_atoms)
 
-    rectangular_unit_structure = find_rectangular_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
+    cuboid_unit_structure = find_cuboid_cell(supercell_atoms.get_cell(), supercell_atoms.get_positions(),
                                                        numerator_options=(-1,0,1), denominator_options=(1, 2, 4))
 
-    print(rectangular_unit_structure)
+    print(cuboid_unit_structure)
 
 
     fig = go.Figure()
     draw_unit_cell(fig, primitive_structure.lattice.matrix.diagonal())
     draw_unit_cell(fig, supercell_structure.lattice.matrix.diagonal(), color="red")
 
-    draw_unit_cell(fig, rectangular_unit_structure.diagonal(), color="green")
+    draw_unit_cell(fig, cuboid_unit_structure.diagonal(), color="green")
 
     draw_structure(fig, structure1, show=True)

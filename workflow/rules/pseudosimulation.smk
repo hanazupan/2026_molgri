@@ -93,25 +93,11 @@ rule create_pseudotrajectory:
 
         network = read_object(input.network)
         weights = m2.atoms.masses
-        print("weights are ", weights)
         coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions, weights)
 
         pt = get_bimolecular_pseudotrajectory(m1, m2, coordinates)
         write_object(pt, output.trajectory)
 
-
-
-
-# checkpoint create_energy_csv_pseudotrajectory:
-#     """
-#     For the pseudotrajectory, read the energy of each frame.
-#     """
-#     input:
-#         energy="<pseudosimulation>energy.xvg",
-#     output:
-#         energy_csv = "<pseudosimulation>energy.csv"
-#     run:
-#         from_xvg_to_csv_energy(input.energy, output.energy_csv)
 
 rule read_in_energies:
     """
@@ -128,31 +114,3 @@ rule read_in_energies:
         my_energy_array = my_energy["Binding energy [kJ/mol]"].to_numpy()
         my_network.add_node_properties(my_energy_array,"binding_energy")
         write_object(my_network, output.network_energy)
-
-
-
-
-# rule pseudotrajectory_slice_gromacs:
-#     """
-#     This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
-#     instead of trajectory in input.
-#     """
-#     input:
-#         trajectory=f"<pseudosimulation>trajectory_with_timesteps.<ext_trj>",
-#         structure_tpr=f"<pseudosimulation>structure.gro",
-#         index=f"<pseudosimulation>index.ndx",
-#         runfile=f"<pseudosimulation>production.mdp"
-#     benchmark:
-#         repeat("<pseudosimulation_traj_slices>duration_frame_{frame_i}.txt",1)
-#     shadow: "minimal"
-#     output:
-#         frame_gro="<pseudosimulation_traj_slices>frame_{frame_i}.<ext_str>",
-#     run:
-#         from workflow.helpers.io import read_from_mdrun
-#         writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
-#         time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
-#         selected_time = int(wildcards.frame_i) * writeout * time_step_ps
-#         shell("""
-#         export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-#         echo "0\n" |  gmx22 trjconv -f {input.trajectory} -s  {input.structure_tpr} -o {output.frame_gro} -n {input.index} -dump {selected_time}
-#         """)

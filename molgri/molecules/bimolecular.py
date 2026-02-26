@@ -1,6 +1,8 @@
 """
-This is the file in which we are using MDAnalysis to merge universes of static and moving parts of the system and
-therefore create pseudotrajectories from atoms and frames.
+Our molecular systems are always bimolecular - consist of two structures.
+
+In this file we use MDAnalysis to modify these structures, e.g. bring m1 and m2 together as a structure or as a
+pseudotrajectory and move molecules to origin.
 """
 
 from MDAnalysis.coordinates.memory import MemoryReader
@@ -9,7 +11,7 @@ import numpy as np
 from MDAnalysis import Universe, Merge
 
 
-def combine_coordinates(static_coordinates: NDArray, moving_coordinates: NDArray):
+def combine_coordinates(static_coordinates: NDArray, moving_coordinates: NDArray) -> NDArray:
     """
     For each frame of the trajectory, we want to stack the coordinates of the first molecule (that do not change at all)
     with the coordinates of the second molecule that change with very step.
@@ -36,15 +38,16 @@ def combine_coordinates(static_coordinates: NDArray, moving_coordinates: NDArray
 def get_bimolecular_structure(universe_static: Universe, universe_moving: Universe, z_distance: float = None) -> Universe:
     """
     The goal here is to combine the atoms from both Universe objects to create a combined Universe. This will be
-    exported as the structure file. Only a single frame  is returned even if universes have trajectories attached.
+    exported as the structure file. Only a single frame is returned even if universes have trajectories attached.
 
-    Note that the atoms are not moved, so if both universes are centered at zero,
-    they likely overlap. However, a structure file is a formal requirement of some programs like GROMACS or VMD.
+    Note that the atoms of molecule 2 can be moved along the z-axis so that the two molecules don't overlap. However,
+    it often plays no role whether the atoms overlap since the structure file is usually used as information on atom
+    types, not positions - for programs like GROMACS or VMD.
 
     Args:
         universe_static (Universe): contain the atoms of molecule 1 that do not move during a pseutotrajectory
         universe_moving (Universe): contain the atoms of molecule 2 that move
-        z_distance (float): if not None molecule 2 will be translated in the z-direction for this amount
+        z_distance (float): if not None molecule 2 will be translated in the z-direction for this amount (unit is A)
 
     Returns:
         a Universe object where atoms from both are combined.
@@ -60,7 +63,7 @@ def get_bimolecular_pseudotrajectory(universe_static: Universe, universe_moving:
     Using two molecular structures and a list of coordinates, create a single Universe object that shows these two
     molecules in all given coordinates.
 
-    Both molecules will be initially centered at their centre of mass.
+    Both molecules are initially centered with their centre of mass moved to the origin.
 
     Args:
         universe_static (Universe): first molecular object with N_1 atoms

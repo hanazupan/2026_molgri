@@ -180,23 +180,8 @@ rule create_index_csv:
         df["Rotation index"] = df["Rotation index"].astype("Int64")
 
         df.columns = pd.MultiIndex.from_tuples(tuples)
-
-        print(df)
         write_object(df, output.energy_csv)
 
-
-rule print_indices_interpretation:
-    """
-    Use this rule if you want to quickly look at the indices and understand them.
-    """
-    input:
-        indices_csv =f"<outputs_network>indices_interpretation.csv"
-    run:
-        df = read_object(input.indices_csv)
-        print(df)
-        # for example only filter the ones with specific rotation index
-        #df_filtered = df.loc[df["Rotation index"] == 5]
-        #print(df_filtered.head(10))
 
 
 rule display_geometry_properties_with_violin_distributions:

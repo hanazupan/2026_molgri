@@ -3,6 +3,7 @@ import numpy as np
 from molgri.network.polytope import Cube4DPolytope, IcosahedronPolytope
 from molgri.utils.arrays import all_rows_unique
 from molgri.utils.quaternions import random_quaternions
+from molgri.molecules.find_unit_cell import get_x_y_grid_inputs
 
 PATH_INPUT_MOLECULES = "inputs/one_molecule_structures/"
 
@@ -15,7 +16,6 @@ def auto_create_grid(config_data: dict):
         return config_data
     all_translation_coo = np.array(config_data["grid"]["translation_subgrids_A"]).reshape(-1)
     if 'None' in all_translation_coo:
-        from molgri.molecules.find_unit_cell import get_x_y_grid_inputs
         path_input = f"{PATH_INPUT_MOLECULES}{config_data['pseudotrajectory']['molecule_1']}.gro"
         num_x_points = config_data["grid"]["translation_subgrids_A"][0][2]
         num_y_points = config_data["grid"]["translation_subgrids_A"][1][2]

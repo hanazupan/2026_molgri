@@ -11,3 +11,5 @@ Prepare two .gro files of each molecule separately. They do not need to be cente
 
 ## Gromacs
 Pseudotrajectories are prepared in such a way that the center of mass of molecule 1 is at (0,0,0). The simulation starts at (0,0,0) and extends to (Lx, Ly, Lz), so the structures are NOT centered in the box. In the simulation, the structures automatically get centered during the simulation but after the simulation they are again aligned so that the center of mass of molecule 1 is at (0, 0, 0).
+
+Units of distance are A. Units of energy are kJ/mol.

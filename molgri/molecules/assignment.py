@@ -1,5 +1,5 @@
 """
-This file deals with assigning trajectory frames to their closest grid positions and orientations
+This file deals with assigning trajectory frames to their closest grid positions and orientations.
 """
 from functools import partial
 from multiprocessing import Pool
@@ -9,17 +9,26 @@ from MDAnalysis.lib.distances import calc_bonds
 from numpy.typing import NDArray
 import numpy as np
 
-def assign_1D(points_to_assign: NDArray, grid_points: NDArray, limits: list, is_periodic: bool):
+def assign_1D(points_to_assign: NDArray, grid_points: NDArray, limits: list, is_periodic: bool) -> NDArray:
     """
+    Given a 1D grid (eg. [0, 0.5, 1.0, 1.5]) that might or might not be periodic and 1D points (eg. [0.6, -5.2, 1.7]),
+    return an array of indices that tell you which gridpoint is closest to this point.
+
+    When there is no periodicity, this is easy - the gridpoint with the smallest absolute value of difference is the
+    closest one.
+
+    If we have a periodic system, the limits play a role, because each gridpoint is infinitely repeated. We use a mod
+    operator to get the closest gridpoint.
 
     Args:
-        points_to_assign ():
-        grid_points ():
-        limits ():
-        is_periodic ():
+        points_to_assign (NDArray): an array of shape (N_trajlen,) of points to be assigned
+        grid_points (NDArray): an array of shape (N_gridpoints,) of 1D gridpoints
+        limits (NDArray): a list of two numbers, the lower and upper limit, eg. [0.0, 2.0]
+        is_periodic (bool): True if the grid is supposed to be periodic, if False points outside the grid will be
+        assigned to the smallest or largest values
 
     Returns:
-
+        an array of shape (N_trajlen,) where an idex of closest gridpoint is assigned for each point
     """
     N_gridpoints = len(grid_points)
     distance_gridpoints = np.array(np.abs(grid_points[1]-grid_points[0]))
@@ -62,6 +71,37 @@ def assign_to_cartesian_translation_grid(points_to_assign: NDArray, subgrids: li
     combined_assignments = x_assignments*N_y*N_z + y_assignments*N_z + z_assignments
     return x_assignments, y_assignments, z_assignments, combined_assignments
 
+def assign_to_best_orientation(structures_to_assign: NDArray, structure_at_each_gridpoint: NDArray) -> NDArray:
+    """
+    We want to determine the best rotational fit for the structures in the trajectory among the possibilities given by
+    the grid.
+
+    IMPORTANT! The function assumes that all of these structures are centered so that center of mass is at origin.
+
+    Args:
+        structures_to_assign (NDArray): an array of shape (N_frames, N_atoms, 3) - each "row" a structure to be assigned
+        structure_at_each_gridpoint (NDArray): an array of shape (N_rotations, N_atoms, 3) - each "row" a reference
+            structure
+
+    Returns:
+        an array of shape (N_frames,), each element an index of best-fitting orientation
+    """
+
+    # shape (N_rotations, N_frames)
+    distances = np.empty((len(structure_at_each_gridpoint), len(structures_to_assign)))
+
+    # maybe could use worker pool here
+    # right now this takes 9min for an extremely long trajectory & 80 reference rotations, so not too worried
+
+    # we loop over reference structures since this is presumably the much shorter list
+    for i, ref_structure in enumerate(structure_at_each_gridpoint):
+        distances_to_this_ref = np.linalg.norm((structures_to_assign - ref_structure), axis=2)
+        total_distances = distances_to_this_ref.sum(axis=1)
+        distances[i] = total_distances
+
+    best_indices = np.argmin(distances.T, axis=1)
+    return best_indices
+
 def _calc_distance_along_traj(frame_index, u, reference_coordinates):
     # index the trajectory to set it to the frame_index frame
     u.trajectory[frame_index]
@@ -70,6 +110,13 @@ def _calc_distance_along_traj(frame_index, u, reference_coordinates):
 
 
 def loop_slowly_over_trajectories(u, u_ref, ag, ag_ref, N_rotations, limit_to):
+    """
+    Not in use right now because looping with GROMACS is faster than any python-based solution. I leave this function in
+    case we later need to loop over a trajectory and calculate something more complex.
+
+    The idea behind having a fast and slow version of the same function: the slow version is more readable and both
+    should return the same answer - helps us test the complex fast function.
+    """
     all_rmsds = np.zeros((limit_to, N_rotations))
     for ts in u_ref.trajectory[:N_rotations]:
         for traj_ts in u.trajectory[:limit_to]:
@@ -80,6 +127,13 @@ def loop_slowly_over_trajectories(u, u_ref, ag, ag_ref, N_rotations, limit_to):
 
 
 def loop_fast_over_trajectories(u, u_ref, N_rotations, limit_to=None):
+    """
+    Not in use right now because looping with GROMACS is faster than any python-based solution. I leave this function in
+    case we later need to loop over a trajectory and calculate something more complex.
+
+    The idea behind having a fast and slow version of the same function: the slow version is more readable and both
+    should return the same answer - helps us test the complex fast function.
+    """
     if limit_to is None:
         limit_to = len(u.trajectory)
     all_rmsds = np.zeros((limit_to, N_rotations))
@@ -93,19 +147,3 @@ def loop_fast_over_trajectories(u, u_ref, N_rotations, limit_to=None):
         resulting_distances = np.array(resulting_distances)
         all_rmsds[:, ts.frame] = resulting_distances
     return all_rmsds
-
-if __name__ == '__main__':
-    path_str2 = "nobackup/graphene_xylene/auto_20/simulation/gromacs/molecule2.gro"
-    path_traj = "nobackup/graphene_xylene/auto_20/simulation/gromacs/m2_trajectory_centered.xtc"
-    path_pseudotraj = "nobackup/graphene_xylene/auto_20/pseudosimulation/gromacs/m2_trajectory_centered.xtc"
-
-    uni = Universe(path_str2, path_traj)
-    uni_ag = uni.select_atoms(f"all")
-
-    uni_ref = Universe(path_str2, path_pseudotraj)
-    uni_ref_ag = uni_ref.select_atoms(f"all")
-
-    all_rmsds = loop_fast_over_trajectories(uni, uni_ref, N_rotations=30, limit_to=50)
-
-    best_indices = np.argmin(all_rmsds, axis=1)
-    print(best_indices)

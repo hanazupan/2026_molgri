@@ -1,12 +1,22 @@
+"""
+In this file we are building Markov State Models and SQare Root-Approximations to determine slow processes. We also
+perform eigendecomposition.
+"""
+
 from typing import Optional, Sequence, Tuple, Any
 
 import pandas as pd
+from numpy._typing import NDArray
 from numpy.typing import NDArray
 import numpy as np
+from scipy.signal import find_peaks, peak_prominences
 from scipy.sparse import coo_array, csr_array, diags, dok_array
 from scipy.sparse.linalg import eigs
 
 from scipy.constants import k as kB, N_A
+from sklearn.neighbors import KernelDensity
+
+from molgri.utils.arrays import k_argmax_in_array, k_argmin_in_array
 
 
 def window(seq: Sequence, len_window: int, step: int = 1) -> Tuple[Any, Any]:
@@ -35,8 +45,10 @@ def window(seq: Sequence, len_window: int, step: int = 1) -> Tuple[Any, Any]:
 
 def noncorr_window(seq: Sequence, len_window: int) -> Tuple[Any, Any]:
     """
-    Subsample the seq so that only each len_window-th element remains and then similarly return pairs of
+    Subsample the sequence so that only each len_window-th element remains and then similarly return pairs of
     elements.
+
+    In this case we throw more data away but we avoid correlated data.
 
     Example:
         >>> gen_obj = noncorr_window([1, 2, 3, 4, 5, 6, 7], 3)
@@ -52,14 +64,27 @@ def noncorr_window(seq: Sequence, len_window: int) -> Tuple[Any, Any]:
 class MSM:
 
     """
-    From assignments create a MSM transition matrix.
+    As an input we have am assigned trajectory - an array as long as the trajectory but each element is an index (of a
+    gridpoint that best describes the structure at this frame index). As an output we create a MSM transition matrix.
     """
 
     def __init__(self, assigned_trajectory: NDArray, total_num_cells: int):
         self.assigned_trajectory = assigned_trajectory
         self.total_num_cells = total_num_cells
 
-    def get_one_tau_transition_matrix(self, tau: float, noncorrelated_windows: bool):
+    def get_one_tau_transition_matrix(self, tau: int, noncorrelated_windows: bool)-> csr_array:
+        """
+        This is the main method, it constructs a MSM for a specific tau ("time jump"). We count transitions using
+        detailed balance and normalize them.
+
+        Args:
+            tau (int): the size of the window
+            noncorrelated_windows (bool): if True use non-correlated windows, else correlated
+
+        Returns:
+            a sparse matrix of shape (N_gridpoints, N_gridpoints) where element (i, j)=(j, i) tells us how likely
+            transition between state i and j is at the timescale of tau
+        """
         sparse_count_matrix = dok_array((self.total_num_cells, self.total_num_cells))
         # save the number of transitions between cell with index i and cell with index j
         # count_per_cell = {(i, j): 0 for i in range(self.num_cells) for j in range(self.num_cells)}
@@ -69,6 +94,7 @@ class MSM:
             window_cell = window(self.assigned_trajectory, int(tau))
 
         for cell_slice in window_cell:
+            # in case we only have one last element available, we skip
             if len(cell_slice)<2:
                 pass
             else:
@@ -86,15 +112,13 @@ class MSM:
         # Left multiply the CSR matrix with the diagonal matrix
         return diagonal_matrix.dot(sparse_count_matrix)
 
-    def get_all_tau_transition_matrices(self, taus: NDArray, noncorrelated_windows: bool):
-        transition_matrix = np.zeros(shape=taus.shape, dtype=object)
-        for tau_i, tau in enumerate(taus):
-            transition_matrix[tau_i] = self.get_one_tau_transition_matrix(tau, noncorrelated_windows=noncorrelated_windows)
-        return transition_matrix
-
-
 
 class SQRA:
+
+    """
+    Square-root approximation is an alternative to a Markov model. We need a lot more information about the grid:
+    distances, surfaces, volumes - but only one energy evaluation per cell
+    """
 
     def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array):
         self.energies = energies
@@ -141,7 +165,11 @@ class SQRA:
 
 class DecompositionTool:
 
-    def __init__(self, matrix_to_decompose):
+    """
+    Just a simple wrapper to perform decomposition and assure the eigenvectors and/or eigenvalues are not complex.
+    """
+
+    def __init__(self, matrix_to_decompose: NDArray | csr_array | coo_array):
         """
 
         Args:
@@ -174,3 +202,95 @@ class DecompositionTool:
         eigenval = eigenval[idx]
         eigenvec = eigenvec[:, idx]
         return eigenval, eigenvec
+
+
+def kde_valley_cutoffs(data: NDArray, bandwidth: str |float = "scott", grid_size: int = 2000, peak_prominence: float = 0.01) -> tuple:
+    """
+    In a 1D data set find "peaks", areas of high point density and "valleys", areas separating one peak from the next
+    with low point density. To do this, density is modelled with KernelDensity.
+
+    Args:
+        data (NDArray): an array of shape (N_datapoints,) for which the density will be modelled
+        bandwidth (str |float): either a metho describing bandwith determination ('scott', 'silverman') or numeric bandwidth
+        grid_size (int): number of evaluation points for KDE
+        peak_prominence (float): the smaller the number, the more peaks will be found
+
+    Returns:
+        a tuple (peaks, valleys) where the two elements are lists of floats; peaks describes the positions of highest
+        densities and valleys the positions of lowest densities
+    """
+    x = np.asarray(data).reshape(-1, 1)
+
+    # --- bandwidth selection ---
+    if isinstance(bandwidth, str):
+        std = np.std(x)
+        n = len(x)
+        if bandwidth == "scott":
+            bw = std * (n ** (-1 / 5))
+        elif bandwidth == "silverman":
+            bw = 1.06 * std * (n ** (-1 / 5))
+        else:
+            raise ValueError("bandwidth must be 'scott', 'silverman', or float")
+    else:
+        bw = float(bandwidth)
+
+    # --- KDE fit ---
+    kde = KernelDensity(kernel="gaussian", bandwidth=bw)
+    kde.fit(x)
+
+    grid = np.linspace(x.min(), x.max(), grid_size)
+    log_density = kde.score_samples(grid.reshape(-1, 1))
+    density = np.exp(log_density)
+
+    peaks, _ = find_peaks(density, prominence=peak_prominence)
+
+    if len(peaks) < 2:
+        raise ValueError("Less than 2 peaks detected; distribution may be unimodal.")
+
+    valleys, _ = find_peaks(-density)
+    return grid[peaks], grid[valleys]
+
+def auto_determine_eigenvector_extremes(one_eigenvector: NDArray,  N_extremes_to_plot: int | str) -> tuple:
+    """
+    The idea of this function: we might not want to plot excatly 5 or 50 structures with most positive contributions,
+    but automatically select the number of structures that form a cluster around the most positive and most negative
+    values.
+
+    Args:
+        one_eigenvector (NDArray): an array of shape (N_gridpoints,) that gives you the contribution to this
+            eigenvector for each gridpoint (cell)
+        N_extremes_to_plot (int | str): if an integer, returns the N smallest and largest contributions
+            if the word "auto", modells the distribution of points and select the N smallest and N largest that
+            correspond to clusters
+
+    Returns:
+        a tuple of two arrays (indices_most_positive, indices_most_negative)
+        the content of the arrays are always the grid indices that have the most positive or negative contributions
+        to the eigenvector
+        if N_extremes_to_plot is an integer, both arrays will have the length N_extremes_to_plot
+        if N_extremes_to_plot is "auto", the arrays might have different lengths
+    """
+
+    # should be automatically determined
+    if N_extremes_to_plot == "auto":
+        above_upper_limit = np.zeros(100)
+        below_lower_limit = np.zeros(100)
+
+        peak_prominence = 0.01
+        max_num_cycles = 5
+        cycle_num = 0
+
+        while (len(above_upper_limit) > 50 or len(below_lower_limit) > 50) and cycle_num < max_num_cycles:
+            my_peaks, my_valleys = kde_valley_cutoffs(one_eigenvector, peak_prominence=peak_prominence)
+            upper_limit = np.max(my_valleys)
+            lower_limit = np.min(my_valleys)
+
+            above_upper_limit = np.where(one_eigenvector >= upper_limit)[0]
+            below_lower_limit = np.where(one_eigenvector <= lower_limit)[0]
+            peak_prominence = peak_prominence / 5
+            cycle_num += 1
+        return above_upper_limit, below_lower_limit
+    # if we already know how many structures to plot
+    else:
+        return k_argmax_in_array(one_eigenvector, N_extremes_to_plot), k_argmin_in_array(one_eigenvector,N_extremes_to_plot)
+
