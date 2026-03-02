@@ -1,8 +1,9 @@
 import numpy as np
 from plotly.tools import DEFAULT_PLOTLY_COLORS
 
-from molgri.molecules.transitions import MSM, SQRA
-from workflow.helpers.io import read_object, write_object, read_from_mdrun, get_num_atoms
+from molgri.molecules.rate_merger import delete_rows_columns
+from molgri.molecules.transitions import MSM
+from workflow.helpers.io import read_object, write_object, read_from_mdrun
 
 
 rule make_msm:
@@ -16,35 +17,23 @@ rule make_msm:
         grid_info = read_object(input.grid_info)
         N_gridpoints = grid_info["N_total"]
 
-
         my_msm = MSM(full_assignments, N_gridpoints)
         transition_matrix = my_msm.get_one_tau_transition_matrix(int(wildcards.tau), noncorrelated_windows=False)
         write_object(transition_matrix, output.msm)
 
-rule make_sqra:
+rule reduce_msm_size:
     input:
-        energies = "<pseudosimulation>energy.csv",
-        volumes = "<outputs_network>volumes.npy",
-        distances= "<outputs_network>distances.npz",
-        surfaces= "<outputs_network>surfaces.npz"
+        msm= f"<outputs_transitions>{{tau}}/msm.npz",
+    wildcard_constraints:
+        tau= r"[1-9]\d*"
     output:
-        rate_matrix = f"<outputs_transitions>sqra.npz",
-    params:
-        T_in_K = 293,
-        diffusion_coefficient = 1,
+        reduced_msm= f"<outputs_transitions>{{tau}}/reduced_msm.npz",
+        indices_to_keep = f"<outputs_transitions>{{tau}}/indices_to_keep.npy",
     run:
-        my_energy = read_object(input.energies)
-        my_energy_array = my_energy["Binding energy [kJ/mol]"].to_numpy()
-        volumes = read_object(input.volumes)
-        distances = read_object(input.distances)
-        surfaces = read_object(input.surfaces)
-
-        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces)
-
-        rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K)
-        #print(np.max(rate_matrix.data),np.min(rate_matrix.data),np.max(-rate_matrix.data),np.min(-rate_matrix.data))
-        # saving to file
-        write_object(rate_matrix, output.rate_matrix)
+        msm = read_object(input.msm)
+        reduced_msm, indices_to_keep = delete_rows_columns(msm,"msm")
+        write_object(reduced_msm, output.reduced_msm)
+        write_object(np.array(indices_to_keep),output.indices_to_keep)
 
 
 rule run_decomposition_msm:
@@ -52,7 +41,11 @@ rule run_decomposition_msm:
     As output we want to have eigenvalues, eigenvectors. Es input we get a (sparse) rate matrix.
     """
     input:
-        msm = f"<outputs_transitions>{{tau}}/msm.npz"
+        reduced_msm=f"<outputs_transitions>{{tau}}/reduced_msm.npz",
+        indices_to_keep=f"<outputs_transitions>{{tau}}/indices_to_keep.npy",
+        grid_info= "<outputs_network>grid_info.yaml",
+    wildcard_constraints:
+        tau= r"[1-9]\d*"
     benchmark:
         f"<outputs_transitions>{{tau}}/timing_decomposition.txt"
     output:
@@ -61,17 +54,19 @@ rule run_decomposition_msm:
     run:
         from molgri.molecules.transitions import DecompositionTool
 
-        my_matrix = read_object(input.msm)
+        grid_info = read_object(input.grid_info)
+        total_length = int(grid_info["N_total"])
+        kept_indices = read_object(input.indices_to_keep)
+        my_matrix = read_object(input.reduced_msm)
 
         # calculation
-        dt = DecompositionTool(my_matrix)
-
-        all_eigenval, all_eigenvec = dt.get_decomposition(tol=1e-5, maxiter=100000,
-            which="LR",
-            sigma=None)
+        dt = DecompositionTool(my_matrix, kept_indices, total_length)
+        all_eigenval, all_eigenvec = dt.decompose_msm()
 
         write_object(all_eigenval, output.eigenvalues)
         write_object(all_eigenvec,output.eigenvectors)
+
+
 
 TAUS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200]
 
@@ -106,7 +101,7 @@ rule plot_all_eigenvectors_as_lines:
     input:
         expand(f"<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_{{tau}}.png", tau=[10])
 
-rule plot_vmd_eigenvectors_as_lines_grouped_by_z_coo:
+rule plot_vmd_eigenvectors_as_lines_grouped_by_zcoo:
     input:
         eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
         grid_info= rules.save_basic_grid_information.output.info_material
@@ -122,13 +117,15 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_z_coo:
         N_translations = grid_info["N_translations"]
         subgrids = grid_info["subgrid_points"]
         len_x, len_y, len_z = len(subgrids[0]), len(subgrids[1]), len(subgrids[2])
-        print(len_x, len_y, len_z)
 
         eigenvector_array = read_object(input.eigenvectors)
         N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
 
-        groups_by_rotation_index = np.repeat(np.arange(len_z), N_rotations*len_x*len_y)
+        groups_by_rotation_index = np.repeat(np.arange(N_translations), N_rotations)
+        groups_by_rotation_index = groups_by_rotation_index % len_z
         print(groups_by_rotation_index)
+        print(groups_by_rotation_index[70:90])
+        print(groups_by_rotation_index[1990:2010])
 
         fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
 
@@ -136,7 +133,44 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_z_coo:
             eigenvector = eigenvector_array[:, row]
             out = np.bincount(groups_by_rotation_index ,weights=eigenvector,minlength=len_z)
             fig.add_trace(
-                go.Bar(x=np.arange(len_z),y=out, text=[f"{i:>2}" for i in np.arange(N_rotations)]),row=1+row,col=1)
+                go.Bar(x=np.arange(len_z),y=out, text=[f"{i:>2}" for i in np.arange(len_z)]),row=1+row,col=1)
+        fig.update_layout(showlegend=False, plot_bgcolor="white", paper_bgcolor="white")
+        #fig.update_yaxes(range=[-5, 5])
+        #fig.update_yaxes(range=[-5, 0], row=1, col=1)
+        fig.update_xaxes(showticklabels=False)
+        fig.write_image(output.plot, scale=3)
+
+rule plot_vmd_eigenvectors_as_lines_grouped_by_trans:
+    input:
+        eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
+        grid_info= rules.save_basic_grid_information.output.info_material
+    output:
+        plot = f"<outputs_other_plots>grouped_by_trans_eigenvectors_for_tau_{{tau}}.png"
+    run:
+        import plotly.graph_objects as go
+        import numpy as np
+        from plotly.subplots import make_subplots
+
+        grid_info = read_object(input.grid_info)
+        N_rotations = grid_info["N_rotations"]
+        N_translations = grid_info["N_translations"]
+        subgrids = grid_info["subgrid_points"]
+        len_x, len_y, len_z = len(subgrids[0]), len(subgrids[1]), len(subgrids[2])
+
+        eigenvector_array = read_object(input.eigenvectors)
+        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+
+        groups_by_rotation_index = np.repeat(np.arange(N_translations), N_rotations)
+        print(groups_by_rotation_index)
+        print(groups_by_rotation_index[70:90])
+
+        fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
+
+        for row in range(N_interesting_eigenvectors):
+            eigenvector = eigenvector_array[:, row]
+            out = np.bincount(groups_by_rotation_index ,weights=eigenvector,minlength=N_translations)
+            fig.add_trace(
+                go.Bar(x=np.arange(N_translations),y=out, text=[f"{i:>2}" for i in np.arange(N_translations)]),row=1+row,col=1)
         fig.update_layout(showlegend=False, plot_bgcolor="white", paper_bgcolor="white")
         #fig.update_yaxes(range=[-5, 5])
         #fig.update_yaxes(range=[-5, 0], row=1, col=1)

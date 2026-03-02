@@ -3,7 +3,7 @@ We have a problem that we often want to perform similar operations (eg. finding 
 them) on pseudotrajectory, trajectory or wrapped trajectory. Here are some helper functions to find the correct files.
 """
 
-def find_the_right_structure(where:str, what: str) -> str:
+def find_the_right_structure(what: str) -> str:
     """
     We want to use the structure in the right directory. Additionally, if we are only plotting the center of mass for
     the second trajectory we want a structure with the correct number of atoms (m1_COM_m2 structure).
@@ -14,7 +14,7 @@ def find_the_right_structure(where:str, what: str) -> str:
     Returns:
         a string giving a path to stucture file
     """
-    return f"{where}{what}.<ext_str>"
+    return f"<pseudosimulation>{what}.<ext_str>"
 
 def find_the_right_frames(where: str, what: str, indices: list) -> tuple:
     """

@@ -1,12 +1,17 @@
-import numpy as np
-import pandas as pd
-from numpy.typing import NDArray
-from MDAnalysis import Universe, Writer, Merge
+"""
+In these rules we use gromacs to quickly and efficiently manipulate trajectory objects: eg. write out specific frames
+for plotting, center and align to reference, extract only the second molecule or the center of mass etc.
+"""
+from MDAnalysis import Merge
 
-from workflow.helpers.io import read_object, write_object, get_num_atoms, from_xvg_to_csv_energy
+from workflow.helpers.io import read_object, from_xvg_to_csv_energy
 
 
 rule add_timesteps_to_pt:
+    """
+    Pseudotrajectories obviously don't have timesteps as they are not time-dependent, but we need to add fake timstamps
+    to use gromacs slicing options since they refer to time rather than to frame index.
+    """
     input:
         trajectory=f"<pseudosimulation>trajectory.<ext_trj>",
         structure_tpr=f"<pseudosimulation>structure.gro",
@@ -28,6 +33,10 @@ rule add_timesteps_to_pt:
 
 
 def input_function_trajectory_slice(wc):
+    """
+    We use trajectory slices (.gro files containing exactly one frame) a lot in plotting of structures found at
+    particular indices.
+    """
     if "assignment" in wc.path:
         trajectory_name = "wrapped_trajectory"
         path_other_files = "<simulation>"
@@ -44,8 +53,7 @@ def input_function_trajectory_slice(wc):
 
 rule trajectory_slice:
     """
-    This is helpful for testing new analysis methods without waiting forever for results. Just use shortened_trajectory
-    instead of trajectory in input.
+    We want to extract just the frame with index frame_i from a full trajectory.
     """
     input:
         unpack(input_function_trajectory_slice)
@@ -300,3 +308,21 @@ rule structure_m1_com_m2:
         merged = Merge(m1.atoms,m2.atoms)
         merged.dimensions = m1.dimensions
         merged.atoms.write(output.structure)
+
+rule trajectory_centered_at_m2_COM:
+    """
+    Write the whole trajectory translated in such a way that the COM of molecule 2 is at (0,0,0) in each frame and
+    molecule1 is not written. This is useful so we can later assign the best rotation.
+    """
+    input:
+        trajectory = "{path}trajectory.<ext_trj>",
+        structure="{path}structure.<ext_str>",
+        index="{path}index.ndx",
+    output:
+        trajectory="{path}m2_trajectory_centered.<ext_trj>",
+    shadow: "minimal"
+    shell:
+        """
+        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
+        echo "3\n3\n" |  gmx22 trjconv  -s {input.structure}  -f {input.trajectory} -o {output.trajectory} -n {input.index} -center -boxcenter zero
+        """

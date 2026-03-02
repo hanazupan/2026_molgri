@@ -282,7 +282,7 @@ if __name__ == "__main__":
     2) we then tile the primitive cell in xy direction to get a supercell
     3) based on the supercell we find a cuboid lattice with the smallest volume that is repeatable
     """
-    from molgri.plotting import draw_structure, draw_unit_cell
+    from molgri.images.plotting import draw_structure, draw_unit_cell
 
     my_path = "/home/hanaz63/2026_molgri/nobackup/graphene_xylene/auto_20/pseudosimulation/"
 

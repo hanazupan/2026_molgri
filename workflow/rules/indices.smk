@@ -64,8 +64,6 @@ checkpoint find_indices_dominant_eigenvectors:
             i=range(1,config["msm"]["num_interesting_eigenvectors"]),j=config["msm"]["num_extremes_to_plot"],
             allow_missing=True)
     run:
-        #from molgri.create_vmdlog import TrajectoryIndexingTool
-
         eigenvectors = read_object(input.eigenvectors)
 
         N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
@@ -85,18 +83,3 @@ checkpoint find_indices_dominant_eigenvectors:
             write_object(np.array(pos_e), output.pos_e_indices[eigenvector_i-1])
             write_object(np.array(neg_e),output.neg_e_indices[eigenvector_i-1])
         write_object(np.array(abs_e),output.abs_e_indices[0])
-
-        # tit = TrajectoryIndexingTool()
-        # tit.set_eigenvectors(eigenvectors.T)
-        #
-        # # the shape of abs_e is (2*N_extremes_to_plot)
-        # # the shapes of pos_e and neg_e are (N_interesting_eigenvectors - 1, N_extremes_to_plot)
-        # abs_e, pos_e, neg_e = tit.get_all_dominant_structures(N_extremes_to_plot, N_interesting_eigenvectors)
-        #
-        # # save the absolute
-        # write_object(np.array(abs_e),output.abs_e_indices[0])
-        #
-        # # save the positive and negative indices
-        # for i in range(N_interesting_eigenvectors - 1):
-        #     write_object(np.array(pos_e[i]), output.pos_e_indices[i])
-        #     write_object(np.array(neg_e[i]),output.neg_e_indices[i])

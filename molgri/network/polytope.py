@@ -21,7 +21,7 @@ from scipy.sparse import coo_array
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from molgri.plotting import draw_curve, draw_line_between, draw_points
+from molgri.images.plotting import draw_curve, draw_line_between, draw_points
 from molgri.utils.quaternions import find_inverse_quaternion, remove_bottom_half_quaternions, q_in_upper_sphere
 from molgri.utils.arrays import normalise_vectors, which_row_is_k
 

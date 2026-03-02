@@ -141,7 +141,7 @@ rule plot_xylene_ring_center:
     output:
         plot="<outputs_other_plots>{sim_or_not}/ring_position_lowest_{N}.png"
     run:
-        from molgri.plotting import draw_line_between
+        from molgri.images.plotting import draw_line_between
         from MDAnalysis import Universe
         import plotly.graph_objects as go
         from molgri.molecules.find_unit_cell import get_rectangular_cell_side_lengths

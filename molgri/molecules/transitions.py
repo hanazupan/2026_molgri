@@ -1,21 +1,20 @@
 """
-In this file we are building Markov State Models and SQare Root-Approximations to determine slow processes. We also
-perform eigendecomposition.
+In this file we are building Markov State Models and Sqare Root-Approximations to determine slow processes. We also
+perform eigendecomposition of these matrices.
 """
 
 from typing import Optional, Sequence, Tuple, Any
 
-import pandas as pd
-from numpy._typing import NDArray
 from numpy.typing import NDArray
 import numpy as np
-from scipy.signal import find_peaks, peak_prominences
-from scipy.sparse import coo_array, csr_array, diags, dok_array
+from scipy.signal import find_peaks
+from scipy.sparse import coo_array, csr_array, diags_array, dok_array
 from scipy.sparse.linalg import eigs
 
 from scipy.constants import k as kB, N_A
 from sklearn.neighbors import KernelDensity
 
+from molgri.molecules.rate_merger import expand_eigenvector_to_full_length
 from molgri.utils.arrays import k_argmax_in_array, k_argmin_in_array
 
 
@@ -108,9 +107,10 @@ class MSM:
         sums[sums == 0] = 1
         # now dividing with counts (actually multiplying with inverse)
         diagonal_values = np.reciprocal(sums)
-        diagonal_matrix = diags(diagonal_values, format='csr')
+        diagonal_matrix = diags_array(diagonal_values, format='csr')
         # Left multiply the CSR matrix with the diagonal matrix
-        return diagonal_matrix.dot(sparse_count_matrix)
+        result = diagonal_matrix.dot(sparse_count_matrix)
+        return result
 
 
 class SQRA:
@@ -127,33 +127,37 @@ class SQRA:
         self.surfaces = surfaces
 
     def get_rate_matrix(self, D: float, T: float) -> csr_array:
-        # calculating rate matrix
+        """
+        This is the method that gets from cell properties (energies, volumes) and adjacency properties (distances,
+        surfaces) to the full rate matrix.
+
+        This method will cause overflow warnings - but don't worry we're dealing with them in delete_rows_columns method
+
+        Args:
+            D (float): diffusion constant, currently just a float TODO must become an adjacency property
+            T (float): the temperature of the simulation
+
+        Returns:
+            a sparse array of rates of shape (N_gridpoints, N_gridpoints)
+        """
         # for sqra demand that each energy corresponds to exactly one cell
         assert len(self.energies) == len(self.volumes), f"{len(self.energies)} != {len(self.volumes)}"
         # you cannot multiply or divide directly in a coo format
+        # using a higher-precision dtype is not useful, since we take exponentials of huge numbers - always overflow
         transition_matrix = D * self.surfaces  #/ all_distances
-        print("data shape", self.surfaces.data.shape, self.distances.data.shape)
         transition_matrix = transition_matrix.tocoo()
         transition_matrix.data /= self.distances.tocoo().data
         # Divide every row of transition_matrix with the corresponding volume
         transition_matrix.data /= self.volumes[transition_matrix.row]
-        print("done volumes")
         # multiply with sqrt(pi_j/pi_i) = e**((V_i-V_j)*1000/(2*k_B*N_A*T))
         # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
         diff_energies = self.energies[transition_matrix.row] - self.energies[transition_matrix.col]
-        # cannot allow more than 3 orders of magnitude difference
-        print(f"Warning! {len(np.where(diff_energies > 5e2)[0])} pairs of cells have a very large difference in "
-              f"energy, more than factor 500. This would lead to overflow, so these differences are capped to a "
-              f"factor 500. This might be a sign of poor discretisation or just the case of L-J overlap.")
-        diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
-
-        print("DIFF", diff_energies.shape, self.volumes.shape, self.distances.shape, self.surfaces.shape)
 
         pi_exponent = np.round(diff_energies,14) * 1000 / (2 * kB * N_A * T)
 
-        print(pd.DataFrame(pi_exponent).describe())
-
         transition_matrix.data *= np.exp(pi_exponent)
+
+
         # normalise rows
         sums = transition_matrix.sum(axis=1)
         sums = np.array(sums).squeeze()
@@ -169,31 +173,63 @@ class DecompositionTool:
     Just a simple wrapper to perform decomposition and assure the eigenvectors and/or eigenvalues are not complex.
     """
 
-    def __init__(self, matrix_to_decompose: NDArray | csr_array | coo_array):
+    def __init__(self, matrix_to_decompose: NDArray | csr_array | coo_array, kept_indices: NDArray, total_length: int):
         """
 
         Args:
-            matrix_to_decompose (): either a single matrix or an array of matrices (for different taus) we want to
-            decompose
+            matrix_to_decompose (NDArray | csr_array | coo_array): a single matrix to be decomposed
+            kept_indices (NDArray): the kept indices in case the provided matrix was reduced with some row-column
+                pairs deleted (see rate_merger.py for more information)
+            total_length (int): the final length to which the eigenvectors will be expanded
         """
         self.matrix_to_decompose = matrix_to_decompose
+        self.kept_indices = kept_indices
+        self.total_length = total_length
 
-    def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k=12):
+    def decompose_msm(self) -> tuple:
         """
-        The function for users - will decompose all matrices.
-
-            tol ():
-            maxiter ():
-            which ():
-            sigma ():
+        Decomposition with settings suitable for transition matrices (expected first eigenvalue 1 and all others
+        positive).
 
         Returns:
+            (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
+            shape (total_len, 12)
+        """
+        return self.get_decomposition(tol=1e-8, maxiter=100000, which="LR", sigma=None)
 
+    def decompose_sqra(self) -> tuple:
+        """
+        Decomposition with settings suitable for transition matrices (expected first eigenvalue 0).
+
+        Returns:
+            (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
+            shape (total_len, 12)
+        """
+        return self.get_decomposition(tol=1e-85, maxiter=100000, which="SR", sigma=1e-12)
+
+    def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 12) -> tuple:
+        """
+        The function to decompose matrices. It wraps the scipy decompose and makes sure:
+        - the output is not given as complex numbers
+        - the eigenvectors are sorted by corresponding eigenvalues
+        - the eigenvectors are expanded to total_length
+
+        Args:
+            tol (float): the tolerance for eigendecomposition
+            maxiter (int): max number of cycles for decomposition
+            which (str): "SR", "LR", "SM" or "LM", defines the type of eigenvalues we look for,
+            for more info  see documentation of scipy.eigs
+            sigma (float or None): search for eigenvalues close to this value, for more info see documentation of
+            scipy.eigs
+
+        Returns:
+            (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
+            shape (total_len, 12)
         """
         eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which, sigma=sigma)
         # if imaginary eigenvectors or eigenvalues, raise error
-        if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-3, atol=1e-5) or not np.allclose(eigenval.imag.max(), 0,
-                                                                                            rtol=1e-3, atol=1e-5):
+        if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-7) or not np.allclose(eigenval.imag.max(), 0,
+                                                                                            rtol=1e-5, atol=1e-7):
             print(f"Complex values for eigenvectors and/or eigenvalues: {eigenvec}, {eigenval}")
         eigenvec = eigenvec.real
         eigenval = eigenval.real
@@ -201,7 +237,15 @@ class DecompositionTool:
         idx = eigenval.argsort()[::-1]
         eigenval = eigenval[idx]
         eigenvec = eigenvec[:, idx]
-        return eigenval, eigenvec
+
+        expanded_eigenvectors = []
+        # expand to full length
+        for eigenvector in eigenvec.T:
+            expanded_eigenvector = expand_eigenvector_to_full_length(eigenvector, self.kept_indices, self.total_length)
+            expanded_eigenvectors.append(expanded_eigenvector)
+        expanded_eigenvectors = np.array(expanded_eigenvectors).T
+
+        return eigenval, expanded_eigenvectors
 
 
 def kde_valley_cutoffs(data: NDArray, bandwidth: str |float = "scott", grid_size: int = 2000, peak_prominence: float = 0.01) -> tuple:

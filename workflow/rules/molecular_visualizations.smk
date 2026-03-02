@@ -1,8 +1,8 @@
 "Perform analyses on energy-structure networks, eg identifying and plotting paths."
 import matplotlib.pyplot as plt
 
-from molgri.create_vmdlog import VMDCreator
-from molgri.images.modifying_images import trim_images_with_common_bbox, join_images
+from molgri.images.create_vmdlog import VMDCreator
+from molgri.images.modifying_images import join_images
 from workflow.helpers.find_right_input import where_to_look, find_the_right_frames, \
     find_the_right_structure, what_to_provide
 from workflow.helpers.io import get_num_atoms, read_object
@@ -20,7 +20,7 @@ pathvars:
 ##################################### GENERAL FUNCTIONS ####################################################
 
 def input_base(where, what, wc):
-    structure_path = find_the_right_structure(where, what)
+    structure_path = find_the_right_structure(what)
     return {"structure": structure_path,
             "structure1": "<pseudosimulation>molecule1.gro",
             "grid_info": "<outputs_network>grid_info.yaml",
@@ -240,7 +240,7 @@ rule stack_all_translation_options:
 rule stack_all_eigenvectors:
     input:
         all_eigenvectors_one_tau = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            i=range(config["msm"]["num_interesting_eigenvectors"]), allow_missing=True),
+            i=[0,1,2,3,4], allow_missing=True),
     output:
         all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
     run:
@@ -249,7 +249,7 @@ rule stack_all_eigenvectors:
 rule get_all_eigenvectors:
     input:
         expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            tau=config["msm"]["taus"], zoom_level=[8],view_index=[1, 4],
+            tau=[10, 100], zoom_level=[8],view_index=[1, 4],
             COM_or_full=["full", "COM"]),
 
 def input_zeroth_eigenvector(wc):
@@ -318,7 +318,7 @@ rule higher_eigenvector_overlapping_frames:
         frame_plot=f"<outputs_molecular_plots>eigenvectors/{{tau}}/{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.tga",
         frame_plot_png = f"<outputs_molecular_plots>eigenvectors/{{tau}}/{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
     run:
-        from molgri.create_vmdlog import VMDCreator
+        from molgri.images.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms, read_object
 
         n1 = get_num_atoms(input.structure1)
@@ -337,6 +337,78 @@ rule higher_eigenvector_overlapping_frames:
         print(f"vmd {input.structure} {names_red} {names_blue} ")
         shell("vmd  -dispdev text {input.structure} {names_red} {names_blue} < {output.vmdlog}")
         shell("convert {output.frame_plot} {output.frame_plot_png}")
+
+
+rule stacked_red_frames:
+    """
+    Sometimes overlapping eigenvectors are a big red-blue mess and it is difficult to see anything. This is an option to
+    plot dominant eigenvectors next to each other.
+    """
+    input:
+        unpack(input_red_blue)
+    output:
+        plot_comparison = f"<outputs_molecular_plots>eigenvectors/{{tau}}/stacked_red_{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
+    shadow: "minimal"
+    wildcard_constraints:
+        i = r"[1-9]\d*"
+    run:
+        from molgri.images.create_vmdlog import VMDCreator
+        from workflow.helpers.io import get_num_atoms
+
+        n1 = get_num_atoms(input.structure1)
+        box_limits, gridpoints = collect_box_information(input)
+
+        all_images = []
+        # make all the single-frame plots
+        for i, pos_structure in enumerate(input.pos_e_structures):
+            my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+            tmp_vmd_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.log"
+            tmp_plot_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.tga"
+            my_vmd.prepare_eigenvector_script(num_red=1,num_blue=0,
+                vmd_name=tmp_vmd_file,plot_name=tmp_plot_file,
+                box_limits=box_limits,draw_rectangular_box=False,gridpoints=None,
+                zoom_level=int(wildcards.zoom_level),translation_rotation_script=input.translation_rotation_script)
+            # create one-frame .tga
+            shell(f"vmd  -dispdev text {input.structure} {pos_structure} < {tmp_vmd_file}")
+            all_images.append(tmp_plot_file)
+
+        join_images(all_images, output.plot_comparison, flip=False)
+
+rule stacked_blue_frames:
+    """
+    Sometimes overlapping eigenvectors are a big red-blue mess and it is difficult to see anything. This is an option to
+    plot dominant eigenvectors next to each other.
+    """
+    input:
+        unpack(input_red_blue)
+    output:
+        plot_comparison = f"<outputs_molecular_plots>eigenvectors/{{tau}}/stacked_blue_{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
+    shadow: "minimal"
+    wildcard_constraints:
+        i = r"[1-9]\d*"
+    run:
+        from molgri.images.create_vmdlog import VMDCreator
+        from workflow.helpers.io import get_num_atoms, read_object
+
+        n1 = get_num_atoms(input.structure1)
+        box_limits, gridpoints = collect_box_information(input)
+
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+        all_images = []
+        # make all the single-frame plots
+        for i, neg_structure in enumerate(input.neg_e_structures):
+            tmp_vmd_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.log"
+            tmp_plot_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.tga"
+            my_vmd.prepare_eigenvector_script(num_red=1,num_blue=0,
+                vmd_name=tmp_vmd_file,plot_name=tmp_plot_file,
+                box_limits=box_limits,draw_rectangular_box=False,gridpoints=None,
+                zoom_level=int(wildcards.zoom_level),translation_rotation_script=input.translation_rotation_script)
+            # create one-frame .tga
+            shell(f"vmd  -dispdev text {input.structure} {neg_structure} < {tmp_vmd_file}")
+            all_images.append(tmp_plot_file)
+
+        join_images(all_images, output.plot_comparison, flip=False)
 ##################################### ASSIGNMENT ##################################################
 
 def get_input_trajectory_frame_i_find_pt_frame(wc):

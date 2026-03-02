@@ -1,10 +1,14 @@
+"""
+Here we basically rely on image processing software (on Linux) to perform tasks like cropping, rotation, converting
+image file formats etc.
+"""
+
 from PIL import Image
 import numpy as np
-import os
 import subprocess
 
 
-def find_bounding_box(image: Image, threshold: int = 245) -> tuple:
+def find_bounding_box(image: Image, threshold: int = 245) -> tuple | None:
     """
     Find the bounding box of the image, enabling the cutting of unnecessary background.
 
@@ -38,7 +42,7 @@ def find_bounding_box(image: Image, threshold: int = 245) -> tuple:
     return (x_min, y_min, x_max + 1, y_max + 1)  # Adjust for cropping
 
 
-def get_common_bbox(image_paths, threshold=245):
+def get_common_bbox(image_paths: list, threshold: int = 245) -> tuple | None:
     """Find the smallest common bounding box for all images."""
     min_x, min_y, max_x, max_y = None, None, None, None
 
@@ -59,12 +63,11 @@ def get_common_bbox(image_paths, threshold=245):
     return (min_x, min_y, max_x, max_y) if min_x is not None else None
 
 
-def trim_images_with_common_bbox(input_paths, output_paths):
+def trim_images_with_common_bbox(input_paths: list, output_paths: list) -> None:
     """Crop all images using the same bounding box and save them."""
 
     # find the bounding box
     bbox = get_common_bbox(input_paths)
-    print(bbox)
 
     for inp_path, out_path in zip(input_paths, output_paths):
         img = Image.open(inp_path)
@@ -72,8 +75,18 @@ def trim_images_with_common_bbox(input_paths, output_paths):
         cropped_img.save(out_path)
         img.close()
 
-def join_images(input_paths, output_path, flip=True):
+def join_images(input_paths: list, output_path: str, flip: bool = True):
+    """
+    We have multiple images, their paths provided as a list. We want one output image where they are all positioned
+    next to each other. This is performed in the background, no output is given in Python.
+
+    Args:
+        input_paths (list): a list of paths to images
+        output_path (str): a path where the final, combined image will be saved
+        flip (bool): optionally flip the images - because sometimes the software enjoys flipping them for no reason
+
+    """
     if flip:
         subprocess.run(f"montage -flip {' '.join(input_paths)} -geometry +0+0 {output_path}", shell=True)
     else:
-        subprocess.run(f"montage -mode concatenate -tile 2x  {' '.join(input_paths)} {output_path}", shell=True)
+        subprocess.run(f"montage -mode concatenate -tile 4x  {' '.join(input_paths)} {output_path}", shell=True)

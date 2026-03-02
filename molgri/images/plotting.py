@@ -1,3 +1,7 @@
+"""
+This is a fairly chaotic collection of plotly utils.
+"""
+
 import os
 from functools import wraps
 
@@ -41,8 +45,6 @@ def save_plotly(func):
             fig.write_html(f"{name}.html")
         return fig
     return wrapper
-
-
 
 
 def draw_curve(fig, start_point, end_point, color="black"):

@@ -1,14 +1,13 @@
 """
 General (not molecular) plots in other_plots directory.
 """
-import ast
 import numpy as np
 import plotly.graph_objects as go
 from MDAnalysis import Universe
 
-from molgri.plotting import draw_unit_cell
+from molgri.images.plotting import draw_unit_cell
 from workflow.helpers.graphene_xylene_specific import plot_graphene
-from workflow.helpers.io import read_object, write_object
+from workflow.helpers.io import read_object
 
 N_points_z_dir = int(config["grid"]["translation_subgrids_A"][-1][-1])
 
@@ -24,7 +23,7 @@ rule violin_plot_E_distributions:
     output:
         violin_plot = "<outputs_other_plots>{pseudo_or_sim}_violin_plot_energies.png"
     run:
-        from molgri.plotting import show_violin
+        from molgri.images.plotting import show_violin
         df = read_object(input[0])
 
         max_energy = config['analysis']['upper_E_limit']
@@ -43,9 +42,6 @@ rule plot_E_per_assigned_position_grids:
     run:
 
         df = read_object(input.assignment_csv, header=[0,1])
-
-        print(df.columns)
-
         grid_info = read_object(input.grid_info)
         subgrid_limits = grid_info["subgrid_limits_A"]
         side_lengths = np.array([subgrid_limits[0][1], subgrid_limits[1][1]])

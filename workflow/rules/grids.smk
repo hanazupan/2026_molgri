@@ -1,5 +1,5 @@
 """
-All rules here should save to network/ folder.
+All rules here should save to network/ folder. Here we create the grid and save properties like volumes, surfaces ...
 """
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ import matplotlib
 import plotly.graph_objects as go
 
 from molgri.network.generation import build_quaternion_network, build_translation_network, create_full_network
-from molgri.plotting import show_graph, show_array
+from molgri.images.plotting import show_graph, show_array
 
 from workflow.helpers.io import write_object, read_object
 from workflow.helpers.build_subgrids import make_grid_base
@@ -16,6 +16,10 @@ from workflow.helpers.build_subgrids import make_grid_base
 matplotlib.use('Agg')
 
 rule save_basic_grid_information:
+    """
+    Grid information is a useful file because it saves properties like number of rotational, translational and total
+    grid points, grid limits, sub-grids that were used to create the full grid etc.
+    """
     output:
         info_material = "<outputs_network>grid_info.yaml"
     run:
@@ -129,7 +133,7 @@ rule display_network_node_attributes:
         grid = "<outputs_network>grid.png",
         volumes = "<outputs_network>volumes.png"
     run:
-        from molgri.plotting import draw_points
+        from molgri.images.plotting import draw_points
         grid = read_object(input.grid)
         draw_points(grid, save_as=output.grid, show=False)
         volumes = read_object(input.volumes)
@@ -139,7 +143,7 @@ rule display_network_node_attributes:
 
 rule create_index_csv:
     """
-    Save which quaternion and position relate to which index.
+    Save which quaternion and position relate to which index. Useful for debugging.
     """
     input:
         network= f"<outputs_network>network.pkl",
@@ -185,6 +189,9 @@ rule create_index_csv:
 
 
 rule display_geometry_properties_with_violin_distributions:
+    """
+    Not all that useful, maybe for small grids to see that the properties are not too wildly different.
+    """
     input:
         volumes = "<outputs_network>volumes.npy",
         distances= "<outputs_network>distances.npz",

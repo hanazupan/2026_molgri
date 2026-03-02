@@ -130,7 +130,7 @@ def test_perfect_division():
 
 def test_visual_example():
     to = create_translation_network("spherical", 20, [2, 7, 3], 1)
-    from molgri.plotting import draw_points
+    from molgri.images.plotting import draw_points
     fig = draw_points(to.grid, label_by_index=True, show=False)
     vertices = np.concatenate([node.hull for node in to.sorted_nodes], axis=1)
     fig = draw_points(vertices[0], color="green", show=False, fig=fig)

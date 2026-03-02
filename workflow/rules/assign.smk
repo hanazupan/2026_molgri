@@ -1,9 +1,12 @@
 """
-Every rule here should save to assign/ directory.
+Every rule here should save to assign/ directory. Assigning is performed on the simulated trajectory and assigns every
+frame of that trajectory to the best grid point. In addition, wrapping is performed, where the simulation frames are
+wrapped to the smallest cuboid cell, mostly for plotting of periodic structures.
 """
 
 from MDAnalysis import Universe, Writer
 import numpy as np
+import plotly.graph_objects as go
 
 from molgri.molecules.find_unit_cell import get_cuboid_cell_side_lengths, wrap_multiple_atoms_to_cuboid_cell, wrap_to_cuboid_cell
 from molgri.molecules.assignment import assign_to_cartesian_translation_grid, assign_to_best_orientation
@@ -15,7 +18,7 @@ from workflow.helpers.io import get_num_atoms, read_object, write_object
 rule wrap_trajectory2cuboid_cell:
     """
     This rule takes a normal (already centered etc.) trajectory of two molecules and applies periodic boundary
-    conditions of the cuboid cell to the molecule2. This is useful so we can assign the best position.
+    conditions of the cuboid cell to the molecule2. This is not used for assignment but for plotting trajectories.
     
     This is tested - you can look at frame_i of wrapped trajectory and frame_i of simulation to confirm.
     """
@@ -47,6 +50,10 @@ rule wrap_trajectory2cuboid_cell:
                 W.write(u.atoms)
 
 rule wrap_molecule2_COM:
+    """
+    This rule uses gromacs' output that contains the center of mass of molecule 2 for each frame of the trajectory. This
+    center of mass is wrapped to the cuboid cell and later used for position assignment.
+    """
     input:
         com_m2 = f"<simulation>COM_m2.xvg",
         structure1 = f"<simulation>molecule1.<ext_str>",
@@ -69,6 +76,11 @@ rule wrap_molecule2_COM:
         write_object(wrapped_com_m2, output.com_m2_wrapped)
 
 rule position_assignment_csv:
+    """
+    Here the position gridpoint that best fits the wrapped center of mass of molecule 2 is found for each frame.
+    
+    We also provide a .csv file with more information, very usefula for debugging.
+    """
     input:
         energy_csv = f"<simulation>energy.csv",
         com_m2 = f"<outputs_assignment>m2_com.npy",
@@ -149,23 +161,6 @@ rule position_assignment_csv:
 
 ##################################### ROTATION ASSIGNMENT ####################################################
 
-rule trajectory_centered_at_m2_COM:
-    """
-    Write the whole trajectory translated in such a way that the COM of molecule 2 is at (0,0,0) in each frame and
-    molecule1 is not written. This is useful so we can later assign the best rotation.
-    """
-    input:
-        trajectory = "{some_folder}trajectory.<ext_trj>",
-        structure="{some_folder}structure.<ext_str>",
-        index="{some_folder}index.ndx",
-    output:
-        trajectory="{some_folder}m2_trajectory_centered.<ext_trj>",
-    shadow: "minimal"
-    shell:
-        """
-        export PATH="/home/janjoswig/local/gromacs-2022/bin:$PATH"
-        echo "3\n3\n" |  gmx22 trjconv  -s {input.structure}  -f {input.trajectory} -o {output.trajectory} -n {input.index} -center -boxcenter zero
-        """
 
 rule rotation_assignment:
     """
@@ -184,11 +179,7 @@ rule rotation_assignment:
         trajectory_universe = Universe(input.structure2, input.trajectory)
         reference_universe = Universe(input.structure2, input.reference_pt)
 
-        # TODO: move this to a function
-
         N_rotations = int(config["grid"]["N_rotations"])
-
-        #TODO if possible: use gromacs or similar to extract position array faster
 
         # shape (N_frames, N_atoms, 3)
         pos = np.array([ts.positions.copy() for ts in trajectory_universe.trajectory])
@@ -201,6 +192,9 @@ rule rotation_assignment:
 ##################################### FULL ASSIGNMENT ####################################################
 
 checkpoint full_assignment:
+    """
+    We combine the rotation assignment and position assignment into the final, full assignment index.
+    """
     input:
         rotation_assignment = f"<outputs_assignment>rotation_assignment.npy",
         translation_assignment= f"<outputs_assignment>translation_assignment.npy",
@@ -217,6 +211,10 @@ checkpoint full_assignment:
 
 
 rule count_assignments:
+    """
+    Some quick plotting to show which states are low in energy (lots of assignments) and which are high (basically no
+    assignments).
+    """
     input:
         translation_assignment=f"<outputs_assignment>translation_assignment.npy",
         rot_assignment=f"<outputs_assignment>rotation_assignment.npy",
@@ -226,7 +224,6 @@ rule count_assignments:
         rot_assignment = f"<outputs_other_plots>hist_rotation_assignment.png",
         full_assignment = f"<outputs_other_plots>hist_full_assignment.png",
     run:
-        import plotly.graph_objects as go
         for input_file, output_file in zip(input, output):
             data = read_object(input_file)
             fig = go.Figure(
