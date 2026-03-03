@@ -45,12 +45,13 @@ def _make_cartesian_grid(config_data: dict, save_information: dict):
         start_point, end_point, num_points = grid_linspace
         # if it is periodic you should not be using the end point for the grid as it would be identical to start point
         sub_grid = np.linspace(start_point, end_point, num_points, endpoint=(not is_peridic))
-        print(f"{grid_label} grid has the selection endpoint={(not is_peridic)}")
         # we start at largest distances and go to the smallest so that the 1st energy isn't too high (GROMACS complains)
         if grid_label == "z" and start_point < end_point:
             sub_grid = sub_grid[::-1]
-
-        grid_deltas.append(np.abs(sub_grid[1] - sub_grid[0]))
+        if len(sub_grid) >= 2:
+            grid_deltas.append(np.abs(sub_grid[1] - sub_grid[0]))
+        else:
+            grid_deltas.append(0.0)
         sub_grids.append(sub_grid)
     # for yaml it is important to save to list
     save_information["translation_grid_deltas"] = grid_deltas

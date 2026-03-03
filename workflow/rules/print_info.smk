@@ -5,10 +5,11 @@ import pandas as pd
 from scipy.sparse import csr_array
 from scipy.sparse.linalg import eigs
 
+from molgri.molecules.bimolecular import move_universe_to_xy_plane
 from molgri.molecules.rate_merger import delete_rows_columns, sqra_determine_indices_never_visited_states, \
     msm_determine_indices_never_visited_states
 from molgri.molecules.transitions import DecompositionTool, SQRA, auto_determine_eigenvector_extremes
-from workflow.helpers.io import read_object
+from workflow.helpers.io import read_object, write_object
 
 rule print_lowest_energies:
     """
@@ -202,3 +203,13 @@ rule try_out_sqra:
         for evec in eigenvec.T:
             print("Eigenvector")
             print(pd.DataFrame(evec).describe())
+
+rule align_to_xy:
+    input:
+        structure = "/home/hanaz63/2026_molgri/inputs/one_molecule_structures/benzene.gro"
+    output:
+        structure = "/home/hanaz63/2026_molgri/inputs/one_molecule_structures/benzene2.gro"
+    run:
+        input_u = read_object(input.structure)
+        output_u = move_universe_to_xy_plane(input_u)
+        write_object(output_u, output.structure)

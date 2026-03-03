@@ -9,6 +9,7 @@ from MDAnalysis.coordinates.memory import MemoryReader
 from numpy.typing import NDArray
 import numpy as np
 from MDAnalysis import Universe, Merge
+from scipy.linalg import svd
 
 
 def combine_coordinates(static_coordinates: NDArray, moving_coordinates: NDArray) -> NDArray:
@@ -112,4 +113,24 @@ def move_to_box_center(universe: Universe) -> Universe:
     box_center = universe.dimensions[:3] / 2
     com = universe.atoms.center_of_mass()
     universe.atoms.translate(box_center - com)
+    return universe
+
+def move_universe_to_xy_plane(universe: Universe) -> Universe:
+    """
+    This is a helper function that fits an universe with one molecule (presumably somewhat planar) to the xy plane as
+    much as possible using only rigid rotations and translations.
+
+    This is useful e.g. so we can have a starting position for molecule1 that is aligned with the xy plane.
+
+    Args:
+        universe (Universe): a MDAnalysis universe object
+
+    Returns:
+        the same universe but the atoms were rigidly rotated and translated so they  best fit the xy-plane
+    """
+    universe.atoms.translate(-universe.atoms.center_of_mass())
+    a, b, c = svd(universe.atoms.positions)
+    rotated_points = np.dot(universe.atoms.positions, c.T)
+    universe.atoms.positions = rotated_points
+    universe.atoms.translate(-universe.atoms.center_of_mass())
     return universe

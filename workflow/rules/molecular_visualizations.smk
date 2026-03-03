@@ -388,19 +388,18 @@ rule stacked_blue_frames:
         i = r"[1-9]\d*"
     run:
         from molgri.images.create_vmdlog import VMDCreator
-        from workflow.helpers.io import get_num_atoms, read_object
+        from workflow.helpers.io import get_num_atoms
 
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
 
-        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
-
         all_images = []
         # make all the single-frame plots
         for i, neg_structure in enumerate(input.neg_e_structures):
+            my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
             tmp_vmd_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.log"
             tmp_plot_file = f"tmp_{wildcards.tau}_{wildcards.i}_{i}.tga"
-            my_vmd.prepare_eigenvector_script(num_red=1,num_blue=0,
+            my_vmd.prepare_eigenvector_script(num_red=0,num_blue=1,
                 vmd_name=tmp_vmd_file,plot_name=tmp_plot_file,
                 box_limits=box_limits,draw_rectangular_box=False,gridpoints=None,
                 zoom_level=int(wildcards.zoom_level),translation_rotation_script=input.translation_rotation_script)
