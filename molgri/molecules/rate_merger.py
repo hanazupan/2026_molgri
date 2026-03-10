@@ -47,10 +47,20 @@ def sqra_determine_indices_never_visited_states(rate_matrix: csr_array) -> NDArr
         an array of sorted indices, the rows & columns with these indices will be cut out since they represent states
         with too high energies.
     """
+    #print(rate_matrix.shape)
+    #print(np.unique(rate_matrix.data))
     too_large_diagonal = np.where(rate_matrix.diagonal() < -1e100)[0]
-    not_finite_diagonal = np.where(~np.isfinite(rate_matrix.diagonal()))[0]
+    #print(len(too_large_diagonal))
+    #too_large_diagonal = []
 
-    combined = set(too_large_diagonal).union(set(not_finite_diagonal))
+    mask = np.isinf(rate_matrix.data)
+    rows = np.unique(np.searchsorted(rate_matrix.indptr[1:], np.where(mask)[0], side='right'))
+    print("rows", len(rows), rows[:20])
+
+    not_finite_diagonal = np.where(~np.isfinite(rate_matrix.diagonal()))[0]
+    print("too large ", len(too_large_diagonal), too_large_diagonal[:20])
+
+    combined = set(too_large_diagonal).union(set(rows))
     combined = list(combined)
     combined.sort()
     combined = np.array(combined)
@@ -72,6 +82,7 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str) -> tuple
         a tuple (smaller_transition_matrix, indices_to_keep) where the first one is a modified transition matrix (
         still a sparse matrix) and the second one the list of all indices that remain (sorted)
     """
+
 
     # first determine the high-energy indices
     if msm_or_sqra == "msm":
@@ -129,7 +140,7 @@ def msm_normalize(my_matrix: csr_array) -> csr_array:
 
 def sqra_normalize(my_matrix: csr_array | NDArray) -> csr_array | NDArray:
     """
-    The rate matrix (SQRA) is normalized so that the sum of the columns is zero. This is achieved by filling the
+    The rate matrix (SQRA) is normalized so that the sum of the rows is zero. This is achieved by filling the
     diagonal with the negative sums of the columns.
 
     Args:
@@ -138,13 +149,15 @@ def sqra_normalize(my_matrix: csr_array | NDArray) -> csr_array | NDArray:
     Returns:
         my-matrix normalized so that the sum of columns is zero
     """
+    my_matrix.setdiag(0)
     sums = my_matrix.sum(axis=1)
-    # diagonal matrix of negative column-sums
+    # diagonal matrix of negative row-sums
     if isinstance(my_matrix, csr_array):
         sum_diag = diags_array(-sums, format="csr")
     else:
         sum_diag = np.diag(-sums)
-    return my_matrix + sum_diag
+    all_together = my_matrix + sum_diag
+    return all_together
 
 def expand_eigenvector_to_full_length(values: NDArray, indices: NDArray, full_length: int):
     """

@@ -308,7 +308,8 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
             self.add_grid(gridpoints)
         if translation_rotation_script:
             self._add_rotations_translations()
-        self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
+        if zoom_level > 0:
+            self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
         # we only have two representations even if the second one potentially uses multiple frames
         self._render_representations([0, 1], plot_path=plot_name)
         self.write_text_to_file(vmd_name)
@@ -347,7 +348,8 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
             self.add_grid(gridpoints)
         if translation_rotation_script:
             self._add_rotations_translations()
-        self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
+        if zoom_level > 0:
+            self._zoom_on_box(box_limits[0], box_limits[1], zoom_level)
         # we always have three representations (first molecule, second in red, second in blue
         if num_red > 0 and num_blue > 0:
             list_representation_indices = [0,1,2]

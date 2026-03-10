@@ -44,6 +44,9 @@ def where_to_look(keyword: str) -> str:
     Returns:
         one of the three paths as described above
     """
+    if "sqra" in keyword:
+        return "<pseudosimulation>"
+
 
     if "wrapped" in keyword:
         return "<outputs_assignment>"

@@ -52,7 +52,6 @@ rule create_translation_network:
         grid_info = read_object(input.info_material)
         periodic_in = grid_info["periodic_in"]
         subgrids = grid_info["subgrid_points"]
-
         translation_network = build_translation_network(subgrids,periodic_in)
         write_object(translation_network, output.network_file)
 
@@ -84,7 +83,6 @@ rule save_network_properties:
         volumes = "<outputs_network>volumes.npy"
     run:
         full_network = read_object(input.network_file)
-
         write_object(full_network.grid, output.grid)
         write_object(full_network.volumes, output.volumes)
 
@@ -101,7 +99,6 @@ rule display_network:
     run:
         my_network = read_object(input.network_file)
         show_graph(my_network,edge_property="distance", show=False, save_as=output.plot)
-
 
 
 rule display_network_edge_matrices:

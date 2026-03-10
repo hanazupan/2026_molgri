@@ -16,11 +16,11 @@ rule print_lowest_energies:
     Use this rule if you want to quickly look at the indices of the lowest energies.
     """
     input:
-        energy_csv =f"<simulation>energy.csv"
+        energy_csv =f"<pseudosimulation>energy.csv"
     run:
         df = read_object(input.energy_csv)
-        df = df.sort_values(by="Binding energy [kJ/mol]",ascending=True)
-        print(df.head(5))
+        df = df.sort_values(by="Energy [kJ/mol]",ascending=True)
+        print(df.head(1))
 
 rule print_position_assignment:
     input:
@@ -56,7 +56,7 @@ rule print_indices_interpretation:
         indices_csv =f"<outputs_network>indices_interpretation.csv"
     run:
         df = read_object(input.indices_csv)
-        print(df.iloc[70:90])
+        print(df.loc["2551"])
         # for example only filter the ones with specific rotation index
         #df_filtered = df.loc[df["Rotation index"] == 5]
         #print(df_filtered.head(10))
@@ -72,6 +72,17 @@ rule print_position_subgrids:
 
 
 import numpy as np
+
+rule print_rate_matrix:
+    input:
+        rate_matrix = "<outputs_transitions>sqra/reduced_sqra.npz" #reduced_sqra
+    run:
+        matrix = read_object(input.rate_matrix).todense()
+        for i in [0, 22, 968]:
+            row = matrix[i]
+            print(f"sum row ", np.sum(row))
+            column = matrix.T[i]
+            print(f"sum column ",np.sum(column))
 
 
 rule print_eigenvector_statistics:

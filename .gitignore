@@ -133,7 +133,7 @@ dmypy.json
 *.idea
 
 # input/output stuff
-**/input/*
+
 **/output/*
 
 .snakemake/*
@@ -202,8 +202,7 @@ workflow/*.csv
 monomer.gro
 
 outputs
-inputs
-input
+
 output
 nobackup
 januar_outdated_outputs/

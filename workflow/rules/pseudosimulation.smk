@@ -1,7 +1,7 @@
 """
 Everything here is saved to the pseudosimulation/gromacs folder: creating a structure, pseudotrajectory and calculating the energy along it.
 """
-from workflow.helpers.io import read_object, write_object, from_xvg_to_csv_energy
+from workflow.helpers.io import read_object, write_object
 
 rule copy_molecular_files_from_input:
     """
@@ -111,6 +111,6 @@ rule read_in_energies:
     run:
         my_network = read_object(input.network)
         my_energy = read_object(input.energy)
-        my_energy_array = my_energy["Binding energy [kJ/mol]"].to_numpy()
+        my_energy_array = my_energy["Energy [kJ/mol]"].to_numpy()
         my_network.add_node_properties(my_energy_array,"binding_energy")
         write_object(my_network, output.network_energy)

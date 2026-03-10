@@ -192,14 +192,13 @@ def represent_flow_sequence(dumper, seq):
     )
 
 
-def from_xvg_to_csv_energy(xvg_file, csv_file):
+def from_xvg_to_csv_energy(xvg_file, csv_file, energy_types: list):
     my_energy = read_object(xvg_file)
-    coulumb = my_energy["Coul-SR:MOL1-MOL2"].to_numpy()
-    lj = my_energy["LJ-SR:MOL1-MOL2"].to_numpy()
+    total_energy = np.zeros(len(my_energy))
+    for energy_type in energy_types:
+        total_energy += my_energy[energy_type].to_numpy()
 
-    df = pd.DataFrame(np.array([coulumb, lj]).T,
-        columns=["Coulomb contribution [kJ/mol]", "Lennard-Jones contribution [kJ/mol]"])
-
-    df["Binding energy [kJ/mol]"] = df["Coulomb contribution [kJ/mol]"] + df["Lennard-Jones contribution [kJ/mol]"]
+    df = pd.DataFrame(total_energy.T,
+        columns=["Energy [kJ/mol]"])
     df.index.name = "Total index"
     write_object(df,csv_file)

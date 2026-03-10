@@ -141,9 +141,9 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
     for i in range(3):
         ith_subgrid = xyz_subgrids[i]
         if len(ith_subgrid) == 1:
-            delta_coo = 0.0
+            delta_coo = 1.0
         else:
-            delta_coo = ith_subgrid[1] - ith_subgrid[0]
+            delta_coo = np.abs(ith_subgrid[1] - ith_subgrid[0])
         nodes = []
         for coo_i, coo in enumerate(ith_subgrid):
             hull = (coo - delta_coo / 2, coo + delta_coo / 2)

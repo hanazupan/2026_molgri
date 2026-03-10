@@ -45,7 +45,7 @@ checkpoint lowest_E_indices:
         indices= "{path}lowest_{N}_binding_energies.txt"
     run:
         df_energy = read_object(input.energy_csv)
-        required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Binding energy [kJ/mol]").index)
+        required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
         write_object(required_indices, output.indices)
 
 checkpoint find_indices_dominant_eigenvectors:
@@ -71,15 +71,15 @@ checkpoint find_indices_dominant_eigenvectors:
         N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
 
         zeroth_eigenvector = eigenvectors[:, 0].T
-        pos_e, pos_neg = auto_determine_eigenvector_extremes(zeroth_eigenvector, N_extremes_to_plot)
-        abs_e = min(pos_e, pos_neg, key=len)
+        pos_e, pos_neg = auto_determine_eigenvector_extremes(np.abs(zeroth_eigenvector), N_extremes_to_plot)
+
         # save the absolute
-        write_object(np.array(abs_e),output.abs_e_indices[0])
+        write_object(np.array(pos_e),output.abs_e_indices[0])
 
         for eigenvector_i in range(1, N_interesting_eigenvectors):
-            higher_eigenvector = eigenvectors[:, 0].T
-            pos_e, neg_e = auto_determine_eigenvector_extremes(zeroth_eigenvector, N_extremes_to_plot)
+            higher_eigenvector = eigenvectors[:, eigenvector_i].T
+            pos_e, neg_e = auto_determine_eigenvector_extremes(higher_eigenvector, N_extremes_to_plot)
+            print(eigenvector_i, pos_e, neg_e)
             # save the positive and negative indices
             write_object(np.array(pos_e), output.pos_e_indices[eigenvector_i-1])
             write_object(np.array(neg_e),output.neg_e_indices[eigenvector_i-1])
-        write_object(np.array(abs_e),output.abs_e_indices[0])

@@ -240,7 +240,7 @@ rule stack_all_translation_options:
 rule stack_all_eigenvectors:
     input:
         all_eigenvectors_one_tau = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            i=[0,1,2,3,4], allow_missing=True),
+            i=list(range(8)), allow_missing=True),
     output:
         all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
     run:
@@ -253,17 +253,18 @@ rule get_all_eigenvectors:
             COM_or_full=["full", "COM"]),
 
 def input_zeroth_eigenvector(wc):
-    where = "<outputs_assignment>"
+    where = "<pseudosimulation>"
     what = what_to_provide(wc.COM_or_full, for_a_structure=True)
     result = input_base(where, what, wc)
 
+    where = where_to_look(wc.tau)
 
     indices_file = checkpoints.find_indices_dominant_eigenvectors.get(tau=wc.tau).output.abs_e_indices
     indices_file = indices_file[0]
     indices = read_object(indices_file).astype(int)
     what = what_to_provide(wc.COM_or_full,for_a_structure=False)
     result["all_frame_gros"] = find_the_right_frames(where, what, indices)
-
+    print(result)
     return result
 
 rule zeroth_eigenvector_overlapping_frames:
@@ -293,18 +294,23 @@ rule zeroth_eigenvector_overlapping_frames:
 
 
 def input_red_blue(wc):
-    where = "<outputs_assignment>"
+    where = "<pseudosimulation>"
     what = what_to_provide(wc.COM_or_full, for_a_structure=True)
     result = input_base(where, what, wc)
 
+    where = where_to_look(wc.tau)
     indices_pos_file = checkpoints.find_indices_dominant_eigenvectors.get(tau=wc.tau, i=wc.i).output.pos_e_indices
     indices_neg_file = checkpoints.find_indices_dominant_eigenvectors.get(tau=wc.tau,i=wc.i).output.neg_e_indices
-    indices_pos = read_object(indices_pos_file[0]).astype(int)
-    indices_neg = read_object(indices_neg_file[0]).astype(int)
+    indices_pos = read_object(indices_pos_file[int(wc.i)-1]).astype(int)
+    indices_neg = read_object(indices_neg_file[int(wc.i)-1]).astype(int)
 
     what = what_to_provide(wc.COM_or_full,for_a_structure=False)
     result["pos_e_structures"] = find_the_right_frames(where, what, indices_pos)
     result["neg_e_structures"] = find_the_right_frames(where, what, indices_neg)
+
+    print(wc.i)
+    print(result["pos_e_structures"])
+    print(result["neg_e_structures"])
     return result
 
 
@@ -352,6 +358,7 @@ rule stacked_red_frames:
     wildcard_constraints:
         i = r"[1-9]\d*"
     run:
+        print(wildcards.i, input.pos_e_structures, input.neg_e_structures)
         from molgri.images.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms
 

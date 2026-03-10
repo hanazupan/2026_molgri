@@ -1,0 +1,40 @@
+integrator              = md
+dt                      = 0.002
+nsteps                  = 20000000
+nstxout-compressed      = 10
+nstxout                 = 0
+nstvout                 = 0
+nstfout                 = 0
+nstcalcenergy           = 10
+nstenergy               = 10
+nstlog                  = 0
+;
+cutoff-scheme           = Verlet
+nstlist                 = 20
+vdwtype                 = Cut-off
+vdw-modifier            = Force-switch
+rvdw_switch             = 1.0
+rvdw                    = 1.2
+rcoulomb                = 1.2
+rlist                   = 1.2
+coulombtype             = Reaction-Field
+epsilon_rf              = 78
+;
+tcoupl                  = v-rescale
+tc_grps                 = System
+tau_t                   = 1.0
+ref_t                   = 298.15
+;
+;
+constraints             = h-bonds
+constraint_algorithm    = LINCS
+continuation            = yes
+;
+nstcomm                 = 100
+comm_mode               = linear
+comm_grps               = System
+;
+periodic-molecules      = yes
+pcoupl                  = no
+
+energygrps              = MOL1 MOL2

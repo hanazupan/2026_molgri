@@ -5,6 +5,7 @@ perform eigendecomposition of these matrices.
 
 from typing import Optional, Sequence, Tuple, Any
 
+import pandas as pd
 from numpy.typing import NDArray
 import numpy as np
 from scipy.signal import find_peaks
@@ -153,18 +154,20 @@ class SQRA:
         # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
         diff_energies = self.energies[transition_matrix.row] - self.energies[transition_matrix.col]
 
+        # print(f"Warning! {len(np.where(diff_energies > 1e3)[0])} pairs of cells have a very large difference in "
+        #       f"energy, more than factor 500. This would lead to overflow, so these differences are capped to a "
+        #       f"factor 500. This might be a sign of poor discretisation or just the case of L-J overlap.")
+        #diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
+
         pi_exponent = np.round(diff_energies,14) * 1000 / (2 * kB * N_A * T)
 
         transition_matrix.data *= np.exp(pi_exponent)
-
-
-        # normalise rows
         sums = transition_matrix.sum(axis=1)
-        sums = np.array(sums).squeeze()
-        all_i = np.arange(len(self.volumes))
-        diagonal_array = coo_array((-sums, (all_i, all_i)), shape=(len(all_i), len(all_i)))
-        transition_matrix = transition_matrix.tocsr() + diagonal_array.tocsr()
-        return transition_matrix
+        # diagonal matrix of negative row-sums
+        sum_diag = diags_array(-sums, format="csr")
+        all_together = transition_matrix + sum_diag
+
+        return all_together
 
 
 class DecompositionTool:
@@ -186,6 +189,10 @@ class DecompositionTool:
         self.kept_indices = kept_indices
         self.total_length = total_length
 
+        # scale
+        self.scale = np.abs(self.matrix_to_decompose.data).max()
+        self.matrix_to_decompose = self.matrix_to_decompose / self.scale
+
     def decompose_msm(self) -> tuple:
         """
         Decomposition with settings suitable for transition matrices (expected first eigenvalue 1 and all others
@@ -205,7 +212,8 @@ class DecompositionTool:
             (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
             shape (total_len, 12)
         """
-        return self.get_decomposition(tol=1e-85, maxiter=100000, which="SR", sigma=1e-12)
+        return self.get_decomposition(tol=1e-12, maxiter=100000, which="SR", sigma=1e-12)
+        #return self.get_decomposition(tol=0, maxiter=100000, which="LM", sigma=1e-300) #SR or LM?
 
     def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 12) -> tuple:
         """
@@ -226,13 +234,15 @@ class DecompositionTool:
             (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
             shape (total_len, 12)
         """
-        eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which, sigma=sigma)
+        eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
+                                  sigma=sigma,)
         # if imaginary eigenvectors or eigenvalues, raise error
         if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-7) or not np.allclose(eigenval.imag.max(), 0,
                                                                                             rtol=1e-5, atol=1e-7):
             print(f"Complex values for eigenvectors and/or eigenvalues: {eigenvec}, {eigenval}")
         eigenvec = eigenvec.real
         eigenval = eigenval.real
+        print("Eigenvalues: ", eigenval)
         # sort eigenvectors according to their eigenvalues
         idx = eigenval.argsort()[::-1]
         eigenval = eigenval[idx]
@@ -245,7 +255,7 @@ class DecompositionTool:
             expanded_eigenvectors.append(expanded_eigenvector)
         expanded_eigenvectors = np.array(expanded_eigenvectors).T
 
-        return eigenval, expanded_eigenvectors
+        return eigenval * self.scale, expanded_eigenvectors
 
 
 def kde_valley_cutoffs(data: NDArray, bandwidth: str |float = "scott", grid_size: int = 2000, peak_prominence: float = 0.01) -> tuple:
@@ -288,8 +298,8 @@ def kde_valley_cutoffs(data: NDArray, bandwidth: str |float = "scott", grid_size
 
     peaks, _ = find_peaks(density, prominence=peak_prominence)
 
-    if len(peaks) < 2:
-        raise ValueError("Less than 2 peaks detected; distribution may be unimodal.")
+    # if len(peaks) < 2:
+    #     raise ValueError("Less than 2 peaks detected; distribution may be unimodal.")
 
     valleys, _ = find_peaks(-density)
     return grid[peaks], grid[valleys]

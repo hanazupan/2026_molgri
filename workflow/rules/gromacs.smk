@@ -112,7 +112,7 @@ checkpoint create_energy_csv_trajectory:
     output:
         energy_csv = "{path}energy.csv"
     run:
-        from_xvg_to_csv_energy(input.energy, output.energy_csv)
+        from_xvg_to_csv_energy(input.energy,output.energy_csv,config["analysis"]["energy_types"])
 
 # rule gromacs_equilibration:
 #     """

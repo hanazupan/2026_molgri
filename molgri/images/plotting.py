@@ -122,14 +122,30 @@ def draw_line_between(fig, point1, point2, color="black", **kwargs):
                          marker=dict(color=color)), **kwargs)
 
 @save_plotly
-def show_array(my_array, title: str = ""):
+def show_array(my_array, title: str = "", indices=None):
+    if indices is None:
+        indices = list(range(len(my_array)))
+
+
     fig = px.imshow(my_array)
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=indices,
+        showgrid=True,
+        tickangle=45,
+        tickfont=dict(size=9),
+    )
+    fig.update_yaxes(
+        tickmode="array",
+        tickvals=indices,
+        showgrid=True,
+        tickfont=dict(size=9)
+    )
+    fig.update_traces(xgap=1, ygap=1)
     fig.update_layout(
         font=dict(size=30),
         title={
             'text': title,
-            'y': 1,
-            'x': 0.5,
             'xanchor': 'center',
             'yanchor': 'top'})
     return fig

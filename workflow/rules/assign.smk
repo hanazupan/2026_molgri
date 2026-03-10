@@ -98,7 +98,7 @@ rule position_assignment_csv:
         com_m2 = read_object(input.com_m2)
         com_m2_wrapped = read_object(input.com_m2_wrapped)
 
-        energy = read_object(input.energy_csv)["Binding energy [kJ/mol]"]
+        energy = read_object(input.energy_csv)["Energy [kJ/mol]"]
         df_indices = read_object(input.indices_csv, header=[0, 1])
 
         df_indices.columns = [col[0] if col[1].startswith("Unnamed") else col[1] for col in df_indices.columns]
