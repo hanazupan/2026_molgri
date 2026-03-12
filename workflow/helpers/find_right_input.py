@@ -55,6 +55,8 @@ def where_to_look(keyword: str) -> str:
         return "<pseudosimulation>"
     elif "simulation" in keyword:
         return "<simulation>"
+    elif int(keyword):
+        return "<outputs_assignment>"
     else:
         raise ValueError(f"Keyword must contain 'wrapped', 'simulation' or 'pseudosimulation', cannot understand {keyword}.")
 

@@ -1,0 +1,16 @@
+
+
+analysis:
+  energy_program: GROMACS
+  zoom_level: [ 0 ]
+  view_index: [ 1 ]
+  length_shortened_trajectory_ns: 10
+  analyse_first_N_frames: None
+
+msm:
+  num_interesting_timescales: 4
+  num_interesting_eigenvectors: 4
+  num_extremes_to_plot: 3
+  tolerance: 0
+  sigma_sqra: 1e-30
+  taus: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]

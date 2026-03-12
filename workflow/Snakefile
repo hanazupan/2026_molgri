@@ -1,4 +1,4 @@
-configfile: "workflow/config/example_config.yaml"
+configfile: "workflow/config/defaults.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
@@ -62,8 +62,8 @@ include: "rules/print_info.smk"
 
 
 N=[1, 5, 10, 50]
-view_index=[1]
-zoom_level = [0]
+view_index=config["analysis"]["view_index"]
+zoom_level = config["analysis"]["zoom_level"]
 
 rule all:
     input:
@@ -87,7 +87,7 @@ rule all:
         # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
         #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
         expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
-            sim_pseudo_wrapped=["pseudosimulation", "pseudosimulation_COM"],
+            sim_pseudo_wrapped=["pseudosimulation"],
             zoom_level=zoom_level, view_index=view_index, N=[1, 4, 20]),
         # "<outputs_indices>all_positions_first_rotation.txt",
         # "<outputs_indices>all_rotations_first_position.txt",
@@ -106,9 +106,11 @@ rule all:
         # "<outputs_other_plots>its.png",
         # rules.get_all_eigenvectors.input,
         # rules.plot_all_eigenvectors_as_lines.input,
+        # expand(
+        # f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
+        # zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], tau=[1, 10, 100]),
         # # sqra
-        "<outputs_transitions>sqra/sqra.npz",
-        "<outputs_transitions>sqra/reduced_sqra.npz",
+        # "<outputs_transitions>sqra/reduced_sqra.npz",
         # "<outputs_transitions>sqra/eigenvectors.npy",
         expand(f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
             zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"]),

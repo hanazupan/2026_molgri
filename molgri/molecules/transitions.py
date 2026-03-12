@@ -5,14 +5,14 @@ perform eigendecomposition of these matrices.
 
 from typing import Optional, Sequence, Tuple, Any
 
-import pandas as pd
 from numpy.typing import NDArray
 import numpy as np
+from scipy.linalg import eig
 from scipy.signal import find_peaks
 from scipy.sparse import coo_array, csr_array, diags_array, dok_array
-from scipy.sparse.linalg import eigs
 
 from scipy.constants import k as kB, N_A
+from scipy.sparse.linalg import eigs
 from sklearn.neighbors import KernelDensity
 
 from molgri.molecules.rate_merger import expand_eigenvector_to_full_length
@@ -126,8 +126,30 @@ class SQRA:
         self.volumes = volumes
         self.distances = distances
         self.surfaces = surfaces
+        # self.rate_matrix = None
+        # self.reduced_rate_matrix = None
+        # self.energy_differences = None
+        # self.indices_to_keep = list(range(self.surfaces.shape[0]))
 
-    def get_rate_matrix(self, D: float, T: float) -> csr_array:
+    # def cut_high_energy_states(self, cutting_factor: float):
+    #     self.indices_to_keep = list(range(self.surfaces.shape[0]))
+    #     # now perform removal of rows and columns
+    #     if cutting_factor != "None":
+    #         as_coo = self.rate_matrix.tocoo()
+    #         indices_data_to_remove = np.where(self.energy_differences > float(cutting_factor))[0]
+    #         indices_rows_to_remove = as_coo.row[indices_data_to_remove]
+    #         print(indices_rows_to_remove, len(indices_rows_to_remove), 9597 in indices_rows_to_remove, 5546 in indices_rows_to_remove,
+    #               1578 in indices_rows_to_remove, 5197 in indices_rows_to_remove, 7820 not in indices_rows_to_remove,
+    #               9820 not in indices_rows_to_remove, 6940 not in indices_rows_to_remove)
+    #         self.reduced_rate_matrix = remove_rows_cols(self.rate_matrix.tocsr(), indices_rows_to_remove)
+    #         self.indices_to_keep = list(set(self.indices_to_keep) - set(indices_rows_to_remove))
+    #         self.indices_to_keep.sort()
+    #         self.reduced_rate_matrix = normalize_rate_matrix(self.reduced_rate_matrix)
+    #     else:
+    #         self.reduced_rate_matrix = normalize_rate_matrix(self.rate_matrix)
+    #     return self.reduced_rate_matrix, self.indices_to_keep
+
+    def get_rate_matrix(self, D: float, T: float, capping_factor: float) -> csr_array:
         """
         This is the method that gets from cell properties (energies, volumes) and adjacency properties (distances,
         surfaces) to the full rate matrix.
@@ -145,29 +167,29 @@ class SQRA:
         assert len(self.energies) == len(self.volumes), f"{len(self.energies)} != {len(self.volumes)}"
         # you cannot multiply or divide directly in a coo format
         # using a higher-precision dtype is not useful, since we take exponentials of huge numbers - always overflow
-        transition_matrix = D * self.surfaces  #/ all_distances
-        transition_matrix = transition_matrix.tocoo()
-        transition_matrix.data /= self.distances.tocoo().data
+        rate_matrix = D * self.surfaces
+        rate_matrix = rate_matrix.tocoo()
+        rate_matrix.data /= self.distances.tocoo().data
         # Divide every row of transition_matrix with the corresponding volume
-        transition_matrix.data /= self.volumes[transition_matrix.row]
+        rate_matrix.data /= self.volumes[rate_matrix.row]
         # multiply with sqrt(pi_j/pi_i) = e**((V_i-V_j)*1000/(2*k_B*N_A*T))
         # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
-        diff_energies = self.energies[transition_matrix.row] - self.energies[transition_matrix.col]
+        energy_differences = self.energies[rate_matrix.row] - self.energies[rate_matrix.col]
 
-        # print(f"Warning! {len(np.where(diff_energies > 1e3)[0])} pairs of cells have a very large difference in "
-        #       f"energy, more than factor 500. This would lead to overflow, so these differences are capped to a "
-        #       f"factor 500. This might be a sign of poor discretisation or just the case of L-J overlap.")
-        #diff_energies = np.where(diff_energies < 5e2, diff_energies, 5e2)
+        if capping_factor!="None":
+            energy_differences = np.where(energy_differences < float(capping_factor), energy_differences, float(capping_factor))
 
-        pi_exponent = np.round(diff_energies,14) * 1000 / (2 * kB * N_A * T)
+        pi_exponent = energy_differences * 1000 / (2 * kB * N_A * T)
+        rate_matrix.data *= np.exp(pi_exponent)
 
-        transition_matrix.data *= np.exp(pi_exponent)
-        sums = transition_matrix.sum(axis=1)
-        # diagonal matrix of negative row-sums
+        # normalize
+        rate_matrix.setdiag(0)
+        sums = rate_matrix.sum(axis=1)
+        print(sums.shape)
         sum_diag = diags_array(-sums, format="csr")
-        all_together = transition_matrix + sum_diag
-
+        all_together = rate_matrix + sum_diag
         return all_together
+
 
 
 class DecompositionTool:
@@ -190,7 +212,7 @@ class DecompositionTool:
         self.total_length = total_length
 
         # scale
-        self.scale = np.abs(self.matrix_to_decompose.data).max()
+        self.scale = 1 #np.abs(self.matrix_to_decompose.data).max()
         self.matrix_to_decompose = self.matrix_to_decompose / self.scale
 
     def decompose_msm(self) -> tuple:
@@ -204,7 +226,7 @@ class DecompositionTool:
         """
         return self.get_decomposition(tol=1e-8, maxiter=100000, which="LR", sigma=None)
 
-    def decompose_sqra(self) -> tuple:
+    def decompose_sqra(self, sigma, tolerance, **kwargs) -> tuple:
         """
         Decomposition with settings suitable for transition matrices (expected first eigenvalue 0).
 
@@ -212,8 +234,7 @@ class DecompositionTool:
             (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
             shape (total_len, 12)
         """
-        return self.get_decomposition(tol=1e-12, maxiter=100000, which="SR", sigma=1e-12)
-        #return self.get_decomposition(tol=0, maxiter=100000, which="LM", sigma=1e-300) #SR or LM?
+        return self.get_decomposition(tol=tolerance, maxiter=1000000, which="SR", sigma=sigma, **kwargs)
 
     def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 12) -> tuple:
         """
@@ -234,15 +255,22 @@ class DecompositionTool:
             (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
             shape (total_len, 12)
         """
-        eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
-                                  sigma=sigma,)
+        # two options for transpose: large, sparse matrices need specialized methods but small ones perform better
+        # with full eigendecomposition
+        if self.matrix_to_decompose.shape[0] > 12000:
+            print(f"sigma={sigma}, tolerance={tol}", type(sigma), type(tol))
+            eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
+                                      sigma=sigma)
+        else:
+            eigenval, eigenvec = eig(self.matrix_to_decompose.toarray(), left=True, right=False)
+        print("Initial eigenvalues ", eigenval[:12])
         # if imaginary eigenvectors or eigenvalues, raise error
-        if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-7) or not np.allclose(eigenval.imag.max(), 0,
-                                                                                            rtol=1e-5, atol=1e-7):
-            print(f"Complex values for eigenvectors and/or eigenvalues: {eigenvec}, {eigenval}")
+        if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-3) or not np.allclose(eigenval.imag.max(), 0,
+                                                                                            rtol=1e-5, atol=1e-3):
+            print(f"Complex values for eigenvectors and/or eigenvalues: {eigenvec.imag.max()}{eigenval.imag.max()}")
         eigenvec = eigenvec.real
         eigenval = eigenval.real
-        print("Eigenvalues: ", eigenval)
+
         # sort eigenvectors according to their eigenvalues
         idx = eigenval.argsort()[::-1]
         eigenval = eigenval[idx]
@@ -252,10 +280,22 @@ class DecompositionTool:
         # expand to full length
         for eigenvector in eigenvec.T:
             expanded_eigenvector = expand_eigenvector_to_full_length(eigenvector, self.kept_indices, self.total_length)
-            expanded_eigenvectors.append(expanded_eigenvector)
-        expanded_eigenvectors = np.array(expanded_eigenvectors).T
 
-        return eigenval * self.scale, expanded_eigenvectors
+            expanded_eigenvectors.append(expanded_eigenvector)
+        expanded_eigenvectors = np.array(expanded_eigenvectors)
+
+        # only allow the 0th eigenvector and higher eigenvectors that sum up to zero
+        allowed_indices = []
+        for i, expanded_eigenvector in enumerate(expanded_eigenvectors):
+            print(i,np.sum(expanded_eigenvector))
+            if i==0 or np.isclose(np.sum(expanded_eigenvector), 0, atol=1e-2, rtol=1e-2):
+                 allowed_indices.append(i)
+
+        final_eigenvalues = eigenval[allowed_indices] * self.scale
+        print("Final eigenvalues ", final_eigenvalues[:12])
+        final_eigenvectors = expanded_eigenvectors[allowed_indices]
+        final_eigenvectors = final_eigenvectors.T
+        return final_eigenvalues, final_eigenvectors
 
 
 def kde_valley_cutoffs(data: NDArray, bandwidth: str |float = "scott", grid_size: int = 2000, peak_prominence: float = 0.01) -> tuple:
@@ -324,7 +364,7 @@ def auto_determine_eigenvector_extremes(one_eigenvector: NDArray,  N_extremes_to
         if N_extremes_to_plot is an integer, both arrays will have the length N_extremes_to_plot
         if N_extremes_to_plot is "auto", the arrays might have different lengths
     """
-
+    print(N_extremes_to_plot)
     # should be automatically determined
     if N_extremes_to_plot == "auto":
         above_upper_limit = np.zeros(100)
@@ -334,7 +374,7 @@ def auto_determine_eigenvector_extremes(one_eigenvector: NDArray,  N_extremes_to
         max_num_cycles = 5
         cycle_num = 0
 
-        while (len(above_upper_limit) > 50 or len(below_lower_limit) > 50) and cycle_num < max_num_cycles:
+        while (len(above_upper_limit) > 10 or len(below_lower_limit) > 10) and cycle_num < max_num_cycles:
             my_peaks, my_valleys = kde_valley_cutoffs(one_eigenvector, peak_prominence=peak_prominence)
             upper_limit = np.max(my_valleys)
             lower_limit = np.min(my_valleys)
@@ -343,8 +383,13 @@ def auto_determine_eigenvector_extremes(one_eigenvector: NDArray,  N_extremes_to
             below_lower_limit = np.where(one_eigenvector <= lower_limit)[0]
             peak_prominence = peak_prominence / 5
             cycle_num += 1
+        if len(above_upper_limit) > 10:
+            above_upper_limit = above_upper_limit[:10]
+        if len(below_lower_limit) > 10:
+            below_lower_limit = below_lower_limit[:10]
         return above_upper_limit, below_lower_limit
     # if we already know how many structures to plot
     else:
+        N_extremes_to_plot = int(N_extremes_to_plot)
         return k_argmax_in_array(one_eigenvector, N_extremes_to_plot), k_argmin_in_array(one_eigenvector,N_extremes_to_plot)
 

@@ -157,6 +157,7 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
         if periodic_in[i]:
             G.add_edge(nodes[0], nodes[-1], edge_type=labels[i])
         sub_networks.append(G)
+        print(G.number_of_edges())
 
     # now combine the sub-networks
     xy_network = nx.cartesian_product(sub_networks[0], sub_networks[1])
@@ -166,7 +167,6 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
     full_network = nx.relabel_nodes(full_network, mapping)
     full_network = CartesianTranslationNetwork(full_network)
     return full_network
-
 
 def _adjacency_hulls_from_upper_quaternions(upper_quaternions: NDArray) -> Tuple[coo_array, NDArray, NDArray]:
     """
@@ -236,4 +236,6 @@ def create_full_network(translation_network: TranslationNetwork, rotation_networ
     full_network = nx.cartesian_product(translation_network, rotation_network)
     mapping = {(trans, rot): FullNode(trans, rot) for (trans, rot) in full_network.nodes}
     full_network = nx.relabel_nodes(full_network, mapping)
+    # remove adjacency to itself (in case there is only 1 rotation or only 1 translation)
+    full_network.remove_edges_from(nx.selfloop_edges(full_network))
     return FullNetwork(full_network)

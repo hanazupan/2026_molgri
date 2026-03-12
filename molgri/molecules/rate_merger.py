@@ -8,6 +8,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import csr_array, diags_array
 
+
+
 def msm_determine_indices_never_visited_states(transition_matrix: csr_array) -> NDArray:
     """
     We are interested in the indices of states that were never visited during the simulation. These will have
@@ -30,7 +32,7 @@ def msm_determine_indices_never_visited_states(transition_matrix: csr_array) -> 
     empty_indices = np.where(empty_mask)[0]
     return empty_indices
 
-def sqra_determine_indices_never_visited_states(rate_matrix: csr_array) -> NDArray:
+def sqra_determine_indices_never_visited_states(rate_matrix: csr_array, cutting_factor) -> NDArray:
     """
     For the rate matrix, we want to remove the elements based on the diagonal elements. The diagonal elements are the
     normalization, they are always negative and describe how much probability density is flowing out of the cell. We
@@ -47,17 +49,18 @@ def sqra_determine_indices_never_visited_states(rate_matrix: csr_array) -> NDArr
         an array of sorted indices, the rows & columns with these indices will be cut out since they represent states
         with too high energies.
     """
-    #print(rate_matrix.shape)
-    #print(np.unique(rate_matrix.data))
-    too_large_diagonal = np.where(rate_matrix.diagonal() < -1e100)[0]
-    #print(len(too_large_diagonal))
-    #too_large_diagonal = []
+
+    if cutting_factor=="None":
+        too_large_diagonal = []
+    else:
+        too_large_diagonal = np.where(rate_matrix.diagonal() < -float(cutting_factor))[0]
+    too_large_diagonal.sort()
+    return np.array(too_large_diagonal)
 
     mask = np.isinf(rate_matrix.data)
     rows = np.unique(np.searchsorted(rate_matrix.indptr[1:], np.where(mask)[0], side='right'))
     print("rows", len(rows), rows[:20])
 
-    not_finite_diagonal = np.where(~np.isfinite(rate_matrix.diagonal()))[0]
     print("too large ", len(too_large_diagonal), too_large_diagonal[:20])
 
     combined = set(too_large_diagonal).union(set(rows))
@@ -66,7 +69,7 @@ def sqra_determine_indices_never_visited_states(rate_matrix: csr_array) -> NDArr
     combined = np.array(combined)
     return combined
 
-def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str) -> tuple:
+def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str, cutting_factor=None) -> tuple:
     """
     This is a general function that deletes rows and columns with given indices from a matrix. The row and column
     with the same index are always removed together (since we are interested in symmetric matrices, they are the same).
@@ -88,25 +91,27 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str) -> tuple
     if msm_or_sqra == "msm":
         indices_to_remove = msm_determine_indices_never_visited_states(transition_matrix)
     elif msm_or_sqra == "sqra":
-        indices_to_remove = sqra_determine_indices_never_visited_states(transition_matrix)
+        indices_to_remove = sqra_determine_indices_never_visited_states(transition_matrix, cutting_factor)
     else:
         raise ValueError(f"The parameter msm_or_sqra must be 'msm' or 'sqra', not: {msm_or_sqra}")
 
+    #print("pre cut ", transition_matrix.shape, transition_matrix.data.shape)
 
-    result = transition_matrix.copy()
+    #result = transition_matrix.copy()
     to_keep = list(set(range(transition_matrix.shape[1])) - set(indices_to_remove))
     to_keep.sort()
 
-    # as csr array delete relevant columns
-    result = result[:, to_keep]
-    # as csc array delete relevant rows
-    if isinstance(transition_matrix, csr_array):
-        result = result.tocsc()
-    result = result[to_keep, :]
-    # back to csr array for consistency
-    if isinstance(transition_matrix, csr_array):
-        result = result.tocsr()
+    result = remove_rows_cols(transition_matrix, indices_to_remove)
 
+    # # as csr array delete relevant columns
+    # result = result[:, to_keep]
+    # # as csc array delete relevant rows
+    # result = result.tocsc()
+    # result = result[to_keep, :]
+    # # back to csr array for consistency
+    # result = result.tocsr()
+
+    #print("post cut ", result.shape, result.data.shape)
     # If we are just deleting empty rows/columns, renormalization is not needed for MSM, but we do it anyway in case
     # we decide to delete other row/column pairs in the future
     if msm_or_sqra == "msm":
@@ -115,7 +120,7 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str) -> tuple
         result = sqra_normalize(result)
     else:
         raise ValueError(f"The parameter msm_or_sqra must be 'msm' or 'sqra', not: {msm_or_sqra}")
-
+    #print("post normalize ", result.shape, result.data.shape)
     return result, to_keep
 
 def msm_normalize(my_matrix: csr_array) -> csr_array:
@@ -177,3 +182,36 @@ def expand_eigenvector_to_full_length(values: NDArray, indices: NDArray, full_le
     result = np.zeros(full_length, dtype=values.dtype)
     result[indices] = values
     return result
+
+
+def remove_rows_cols(A, remove_idx):
+    remove_idx = np.asarray(remove_idx)
+    n = A.shape[0]
+
+    keep_mask = np.ones(n, dtype=bool)
+    keep_mask[remove_idx] = False
+
+    keep_rows = np.nonzero(keep_mask)[0]
+
+    # map old column indices → new ones
+    new_index = -np.ones(n, dtype=int)
+    new_index[keep_rows] = np.arange(len(keep_rows))
+
+    data = []
+    indices = []
+    indptr = [0]
+
+    for r in keep_rows:
+        start, end = A.indptr[r], A.indptr[r + 1]
+        cols = A.indices[start:end]
+        vals = A.data[start:end]
+
+        keep = keep_mask[cols]
+
+        data.extend(vals[keep])
+        indices.extend(new_index[cols[keep]])
+
+        indptr.append(len(data))
+
+    return csr_array((data, indices, indptr),
+                     shape=(len(keep_rows), len(keep_rows)))

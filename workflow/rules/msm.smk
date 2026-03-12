@@ -218,13 +218,15 @@ rule plot_vmd_eigenvectors_as_lines:
         eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
     output:
         plot = f"<outputs_other_plots>eigenvectors_for_tau_{{tau}}.png"
+    params:
+        N_eigenvec = config["msm"]["num_interesting_eigenvectors"]
     run:
         import plotly.graph_objects as go
         from plotly.subplots import make_subplots
 
         eigenvector_array = read_object(input.eigenvectors)
 
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = int(params.N_eigenvec)
 
         fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
 
@@ -233,6 +235,7 @@ rule plot_vmd_eigenvectors_as_lines:
                 go.Scatter(x=np.arange(eigenvector_array.shape[0]),y=eigenvector_array[:, row], line=dict(color="black"),
                     mode="lines"),row=1+row,col=1)
 
+        fig.update_layout(showlegend=False, plot_bgcolor="white",)
         fig.write_image(output.plot, scale=3)
 
 rule run_plot_its_msm:

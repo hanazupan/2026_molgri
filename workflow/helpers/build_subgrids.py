@@ -86,6 +86,8 @@ def _make_spherical_grid(config_data: dict, save_information: dict):
     save_information["translation_grid_deltas"] = [None, np.abs(r_grid[1]-r_grid[0])]
     save_information["explain_subgrid_points"] = ["points_on_unit_sphere", "radial_grid_in_angstrom"]
     save_information["subgrid_points"] = [spherical_points, r_grid]
+    save_information["subgrid_N_points"] = spherical_N_points*num_steps
+    save_information["subgrid_limits_A"] = [[None, None], [None, None],[None, None]]
     return save_information
 
 

@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "cartesian"
+  unique_network_name: "spherical"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 1
-  translation_algorithm: "cartesian"
-  periodic_in: [False, False, False]
-  translation_subgrids_A: [ [-2, 2, 5], [ -2, 2, 5], [3, 7, 5] ]
+  periodic_in: [ False, False ]
+  translation_algorithm: "spherical"
+  translation_subgrids_A: [ 80, [3, 20, 20] ]
 
 pseudotrajectory:
   molecule_1: "natrium"
@@ -15,6 +15,8 @@ pseudotrajectory:
 
 analysis:
   energy_program: GROMACS
+  zoom_level: [ 0 ]
+  view_index: [ 1 ]
   length_shortened_trajectory_ns: 10
   upper_E_limit: 0
   energy_types: ["Potential"]

@@ -5,6 +5,7 @@ import pandas as pd
 from scipy.sparse import csr_array
 from scipy.sparse.linalg import eigs
 
+from molgri.images.plotting import show_array
 from molgri.molecules.bimolecular import move_universe_to_xy_plane
 from molgri.molecules.rate_merger import delete_rows_columns, sqra_determine_indices_never_visited_states, \
     msm_determine_indices_never_visited_states
@@ -20,7 +21,9 @@ rule print_lowest_energies:
     run:
         df = read_object(input.energy_csv)
         df = df.sort_values(by="Energy [kJ/mol]",ascending=True)
-        print(df.head(1))
+        print(df.head(20))
+        df = df.sort_values(by="Energy [kJ/mol]",ascending=False)
+        print(df.head(20))
 
 rule print_position_assignment:
     input:
@@ -56,10 +59,28 @@ rule print_indices_interpretation:
         indices_csv =f"<outputs_network>indices_interpretation.csv"
     run:
         df = read_object(input.indices_csv)
-        print(df.loc["2551"])
+        for index in [159, 168, 150, 125, 71]:
+            print(df.loc[f"{index}"])
+        print("High E")
+        for index in [161, 170, 152, 224, 98, 233]:
+            print(df.loc[f"{index}"])
         # for example only filter the ones with specific rotation index
         #df_filtered = df.loc[df["Rotation index"] == 5]
         #print(df_filtered.head(10))
+rule print_grid_interpretation:
+    """
+    Use this rule if you want to quickly look at the indices and understand them.
+    """
+    input:
+        indices_csv =f"<outputs_network>grid.npy"
+    run:
+        import numpy as np
+        grid_array = read_object(input.indices_csv)
+        for index in [159, 168, 150, 125, 71]:
+            print(np.linalg.norm(grid_array[index]))
+        print("High E")
+        for index in [161, 170, 152, 224, 98, 233]:
+            print(np.linalg.norm(grid_array[index]))
 
 rule print_position_subgrids:
     input:
@@ -84,6 +105,42 @@ rule print_rate_matrix:
             column = matrix.T[i]
             print(f"sum column ",np.sum(column))
 
+rule display_matrices:
+    input:
+        adjacency = "<outputs_network>adjacency.npz",
+        distances = "<outputs_network>distances.npz",
+        surfaces = "<outputs_network>surfaces.npz",
+    run:
+        some_arr = read_object(input.adjacency).toarray()
+        np.set_printoptions(precision=3,suppress=True,linewidth=np.inf)
+        print(np.where(some_arr[0, :]))
+        print(np.where(some_arr[200, :]))
+
+rule display_energy_difference:
+    input:
+        adjacency = "<outputs_network>adjacency.npz",
+        energy_csv=f"<pseudosimulation>energy.csv"
+    run:
+        np.set_printoptions(precision=3,suppress=True,linewidth=np.inf)
+        adjacency = read_object(input.adjacency).tocoo() #.toarray()
+        energies = read_object(input.energy_csv)
+        my_energy_array = energies["Energy [kJ/mol]"].to_numpy()
+        print(len(my_energy_array))
+        print(my_energy_array[35], my_energy_array[43], my_energy_array[52], my_energy_array[62])
+        diff_energies = my_energy_array[adjacency.row] - my_energy_array[adjacency.col]
+        diff_energies = np.where(diff_energies < 10,diff_energies,10)
+        assert len(adjacency.data) == len(diff_energies)
+        adjacency.data = diff_energies
+        print(np.where(adjacency.toarray()[44, :]))
+        #print(adjacency.toarray()[8, 17])
+        adjacency.data = np.exp(diff_energies)
+        print(adjacency.toarray()[7, :],)
+        print(adjacency.toarray()[8, 7],)
+        print(adjacency.toarray()[9, 0], adjacency.toarray()[9, 10],)
+        print(adjacency.toarray()[44, 35], adjacency.toarray()[44, 43], adjacency.toarray()[44, 53],)
+        print(adjacency.toarray()[53, 44], adjacency.toarray()[53, 52], adjacency.toarray()[53, 62],)
+        # show_array(adjacency.toarray(), "Energy difference",
+        #     show=True, log=True) #save_as=output.adjacency,
 
 rule print_eigenvector_statistics:
     input:

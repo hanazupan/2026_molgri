@@ -122,32 +122,53 @@ def draw_line_between(fig, point1, point2, color="black", **kwargs):
                          marker=dict(color=color)), **kwargs)
 
 @save_plotly
-def show_array(my_array, title: str = "", indices=None):
+def show_array(my_array, title: str = "", indices=None, log=False):
     if indices is None:
         indices = list(range(len(my_array)))
 
+    if log:
+        data = np.sign(my_array)*np.log10(np.abs(my_array))
+    else:
+        data = my_array
 
-    fig = px.imshow(my_array)
+    fig = px.imshow(data, color_continuous_scale="RdBu", zmax=45, zmin=-45)
     fig.update_xaxes(
         tickmode="array",
-        tickvals=indices,
-        showgrid=True,
+        #tickvals=indices,
+        #showgrid=True,
         tickangle=45,
         tickfont=dict(size=9),
     )
     fig.update_yaxes(
         tickmode="array",
-        tickvals=indices,
-        showgrid=True,
+        #tickvals=indices,
+        #showgrid=True,
         tickfont=dict(size=9)
     )
-    fig.update_traces(xgap=1, ygap=1)
+
+    nrows, ncols = my_array.shape
+    if ncols < 70:
+        # draw horizontal grid lines
+        for y in range(nrows + 1):
+            fig.add_hline(
+                y=y - 0.5,
+                line_color="black",
+                line_width=1
+            )
+
+        # draw vertical grid lines
+        for x in range(ncols + 1):
+            fig.add_vline(
+                x=x - 0.5,
+                line_color="black",
+                line_width=1
+            )
+
     fig.update_layout(
-        font=dict(size=30),
-        title={
-            'text': title,
-            'xanchor': 'center',
-            'yanchor': 'top'})
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        title=title
+    )
     return fig
 
 

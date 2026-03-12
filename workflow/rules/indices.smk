@@ -63,12 +63,15 @@ checkpoint find_indices_dominant_eigenvectors:
         neg_e_indices= expand(f"<outputs_indices>{{tau}}/{{i}}_eigenvector_{{j}}_most_negative.txt",
             i=range(1,config["msm"]["num_interesting_eigenvectors"]),j=config["msm"]["num_extremes_to_plot"],
             allow_missing=True)
+    params:
+        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"],
+        N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
     run:
         eigenvectors = read_object(input.eigenvectors)
 
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = int(params.N_interesting_eigenvectors)
 
-        N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
+        N_extremes_to_plot = params.N_extremes_to_plot
 
         zeroth_eigenvector = eigenvectors[:, 0].T
         pos_e, pos_neg = auto_determine_eigenvector_extremes(np.abs(zeroth_eigenvector), N_extremes_to_plot)

@@ -244,7 +244,7 @@ class SphericalTranslationNetwork(TranslationNetwork):
         Returns:
             the distance which is simply the arch between the two points.
         """
-        return dist_on_sphere(np.array(node1.sphere.coordinate), np.array(node2.sphere.coordinate))[0]
+        return dist_on_sphere(np.array(node1.sphere.coordinate), np.array(node2.sphere.coordinate))
 
     def _distances(self, edge_dict: dict) -> dict | None:
         """

@@ -297,7 +297,7 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         if draw_m1:
             # plot only one non-zero frame since they are all the same
             self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
-                                       representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
+                                       representation="Licorice", trajectory_frames=[1]) #DynamicBonds 1.600000 0.300000 6.000000
         if draw_m2:
             # plot all provided frames except 0
             self._add_representation(first_molecule=False, second_molecule=True, periodic="zZ",
@@ -330,16 +330,16 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         if draw_m1:
             # plot only one non-zero frame since they are all the same
             self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
-                                       representation="DynamicBonds 1.600000 0.300000 6.000000", trajectory_frames=[1])
+                                       representation="Licorice", trajectory_frames=[1])
         if draw_m2:
             # plot red frames
             if num_red > 0:
-                self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ",
+                self._add_representation(first_molecule=False, second_molecule=True, periodic=None,
                                          coloring= "ColorID", color="red",
                                         representation="Licorice", trajectory_frames=list(range(1, num_red+1)))
             # plot blue frames
             if num_blue > 0:
-                self._add_representation(first_molecule=False, second_molecule=True, periodic="xyzXYZ", color="blue",
+                self._add_representation(first_molecule=False, second_molecule=True, periodic=None, color="blue",
                                          representation="Licorice", coloring="ColorID",
                                          trajectory_frames=list(range(num_red+1, num_red + num_blue + 1)))
         if draw_rectangular_box:

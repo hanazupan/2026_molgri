@@ -181,6 +181,7 @@ rule create_index_csv:
         df["Rotation index"] = df["Rotation index"].astype("Int64")
 
         df.columns = pd.MultiIndex.from_tuples(tuples)
+        print(df)
         write_object(df, output.energy_csv)
 
 

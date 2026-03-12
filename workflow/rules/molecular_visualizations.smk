@@ -240,7 +240,7 @@ rule stack_all_translation_options:
 rule stack_all_eigenvectors:
     input:
         all_eigenvectors_one_tau = expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            i=list(range(8)), allow_missing=True),
+            i=list(range(config["msm"]["num_interesting_eigenvectors"])), allow_missing=True),
     output:
         all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
     run:
@@ -249,8 +249,8 @@ rule stack_all_eigenvectors:
 rule get_all_eigenvectors:
     input:
         expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            tau=[10, 100], zoom_level=[8],view_index=[1, 4],
-            COM_or_full=["full", "COM"]),
+            tau=[1, 10, 100], zoom_level=[8],view_index=[1, 4],
+            COM_or_full=["full"]),
 
 def input_zeroth_eigenvector(wc):
     where = "<pseudosimulation>"
