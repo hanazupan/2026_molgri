@@ -15,17 +15,17 @@ pseudotrajectory:
 
 analysis:
   energy_program: GROMACS
-  zoom_level: [ 0 ]
   view_index: [ 1 ]
   length_shortened_trajectory_ns: 10
   upper_E_limit: 0
   energy_types: ["Potential"]
   analyse_first_N_frames: None
 
-msm:
+sqra:
+  cutting_factor: "auto"
+  tolerance_rate_matrix_row_sum: 1e-16
+
+eigenvectors:
   num_interesting_timescales: 4
-  num_interesting_eigenvectors: 6
-  num_extremes_to_plot: 6
-  capping_factor: None
-  cutting_factor: -1e5
-  taus: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]
+  num_interesting_eigenvectors: 4
+  num_extremes_to_plot: "auto"

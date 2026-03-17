@@ -15,7 +15,6 @@ pseudotrajectory:
 
 analysis:
   energy_program: GROMACS
-  zoom_level: [ 0 ]
   view_index: [ 1 ]
   length_shortened_trajectory_ns: 10
   upper_E_limit: 0

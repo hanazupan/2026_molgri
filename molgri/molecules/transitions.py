@@ -185,7 +185,6 @@ class SQRA:
         # normalize
         rate_matrix.setdiag(0)
         sums = rate_matrix.sum(axis=1)
-        print(sums.shape)
         sum_diag = diags_array(-sums, format="csr")
         all_together = rate_matrix + sum_diag
         return all_together
@@ -234,7 +233,26 @@ class DecompositionTool:
             (eigenvalues, eigenvectors) where eigenvalues is an array of shape (12,) and eigenvectors an array of
             shape (total_len, 12)
         """
-        return self.get_decomposition(tol=tolerance, maxiter=1000000, which="SR", sigma=sigma, **kwargs)
+        print(f"Matrix size is {self.matrix_to_decompose.shape}")
+        eigenvalues, eigenvectors = self.get_decomposition(tol=tolerance, maxiter=1000000, which="SR", sigma=sigma,
+                                                           **kwargs)
+        # now divide into three categories: sum +-1, sum 0, sum other
+        indices_sum_to_0 = []
+        indices_sum_to_1 = []
+        indices_sum_to_other = []
+        for i, expanded_eigenvector in enumerate(eigenvectors.T):
+            print(i, np.abs(np.sum(expanded_eigenvector)))
+            if np.isclose(np.sum(expanded_eigenvector), 0, atol=1e-3, rtol=1e-3):
+                indices_sum_to_0.append(i)
+            elif np.isclose(np.abs(np.sum(expanded_eigenvector)), 1, atol=1e-2, rtol=1e-2):
+                indices_sum_to_1.append(i)
+            else:
+                indices_sum_to_other.append(i)
+        # return the three categories
+        first_tuple = (eigenvalues[indices_sum_to_0], eigenvectors[:, indices_sum_to_0])
+        second_tuple = (eigenvalues[indices_sum_to_1], eigenvectors[:, indices_sum_to_1])
+        third_tuple = (eigenvalues[indices_sum_to_other], eigenvectors[:, indices_sum_to_other])
+        return first_tuple, second_tuple, third_tuple
 
     def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 12) -> tuple:
         """
@@ -257,13 +275,11 @@ class DecompositionTool:
         """
         # two options for transpose: large, sparse matrices need specialized methods but small ones perform better
         # with full eigendecomposition
-        if self.matrix_to_decompose.shape[0] > 12000:
-            print(f"sigma={sigma}, tolerance={tol}", type(sigma), type(tol))
+        if self.matrix_to_decompose.shape[0] > 20000:
             eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
                                       sigma=sigma)
         else:
             eigenval, eigenvec = eig(self.matrix_to_decompose.toarray(), left=True, right=False)
-        print("Initial eigenvalues ", eigenval[:12])
         # if imaginary eigenvectors or eigenvalues, raise error
         if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-3) or not np.allclose(eigenval.imag.max(), 0,
                                                                                             rtol=1e-5, atol=1e-3):
@@ -284,16 +300,8 @@ class DecompositionTool:
             expanded_eigenvectors.append(expanded_eigenvector)
         expanded_eigenvectors = np.array(expanded_eigenvectors)
 
-        # only allow the 0th eigenvector and higher eigenvectors that sum up to zero
-        allowed_indices = []
-        for i, expanded_eigenvector in enumerate(expanded_eigenvectors):
-            print(i,np.sum(expanded_eigenvector))
-            if i==0 or np.isclose(np.sum(expanded_eigenvector), 0, atol=1e-2, rtol=1e-2):
-                 allowed_indices.append(i)
-
-        final_eigenvalues = eigenval[allowed_indices] * self.scale
-        print("Final eigenvalues ", final_eigenvalues[:12])
-        final_eigenvectors = expanded_eigenvectors[allowed_indices]
+        final_eigenvalues = eigenval * self.scale
+        final_eigenvectors = expanded_eigenvectors
         final_eigenvectors = final_eigenvectors.T
         return final_eigenvalues, final_eigenvectors
 
@@ -364,7 +372,6 @@ def auto_determine_eigenvector_extremes(one_eigenvector: NDArray,  N_extremes_to
         if N_extremes_to_plot is an integer, both arrays will have the length N_extremes_to_plot
         if N_extremes_to_plot is "auto", the arrays might have different lengths
     """
-    print(N_extremes_to_plot)
     # should be automatically determined
     if N_extremes_to_plot == "auto":
         above_upper_limit = np.zeros(100)

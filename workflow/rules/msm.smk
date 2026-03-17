@@ -76,6 +76,8 @@ rule get_implied_timescales:
         runfile=f"<simulation>production.mdp"
     output:
         its = f"<outputs_transitions>{{tau}}/its.npy",
+    params:
+        N_eigenvec = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
         eigenvalues = read_object(input.eigenvalues)
         eigenvalues = eigenvalues[1:]  # dropping the first one as it should be zero and cause issues
@@ -83,7 +85,7 @@ rule get_implied_timescales:
         writeout = int(read_from_mdrun(input.runfile,"nstxout-compressed"))
         time_step_ps = float(read_from_mdrun(input.runfile,"dt"))
 
-        num_interesting_timescales = int(config["msm"]["num_interesting_timescales"])
+        num_interesting_timescales = int(params.N_eigenvec)
 
         # save only the interesting ones
         while len(eigenvalues) < num_interesting_timescales:
@@ -107,6 +109,8 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_zcoo:
         grid_info= rules.save_basic_grid_information.output.info_material
     output:
         plot = f"<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_{{tau}}.png"
+    params:
+        N_eigenvec = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
         import plotly.graph_objects as go
         import numpy as np
@@ -119,7 +123,7 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_zcoo:
         len_x, len_y, len_z = len(subgrids[0]), len(subgrids[1]), len(subgrids[2])
 
         eigenvector_array = read_object(input.eigenvectors)
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = int(params.N_eigenvec)
 
         groups_by_rotation_index = np.repeat(np.arange(N_translations), N_rotations)
         groups_by_rotation_index = groups_by_rotation_index % len_z
@@ -146,6 +150,8 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_trans:
         grid_info= rules.save_basic_grid_information.output.info_material
     output:
         plot = f"<outputs_other_plots>grouped_by_trans_eigenvectors_for_tau_{{tau}}.png"
+    params:
+        N_eigenvec = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
         import plotly.graph_objects as go
         import numpy as np
@@ -158,7 +164,7 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_trans:
         len_x, len_y, len_z = len(subgrids[0]), len(subgrids[1]), len(subgrids[2])
 
         eigenvector_array = read_object(input.eigenvectors)
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = int(params.N_eigenvec)
 
         groups_by_rotation_index = np.repeat(np.arange(N_translations), N_rotations)
         print(groups_by_rotation_index)
@@ -183,6 +189,8 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_rotation:
         grid_info= rules.save_basic_grid_information.output.info_material
     output:
         plot = f"<outputs_other_plots>grouped_by_rotation_eigenvectors_for_tau_{{tau}}.png"
+    params:
+        N_eigenvec = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
         import plotly.graph_objects as go
         import numpy as np
@@ -194,7 +202,7 @@ rule plot_vmd_eigenvectors_as_lines_grouped_by_rotation:
 
 
         eigenvector_array = read_object(input.eigenvectors)
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = int(params.N_eigenvec)
 
         groups_by_rotation_index = np.tile(np.arange(N_rotations), N_translations)
 
@@ -219,7 +227,7 @@ rule plot_vmd_eigenvectors_as_lines:
     output:
         plot = f"<outputs_other_plots>eigenvectors_for_tau_{{tau}}.png"
     params:
-        N_eigenvec = config["msm"]["num_interesting_eigenvectors"]
+        N_eigenvec = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
         import plotly.graph_objects as go
         from plotly.subplots import make_subplots

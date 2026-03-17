@@ -59,9 +59,6 @@ def sqra_determine_indices_never_visited_states(rate_matrix: csr_array, cutting_
 
     mask = np.isinf(rate_matrix.data)
     rows = np.unique(np.searchsorted(rate_matrix.indptr[1:], np.where(mask)[0], side='right'))
-    print("rows", len(rows), rows[:20])
-
-    print("too large ", len(too_large_diagonal), too_large_diagonal[:20])
 
     combined = set(too_large_diagonal).union(set(rows))
     combined = list(combined)
@@ -95,7 +92,7 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str, cutting_
     else:
         raise ValueError(f"The parameter msm_or_sqra must be 'msm' or 'sqra', not: {msm_or_sqra}")
 
-    #print("pre cut ", transition_matrix.shape, transition_matrix.data.shape)
+
 
     #result = transition_matrix.copy()
     to_keep = list(set(range(transition_matrix.shape[1])) - set(indices_to_remove))
@@ -111,7 +108,6 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str, cutting_
     # # back to csr array for consistency
     # result = result.tocsr()
 
-    #print("post cut ", result.shape, result.data.shape)
     # If we are just deleting empty rows/columns, renormalization is not needed for MSM, but we do it anyway in case
     # we decide to delete other row/column pairs in the future
     if msm_or_sqra == "msm":
@@ -120,7 +116,6 @@ def delete_rows_columns(transition_matrix: csr_array, msm_or_sqra: str, cutting_
         result = sqra_normalize(result)
     else:
         raise ValueError(f"The parameter msm_or_sqra must be 'msm' or 'sqra', not: {msm_or_sqra}")
-    #print("post normalize ", result.shape, result.data.shape)
     return result, to_keep
 
 def msm_normalize(my_matrix: csr_array) -> csr_array:

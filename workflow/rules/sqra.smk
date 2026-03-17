@@ -1,12 +1,17 @@
 import numpy as np
 import pandas as pd
-from networkx.algorithms.threshold import eigenvectors
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
+from molgri.images.create_vmdlog import VMDCreator
+from molgri.images.modifying_images import join_images
 from molgri.images.plotting import show_array
 from molgri.molecules.rate_merger import delete_rows_columns, expand_eigenvector_to_full_length
-from molgri.molecules.transitions import SQRA
+from molgri.molecules.transitions import SQRA, auto_determine_eigenvector_extremes
 from molgri.utils.arrays import k_argmax_in_array, k_argmin_in_array
-from workflow.helpers.io import read_object, write_object
+from workflow.helpers.find_right_input import find_the_right_frames, find_the_right_structure, what_to_provide, \
+    where_to_look
+from workflow.helpers.io import get_num_atoms, read_object, write_object
 from molgri.molecules.transitions import DecompositionTool
 
 rule make_sqra:
@@ -17,13 +22,10 @@ rule make_sqra:
         surfaces= "<outputs_network>surfaces.npz"
     output:
         rate_matrix = f"<outputs_transitions>sqra/sqra.npz",
-        # reduced_sqra= f"<outputs_transitions>sqra/reduced_sqra.npz",
-        # indices_to_keep= f"<outputs_transitions>sqra/indices_to_keep.npy",
     params:
         T_in_K = 293,
         diffusion_coefficient = 1,
-        capping_factor = config["msm"]["capping_factor"],
-        cutting_factor= config["msm"]["cutting_factor"]
+        capping_factor = config["sqra"]["capping_factor"],
     run:
         my_energy = read_object(input.energies)
         my_energy_array = my_energy["Energy [kJ/mol]"].to_numpy()
@@ -31,67 +33,42 @@ rule make_sqra:
         distances = read_object(input.distances)
         surfaces = read_object(input.surfaces)
 
-        # get rate matrix first, then try different cutting factors
         sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces)
         rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K,
-            capping_factor="None")
+            capping_factor=params.capping_factor)
         write_object(rate_matrix, output.rate_matrix)
 
-        # for cutting_factor in range(5000, 4000, -200):
-        #     reduced_rate_matrix, to_keep = sqra.cut_high_energy_states(cutting_factor=cutting_factor)
-        #     print(cutting_factor, np.max(np.sum(reduced_rate_matrix, axis=1)))
-        #     # we demand the row-sum of rate matrix to be close to zero in order to get eigenvectors that behave as such
-        #     if np.abs(np.max(np.sum(reduced_rate_matrix, axis=1))) < 1e-8:
-        #         print("FOUND CUTTING FACTOR ", cutting_factor)
-        #         break
-            # print(cutting_factor, )
-            #
-            # dt = DecompositionTool(rate_matrix,to_keep,len(volumes))
-            # try:
-            #     print("trying")
-            #     # WHY IS THE SUM OF FIRST EIGENVECTOR NOT 1??
-            #     all_eigenval, all_eigenvec = dt.decompose_sqra(k=2, maxiter=100)
-            #     all_eigenvec_t = all_eigenvec.T
-            #     first_sum_is_one = np.isclose(np.sum(all_eigenvec_t[0, :]), 1, atol=1e-3, rtol=1e-3) or  np.isclose(np.sum(all_eigenvec[0, :]), -1, atol=1e-3, rtol=1e-3)
-            #
-            #     #other_sum_is_zero = np.allclose([np.sum(other_rows) for other_rows in all_eigenvec_t[1:]], 0, atol=1e-3, rtol=1e-3)
-            #     print(np.sum(all_eigenvec_t[0, :]))
-            #     if first_sum_is_one: #and other_sum_is_zero:
-            #         print("FOUND CUTTING FACTOR ", cutting_factor)
-            #         break
-            # except:
-            #     pass
-        # else:
-        #     raise ValueError("No cutting factor works")
-
-
-        # print("Reduced Rate Matrix ", len(volumes), reduced_rate_matrix.shape, len(to_keep))
-        # write_object(reduced_rate_matrix,output.reduced_sqra)
-        # write_object(np.array(to_keep),output.indices_to_keep)
-
-
-
 rule reduce_sqra_size:
+    """
+    Here we remove rows & indices with too high energies to enable diagonalization of rate matrix.
+    """
     input:
         sqra= f"<outputs_transitions>sqra/sqra.npz",
     output:
         reduced_sqra= f"<outputs_transitions>sqra/reduced_sqra.npz",
         indices_to_keep = f"<outputs_transitions>sqra/indices_to_keep.npy",
     params:
-        cutting_factor = config["msm"]["cutting_factor"]
+        cutting_factor = config["sqra"]["cutting_factor"],
+        tolerance_rate_matrix_row_sum = config["sqra"]["tolerance_rate_matrix_row_sum"]
     run:
         sqra = read_object(input.sqra)
 
-        logarithmically_spaced_cutting_factors = np.logspace(2, 300, num=200)
-        logarithmically_spaced_cutting_factors = logarithmically_spaced_cutting_factors [::-1]
+        # if we don't have any idea how to set the cutting factor we can just try out a few options
+        if params.cutting_factor == "auto":
+            logarithmically_spaced_cutting_factors = np.logspace(2, 300, num=298)
+            logarithmically_spaced_cutting_factors = logarithmically_spaced_cutting_factors [::-1]
 
-        for cutting_factor in logarithmically_spaced_cutting_factors:
-            reduced_sqra, indices_to_keep = delete_rows_columns(sqra,"sqra", cutting_factor)
-            print(cutting_factor, np.max(np.sum(reduced_sqra, axis=1)))
-            # we demand the row-sum of rate matrix to be close to zero in order to get eigenvectors that behave as such
-            if np.abs(np.max(np.sum(reduced_sqra, axis=1))) < 1e-12:
-                print("FOUND CUTTING FACTOR ", cutting_factor)
-                break
+            for cutting_factor in logarithmically_spaced_cutting_factors:
+                reduced_sqra, indices_to_keep = delete_rows_columns(sqra,"sqra", cutting_factor)
+                # we demand the row-sum of rate matrix to be close to zero in order to get eigenvectors that behave as such
+                if np.abs(np.max(np.sum(reduced_sqra, axis=1))) < float(params.tolerance_rate_matrix_row_sum):
+                    print("FOUND CUTTING FACTOR ", cutting_factor)
+                    break
+            else:
+                raise ValueError(f"No cutting factor could reach the required tolerance: {np.abs(np.max(np.sum(reduced_sqra, axis=1)))} > {float(params.tolerance_rate_matrix_row_sum)}")
+        else:
+            print("CUTTING FACTOR is set to be ", params.cutting_factor)
+            reduced_sqra, indices_to_keep = delete_rows_columns(sqra,"sqra", float(params.cutting_factor))
 
 
         write_object(reduced_sqra, output.reduced_sqra)
@@ -102,94 +79,77 @@ rule run_decomposition_sqra:
     As output we want to have eigenvalues, eigenvectors. Es input we get a (sparse) rate matrix.
     """
     input:
-        reduced_msm=f"<outputs_transitions>sqra/reduced_sqra.npz",
-        indices_to_keep=f"<outputs_transitions>sqra/indices_to_keep.npy",
+        reduced_sqra= f"<outputs_transitions>sqra/reduced_sqra.npz",
+        indices_to_keep = f"<outputs_transitions>sqra/indices_to_keep.npy",
         grid_info= "<outputs_network>grid_info.yaml",
     benchmark:
         f"<outputs_transitions>sqra/timing_decomposition.txt"
     output:
-        eigenvalues = f"<outputs_transitions>sqra/eigenvalues.npy",
-        eigenvectors = f"<outputs_transitions>sqra/eigenvectors.npy"
+        eigenvalues_sum_0 = f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
+        eigenvectors_sum_0 = f"<outputs_transitions>sqra/eigenvectors_sum_0.npy",
+        eigenvalues_sum_1= f"<outputs_transitions>sqra/eigenvalues_sum_1.npy",
+        eigenvectors_sum_1= f"<outputs_transitions>sqra/eigenvectors_sum_1.npy",
+        eigenvalues_sum_other= f"<outputs_transitions>sqra/eigenvalues_sum_other.npy",
+        eigenvectors_sum_other= f"<outputs_transitions>sqra/eigenvectors_sum_other.npy",
     params:
-        tolerance = config["msm"]["tolerance"],
-        sigma_sqra = config["msm"]["sigma_sqra"]
+        tolerance = config["sqra"]["tolerance_eigendecomposition"],
+        sigma_sqra = config["sqra"]["sigma"]
     run:
         grid_info = read_object(input.grid_info)
         total_length = int(grid_info["N_total"])
         kept_indices = read_object(input.indices_to_keep)
-        my_matrix = read_object(input.reduced_msm)
-        # print("Decomposing matrix of shape ", my_matrix.shape)
-        # from scipy.linalg import eig
-        # print("NORMAL DECOMPOSITION")
-        # eigenval, left_eigenvec, right_eigenvec = eig(my_matrix.toarray(), left=True, right=True)
-        # print("Imaginary ", eigenval.imag.max(), left_eigenvec.imag.max(), right_eigenvec.imag.max())
-        # eigenval = eigenval.real
-        # idx = eigenval.argsort()[::-1]
-        # eigenval = eigenval[idx]
-        # # typically we want left eigenvectors for sqra
-        # #print("Eigenvalues: ",eigenval)
-        # left_eigenvec = left_eigenvec.real
-        # left_eigenvec = left_eigenvec[:, idx]
-        #
-        #
-        # expanded_eigenvectors = []
-        # # expand to full length
-        # allowed_indices = [0]
-        # for i, eigenvector in enumerate(left_eigenvec.T):
-        #     expanded_eigenvector = expand_eigenvector_to_full_length(eigenvector, kept_indices, total_length)
-        #     if i==0:
-        #         expanded_eigenvectors.append(expanded_eigenvector)
-        #         # should we demand they sum up to zero?
-        #         print(i, np.sum(expanded_eigenvector))
-        #     if np.isclose(np.sum(expanded_eigenvector), 0, atol=1e-2, rtol=1e-2):
-        #         allowed_indices.append(i)
-        #         expanded_eigenvectors.append(expanded_eigenvector)
-        #         # should we demand they sum up to zero?
-        #         print(i, np.sum(expanded_eigenvector),  k_argmax_in_array(expanded_eigenvector, 7), k_argmin_in_array(expanded_eigenvector, 7))
-        # expanded_eigenvectors = np.array(expanded_eigenvectors).T
-        # print("shape ", expanded_eigenvectors.shape)
-        # calculation
+        my_matrix = read_object(input.reduced_sqra)
         dt = DecompositionTool(my_matrix, kept_indices, total_length)
-        print(my_matrix.shape)
-        all_eigenval, all_eigenvec = dt.decompose_sqra(sigma=float(params.sigma_sqra), tolerance=float(params.tolerance))
-
-        write_object(all_eigenval, output.eigenvalues)
-        write_object(all_eigenvec,output.eigenvectors)
-
-        # print("allowed_eigenvalues ", eigenval[allowed_indices])
-        #
-        # write_object(eigenval[allowed_indices],output.eigenvalues)
-        # write_object(expanded_eigenvectors,output.eigenvectors)
+        sum_to_0, sum_to_1, sum_to_other = dt.decompose_sqra(sigma=float(params.sigma_sqra), tolerance=float(params.tolerance))
+        write_object(sum_to_0[0], output.eigenvalues_sum_0)
+        write_object(sum_to_0[1],output.eigenvectors_sum_0)
+        write_object(sum_to_1[0], output.eigenvalues_sum_1)
+        write_object(sum_to_1[1],output.eigenvectors_sum_1)
+        write_object(sum_to_other[0], output.eigenvalues_sum_other)
+        write_object(sum_to_other[1],output.eigenvectors_sum_other)
 
 rule plot_sqra_eigenvectors_as_lines:
     input:
-        eigenvectors = f"<outputs_transitions>sqra/eigenvectors.npy",
+        eigenvectors_sum_0 = f"<outputs_transitions>sqra/eigenvectors_sum_0.npy",
+        eigenvectors_sum_1= f"<outputs_transitions>sqra/eigenvectors_sum_1.npy",
+        eigenvectors_sum_other= f"<outputs_transitions>sqra/eigenvectors_sum_other.npy",
     output:
         plot = f"<outputs_other_plots>eigenvectors_sqra.png"
     params:
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"]
+        N_interesting_eigenvectors = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
 
-        eigenvector_array = read_object(input.eigenvectors)
+        eigenvector_array_0 = read_object(input.eigenvectors_sum_0)
+        eigenvector_array_1 = read_object(input.eigenvectors_sum_1)
+        eigenvector_array_other = read_object(input.eigenvectors_sum_other)
+        all_eigenvector_arrays = (eigenvector_array_1, eigenvector_array_0, eigenvector_array_other)
 
         N_interesting_eigenvectors = params.N_interesting_eigenvectors
 
-        fig = make_subplots(rows=N_interesting_eigenvectors,cols=1)
+        fig = make_subplots(rows=N_interesting_eigenvectors,cols=3, column_titles=["Sum=1", "Sum=0", "Sum=Other"])
 
-        for row in range(N_interesting_eigenvectors):
-            fig.add_trace(
-                go.Scatter(x=np.arange(eigenvector_array.shape[0]),y=eigenvector_array[:, row], line=dict(color="black"),
-                    mode="lines"),row=1+row,col=1)
+        for col in range(3):
+            selected_array = all_eigenvector_arrays[col]
+            for row in range(min(N_interesting_eigenvectors, selected_array.shape[1])):
+                fig.add_trace(
+                    go.Scatter(x=np.arange(selected_array.shape[0]),y=selected_array[:, row], line=dict(color="black"),
+                        mode="lines"),row=1+row,col=1+col)
             # todo names of peaks
         fig.add_hline(
-            y=0,
+            y=1,
             line_color="red",
-            line_width=2,
+            line_width=1,
+            line_dash="dash"
+        )
+        fig.add_hline(
+            y=-1,
+            line_color="blue",
+            line_width=1,
             line_dash="dash"
         )
         fig.update_layout(showlegend=False,plot_bgcolor="white",)
+        fig.update_yaxes(range=[-1, 1], showticklabels=False, ticks="")
+        fig.update_xaxes(showticklabels=False,ticks="")
         fig.write_image(output.plot, scale=3)
 
 rule display_rate_matrix:
@@ -201,15 +161,9 @@ rule display_rate_matrix:
         plot = f"<outputs_other_plots>array_sqra.png",
         plot_reduced = f"<outputs_other_plots>array_reduced_sqra.png",
     run:
-        np.set_printoptions(precision=7,suppress=True,linewidth=np.inf)
         as_array = read_object(input.rate_matrix).toarray()
         show_array(as_array, "Rate Matrix",
             save_as=output.plot, show=False)
-        # print(as_array[7, :],)
-        # print(as_array[8, 7],)
-        # print(as_array[9, 0], as_array[9, 10],)
-        # print(as_array[44, 35], as_array[44, 43], as_array[44, 53],)
-        # print(as_array[53, 44], as_array[53, 52], as_array[53, 62],)
         for i, row in enumerate(as_array):
             if i in [7, 8, 9, 43, 44, 53]:
                 print(i, np.unique(row))
@@ -221,50 +175,308 @@ rule display_rate_matrix:
             if i in [7, 8, 9, 43, 44, 53]:
                 print(i, np.unique(row))
 
-rule plot_eigenvalues:
+rule plot_sqra_eigenvalues:
     input:
-        eigenvalues = f"<outputs_transitions>sqra/eigenvalues.npy",
+        eigenvalues_sum_0 = f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
+        eigenvalues_sum_1= f"<outputs_transitions>sqra/eigenvalues_sum_1.npy",
+        eigenvalues_sum_other= f"<outputs_transitions>sqra/eigenvalues_sum_other.npy",
     output:
         plot = f"<outputs_other_plots>eigenvalues_sqra.png"
+    params:
+        N_interesting_eigenvectors = config["eigenvectors"]["num_interesting_eigenvectors"]
     run:
-        np.set_printoptions(precision=16,suppress=True,linewidth=np.inf)
-        eigenvals = read_object(input.eigenvalues)
-        print(eigenvals)
+        eigenvals_0 = read_object(input.eigenvalues_sum_0)
+        eigenvals_1 = read_object(input.eigenvalues_sum_1)
+        eigenvals_other = read_object(input.eigenvalues_sum_other)
+        all_eigenvalues = (eigenvals_1, eigenvals_0, eigenvals_other)
 
-        max_num = 8
+        fig = make_subplots(rows=1,cols=3,column_titles=["Sum=1", "Sum=0", "Sum=Other"],
+            horizontal_spacing=0.03, vertical_spacing=0.01)
+
+        max_num = int(params.N_interesting_eigenvectors)
 
         xs = np.linspace(0, 1, num=max_num)
 
-        fig = go.Figure()
+        for col in range(3):
+            eigenvalue_array = all_eigenvalues[col]
+            actual_max_num = min(max_num, len(eigenvalue_array))
+            # vertical lines
+            for i, eigenw in enumerate(eigenvalue_array[:actual_max_num]):
+                fig.add_shape(type="line", x0=xs[i], y0=0, x1=xs[i], y1=eigenw, line=dict(color="black", width=5),
+                              opacity=1, col=1+col, row=1)
 
-        # vertical lines
-        for i, eigenw in enumerate(eigenvals[:max_num]):
-            fig.add_shape(type="line", x0=xs[i], y0=0, x1=xs[i], y1=eigenw, line=dict(color="black", width=5),
-                          opacity=1)
+            # horizontal infinite line
+            fig.add_hline(y=0, line=dict(color="black", width=5), opacity=1, col=1+col, row=1)
 
-        # horizontal infinite line
-        fig.add_hline(y=0, line=dict(color="black", width=5), opacity=1)
+            # plotting (after the axes so that the numbers are on top if there is any overlap)
+            fig.add_scatter(x=xs, y=eigenvalue_array[:actual_max_num], mode='markers+text', text=[f"{el:.1e}" for el in eigenvalue_array[:actual_max_num]],
+                            marker=dict(size=14, color="black"), opacity=1, col=1+col, row=1)
+        fig.update_layout(margin=dict(l=100, r=40, t=30, b=70))
 
-        # plotting (after the axes so that the numbers are on top if there is any overlap)
-        fig.add_scatter(x=xs, y=eigenvals[:max_num], mode='markers+text', text=[f"{el:.1e}" for el in eigenvals[:max_num]],
-                        marker=dict(size=14, color="black"), opacity=1)
 
-        #self.fig.update_yaxes(title="Eigenvalues")
-        fig.update_layout(xaxis_visible=False, xaxis_showticklabels=False, font=dict(size=20), yaxis_visible=False)
+        fig.update_layout(xaxis_visible=False, xaxis_showticklabels=False, font=dict(size=12), yaxis_visible=False, showlegend=False)
 
-        fig.update_traces(textposition='bottom center', textfont=dict(size=24))
+        fig.update_traces(textposition='bottom center', textfont=dict(size=12))
 
         fig.update_layout(
-            margin=dict(l=100, r=40, t=40, b=120),  # Reduce margins (left, right, top, bottom)
-            #title_x=0.5,  # Center title
-            #autosize=True,  # Allow automatic resizing
-            #xaxis=dict(automargin=True),  # Auto-adjust x-axis margins
-            #yaxis=dict(automargin=True),  # Auto-adjust y-axis margins
             plot_bgcolor="white",
             paper_bgcolor="white"
         )
         fig.update_layout(
-            width=1000,
-            height=700
+            width=1500,
+            height=300
         )
+        fig.update_xaxes(showticklabels=False,ticks="")
+        fig.update_yaxes(showticklabels=False,ticks="")
+
         fig.write_image(output.plot, scale=3)
+
+checkpoint sqra_find_indices_dominant_eigenvectors:
+    """
+    For each eigenvector find the structures that contribute the most to the eigenvector.
+    """
+    input:
+        eigenvectors_sum_1=f"<outputs_transitions>sqra/eigenvectors_sum_1.npy",
+        eigenvectors_sum_0=f"<outputs_transitions>sqra/eigenvectors_sum_0.npy",
+        eigenvectors_sum_other= f"<outputs_transitions>sqra/eigenvectors_sum_other.npy",
+    output:
+        abs_e_indices=expand(f"<outputs_indices>sqra/{{i}}_eigenvector_sum_1_{{j}}_largest_abs_values.txt",
+            j=config["eigenvectors"]["num_extremes_to_plot"], i=range(config["eigenvectors"]["num_interesting_eigenvectors"])),
+        pos_e_indices= expand(f"<outputs_indices>sqra/{{i}}_eigenvector_sum_0_{{j}}_most_positive.txt",
+            i=range(config["eigenvectors"]["num_interesting_eigenvectors"]),j=config["eigenvectors"]["num_extremes_to_plot"]),
+        neg_e_indices= expand(f"<outputs_indices>sqra/{{i}}_eigenvector_sum_0_{{j}}_most_negative.txt",
+            i=range(config["eigenvectors"]["num_interesting_eigenvectors"]),j=config["eigenvectors"]["num_extremes_to_plot"],),
+        abs_e_indices_other=expand(f"<outputs_indices>sqra/{{i}}_eigenvector_sum_other_{{j}}_largest_abs_values.txt",
+            j=config["eigenvectors"]["num_extremes_to_plot"],i=range(
+                config["eigenvectors"]["num_interesting_eigenvectors"])),
+    params:
+        N_interesting_eigenvectors=config["eigenvectors"]["num_interesting_eigenvectors"],
+        N_extremes_to_plot=config["eigenvectors"]["num_extremes_to_plot"]
+    run:
+        eigenvectors = read_object(input.eigenvectors_sum_1)
+        N_interesting_eigenvectors = int(params.N_interesting_eigenvectors)
+        N_extremes_to_plot = params.N_extremes_to_plot
+
+        # eigenvectors with sum 1 should have only positive or only negative contributions
+        for i in range(N_interesting_eigenvectors):
+            if i < len(eigenvectors.T):
+                eigenvector = eigenvectors.T[i]
+                pos_e, pos_neg = auto_determine_eigenvector_extremes(np.abs(eigenvector),N_extremes_to_plot)
+                # save the absolute
+                write_object(np.array(pos_e),output.abs_e_indices[i])
+            else:
+                write_object(np.array([]),output.abs_e_indices[i])
+
+        eigenvectors = read_object(input.eigenvectors_sum_0)
+        for i in range(N_interesting_eigenvectors):
+            if i < len(eigenvectors.T):
+                eigenvector = eigenvectors.T[i]
+                pos_e, neg_e = auto_determine_eigenvector_extremes(eigenvector,N_extremes_to_plot)
+                # save the absolute
+                write_object(np.array(pos_e),output.pos_e_indices[i])
+                write_object(np.array(neg_e),output.neg_e_indices[i])
+            else:
+                write_object(np.array([]),output.pos_e_indices[i])
+                write_object(np.array([]),output.neg_e_indices[i])
+
+        eigenvectors = read_object(input.eigenvectors_sum_other)
+
+        # eigenvectors with sum 1 should have only positive or only negative contributions
+        for i in range(N_interesting_eigenvectors):
+            if i < len(eigenvectors.T):
+                eigenvector = eigenvectors.T[i]
+                pos_e, pos_neg = auto_determine_eigenvector_extremes(np.abs(eigenvector),N_extremes_to_plot)
+                # save the absolute
+                write_object(np.array(pos_e),output.abs_e_indices_other[i])
+            else:
+                write_object(np.array([]),output.abs_e_indices_other[i])
+
+def collect_box_information(input):
+    grid_info = read_object(input.grid_info)
+    subgrid_limits = grid_info["subgrid_limits_A"]
+    N_rotations = int(grid_info["N_rotations"])
+    my_grid = read_object(input.grid)[:, :3]
+    my_grid = my_grid[::N_rotations]
+
+    box_limits = [subgrid_limits[0][1], subgrid_limits[1][1], subgrid_limits[2][1]]
+    return box_limits, my_grid
+
+def input_base(where, what, wc):
+    structure_path = find_the_right_structure(what)
+    return {"structure": structure_path,
+            "structure1": "<pseudosimulation>molecule1.gro",
+            "grid_info": "<outputs_network>grid_info.yaml",
+            "translation_rotation_script": f"<inputs_vmd>script{wc.view_index}.log",
+            "grid": "<outputs_network>grid.npy"}
+
+################# EVERYTHING FOR EIGENVECTORS WITH SUM 1
+
+rule get_eigenvectors_sum_1:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_1_view{{view_index}}_{{COM_or_full}}.png",
+        COM_or_full=["full"], view_index=config["analysis"]["view_index"])
+
+rule stack_all_eigenvectors_sum_1:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_1_view{{view_index}}_{{COM_or_full}}.png",
+            i=list(range(config["eigenvectors"]["num_interesting_eigenvectors"])), allow_missing=True),
+    output:
+        all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_1_view{{view_index}}_{{COM_or_full}}.png"
+    run:
+        join_images(input,output.all_eigenvectors_one_tau,flip=False)
+
+def input_zeroth_eigenvector(wc):
+    where = "<pseudosimulation>"
+    what = what_to_provide(wc.COM_or_full, for_a_structure=True)
+    result = input_base(where, what, wc)
+
+    indices_file = checkpoints.sqra_find_indices_dominant_eigenvectors.get(i=wc.i).output.abs_e_indices
+    indices_file = indices_file[int(wc.i)]
+    indices = read_object(indices_file).astype(int)
+    what = what_to_provide(wc.COM_or_full,for_a_structure=False)
+    result["all_frame_gros"] = find_the_right_frames(where, what, indices)
+    return result
+
+rule eigenvector_sum_1_overlapping_frames:
+    input:
+        unpack(input_zeroth_eigenvector)
+    output:
+        vmdlog=f"<outputs_vmd>eigenvectors/sqra/{{i}}th_eigenvector_sum_1_view{{view_index}}_{{COM_or_full}}",
+        frame_plot=f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_1_view{{view_index}}_{{COM_or_full}}.tga",
+        frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_1_view{{view_index}}_{{COM_or_full}}.png"
+    params:
+        zoom_level = config["analysis"]["zoom_level"],
+    run:
+        n1 = get_num_atoms(input.structure1)
+        box_limits, gridpoints = collect_box_information(input)
+
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+
+        my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
+            num_frames=len(input.all_frame_gros),
+            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            draw_rectangular_box=False, gridpoints=None,
+            zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
+
+        names_all_frames = ' '.join(input.all_frame_gros)
+
+        shell("vmd  -dispdev text {input.structure} {names_all_frames} < {output.vmdlog}")
+        shell("convert {output.frame_plot} {output.frame_plot_png}")
+
+################# EVERYTHING FOR EIGENVECTORS WITH SUM other
+#TODO
+rule get_eigenvectors_sum_other:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_other_view{{view_index}}_{{COM_or_full}}.png",
+        COM_or_full=["full"], view_index=config["analysis"]["view_index"])
+
+rule stack_all_eigenvectors_sum_other:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_other_view{{view_index}}_{{COM_or_full}}.png",
+            i=list(range(config["eigenvectors"]["num_interesting_eigenvectors"])), allow_missing=True),
+    output:
+        all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_other_view{{view_index}}_{{COM_or_full}}.png"
+    run:
+        join_images(input,output.all_eigenvectors_one_tau,flip=False)
+
+def input_sum_other_eigenvector(wc):
+    where = "<pseudosimulation>"
+    what = what_to_provide(wc.COM_or_full, for_a_structure=True)
+    result = input_base(where, what, wc)
+
+    indices_file = checkpoints.sqra_find_indices_dominant_eigenvectors.get(i=wc.i).output.abs_e_indices_other
+    indices_file = indices_file[int(wc.i)]
+    indices = read_object(indices_file).astype(int)
+    what = what_to_provide(wc.COM_or_full,for_a_structure=False)
+    result["all_frame_gros"] = find_the_right_frames(where, what, indices)
+    return result
+
+rule eigenvector_sum_other_overlapping_frames:
+    input:
+        unpack(input_sum_other_eigenvector)
+    output:
+        vmdlog=f"<outputs_vmd>eigenvectors/sqra/{{i}}th_eigenvector_sum_other_view{{view_index}}_{{COM_or_full}}",
+        frame_plot=f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_other_view{{view_index}}_{{COM_or_full}}.tga",
+        frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_other_view{{view_index}}_{{COM_or_full}}.png"
+    params:
+        zoom_level = config["analysis"]["zoom_level"],
+    run:
+        n1 = get_num_atoms(input.structure1)
+        box_limits, gridpoints = collect_box_information(input)
+
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+
+        my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
+            num_frames=len(input.all_frame_gros),
+            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            draw_rectangular_box=False, gridpoints=None,
+            zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
+
+        names_all_frames = ' '.join(input.all_frame_gros)
+
+        shell("vmd  -dispdev text {input.structure} {names_all_frames} < {output.vmdlog}")
+        shell("convert {output.frame_plot} {output.frame_plot_png}")
+
+################# EVERYTHING FOR EIGENVECTORS WITH SUM 0
+
+rule get_eigenvectors_sum_0:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_0_view{{view_index}}_{{COM_or_full}}.png",
+        COM_or_full=["full"], view_index=config["analysis"]["view_index"])
+
+rule stack_all_eigenvectors_sum_0:
+    input:
+        expand(f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_0_view{{view_index}}_{{COM_or_full}}.png",
+            i=list(range(config["eigenvectors"]["num_interesting_eigenvectors"])), allow_missing=True),
+    output:
+        all_eigenvectors_one_tau = f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_SUM_0_view{{view_index}}_{{COM_or_full}}.png"
+    run:
+        join_images(input,output.all_eigenvectors_one_tau,flip=False)
+
+
+def input_eigenvector_sum_0(wc):
+    where = "<pseudosimulation>"
+    what = what_to_provide(wc.COM_or_full, for_a_structure=True)
+    result = input_base(where, what, wc)
+
+    indices_pos_file = checkpoints.sqra_find_indices_dominant_eigenvectors.get(i=wc.i).output.pos_e_indices
+    indices_neg_file = checkpoints.sqra_find_indices_dominant_eigenvectors.get(i=wc.i).output.neg_e_indices
+
+    indices_pos = read_object(indices_pos_file[int(wc.i)]).astype(int)
+    indices_neg = read_object(indices_neg_file[int(wc.i)]).astype(int)
+
+    what = what_to_provide(wc.COM_or_full,for_a_structure=False)
+    result["pos_e_structures"] = find_the_right_frames(where, what, indices_pos)
+    result["neg_e_structures"] = find_the_right_frames(where, what, indices_neg)
+    return result
+
+rule eigenvector_sum_0_overlapping_frames:
+    input:
+        unpack(input_eigenvector_sum_0)
+    output:
+        vmdlog=f"<outputs_vmd>eigenvectors/sqra/{{i}}th_eigenvector_sum_0_view{{view_index}}_{{COM_or_full}}",
+        frame_plot=f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_0_view{{view_index}}_{{COM_or_full}}.tga",
+        frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_0_view{{view_index}}_{{COM_or_full}}.png"
+    params:
+        zoom_level = config["analysis"]["zoom_level"],
+    run:
+        from molgri.images.create_vmdlog import VMDCreator
+        from workflow.helpers.io import get_num_atoms, read_object
+
+        n1 = get_num_atoms(input.structure1)
+        box_limits, gridpoints = collect_box_information(input)
+
+
+        my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
+
+        my_vmd.prepare_eigenvector_script(num_red=len(input.pos_e_structures), num_blue=len(input.neg_e_structures),
+            vmd_name=output.vmdlog, plot_name=output.frame_plot,
+            box_limits=box_limits, draw_rectangular_box=False, gridpoints=None,
+            zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
+
+        names_red = ' '.join(input.pos_e_structures)
+        names_blue = ' '.join(input.neg_e_structures)
+        shell("vmd  -dispdev text {input.structure} {names_red} {names_blue} < {output.vmdlog}")
+        shell("convert {output.frame_plot} {output.frame_plot_png}")

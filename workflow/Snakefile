@@ -112,13 +112,15 @@ rule all:
         # # sqra
         # "<outputs_transitions>sqra/reduced_sqra.npz",
         # "<outputs_transitions>sqra/eigenvectors.npy",
-        expand(f"<outputs_molecular_plots>eigenvectors/sqra/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"]),
+        rules.plot_sqra_eigenvectors_as_lines.output,
+        rules.plot_sqra_eigenvalues.output,
+        rules.get_eigenvectors_sum_1.input,
+        rules.get_eigenvectors_sum_0.input,
+        rules.get_eigenvectors_sum_other.input
         # expand(f"<outputs_molecular_plots>eigenvectors/sqra/stacked_{{color}}_{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
         # zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], i=[1,2,3], color=["red", "blue"]),
         #f"<outputs_other_plots>array_sqra.png",
-        "<outputs_other_plots>eigenvectors_sqra.png",
-        f"<outputs_other_plots>eigenvalues_sqra.png",
+
         # "<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_sqra.png",
         # "<outputs_other_plots>grouped_by_trans_eigenvectors_for_tau_sqra.png",
         # "<outputs_other_plots>grouped_by_rotation_eigenvectors_for_tau_sqra.png"

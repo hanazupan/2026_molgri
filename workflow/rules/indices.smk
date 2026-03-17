@@ -56,16 +56,18 @@ checkpoint find_indices_dominant_eigenvectors:
         eigenvectors = f"<outputs_transitions>{{tau}}/eigenvectors.npy",
     output:
         abs_e_indices = expand(f"<outputs_indices>{{tau}}/0_eigenvector_{{j}}_largest_abs_values.txt",
-            j=config["msm"]["num_extremes_to_plot"], allow_missing=True),
+            j=config["eigenvectors"]["num_extremes_to_plot"], allow_missing=True),
         pos_e_indices = expand(f"<outputs_indices>{{tau}}/{{i}}_eigenvector_{{j}}_most_positive.txt",
-            i=range(1, config["msm"]["num_interesting_eigenvectors"]), j=config["msm"]["num_extremes_to_plot"],
+            i=range(1, config["eigenvectors"]["num_interesting_eigenvectors"]), j=config["eigenvectors"]["num_extremes_to_plot"],
             allow_missing=True),
         neg_e_indices= expand(f"<outputs_indices>{{tau}}/{{i}}_eigenvector_{{j}}_most_negative.txt",
-            i=range(1,config["msm"]["num_interesting_eigenvectors"]),j=config["msm"]["num_extremes_to_plot"],
+            i=range(1,config["eigenvectors"]["num_interesting_eigenvectors"]),j=config["eigenvectors"]["num_extremes_to_plot"],
             allow_missing=True)
+    wildcard_constraints:
+        tau= r"[1-9]\d*"
     params:
-        N_interesting_eigenvectors = config["msm"]["num_interesting_eigenvectors"],
-        N_extremes_to_plot = config["msm"]["num_extremes_to_plot"]
+        N_interesting_eigenvectors = config["eigenvectors"]["num_interesting_eigenvectors"],
+        N_extremes_to_plot = config["eigenvectors"]["num_extremes_to_plot"]
     run:
         eigenvectors = read_object(input.eigenvectors)
 
@@ -86,3 +88,4 @@ checkpoint find_indices_dominant_eigenvectors:
             # save the positive and negative indices
             write_object(np.array(pos_e), output.pos_e_indices[eigenvector_i-1])
             write_object(np.array(neg_e),output.neg_e_indices[eigenvector_i-1])
+
