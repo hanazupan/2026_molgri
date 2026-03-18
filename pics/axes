@@ -1,0 +1,27 @@
+Info) VMD for LINUXAMD64, version 1.9 (March 14, 2011)
+Info) http://www.ks.uiuc.edu/Research/vmd/                         
+Info) Email questions and bug reports to vmd@ks.uiuc.edu           
+Info) Please include this reference in published work using VMD:   
+Info)    Humphrey, W., Dalke, A. and Schulten, K., `VMD - Visual   
+Info)    Molecular Dynamics', J. Molec. Graphics 1996, 14.1, 33-38.
+Info) -------------------------------------------------------------
+Info) Multithreading available, 20 CPUs detected.
+Info) Free system memory: 51864MB (81%)
+Info) Creating CUDA device pool and initializing hardware...
+CUDA error: invalid device symbol, CUDAClearDevice.cu line 62
+Info) Detected 1 available CUDA accelerator:
+Info)   [0] NVIDIA GeForce RTX 4060 24 SM_8.9 @ 2.46 GHz, 4095MB RAM, KTO, OIO, ZCP
+Warning) Detected X11 'Composite' extension: if incorrect display occurs
+Warning) try disabling this optional X server feature.
+Info) OpenGL renderer: NVIDIA GeForce RTX 4060/PCIe/SSE2
+Info)   Features: STENCIL MSAA(16) MDE CVA MTX NPOT PP PS GLSL(OVF) 
+Info)   Full GLSL rendering mode is available.
+Info)   Textures: 2-D (32768x32768), 3-D (16384x16384x16384), Multitexture (4)
+Info) Dynamically loaded 2 plugins in directory:
+Info) /usr/local/sw/vmd/plugins/LINUXAMD64/molfile
+Info) File loading in progress, please wait.
+Warning) Unable to ascertain filetype from filename 'location'; assuming pdb.
+ERROR) Could not read file location
+ERROR) Loading of startup molecule files aborted.
+vmd > Info) VMD for LINUXAMD64, version 1.9 (March 14, 2011)
+Info) Exiting normally.

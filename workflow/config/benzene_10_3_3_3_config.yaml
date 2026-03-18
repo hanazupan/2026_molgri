@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "auto_200"
+  unique_network_name: "cart_10_3_3_3"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 200
+  N_rotations: 10
   translation_algorithm: "cartesian"
   periodic_in: [False, False, False]
-  translation_subgrids_A: [ [0, 0.1, 1], [ 0, 0.1, 1], [5.3, 5.4, 1] ]
+  translation_subgrids_A: [ [-4,4,3], [-4,4,3], [3, 5, 3] ]
 
 pseudotrajectory:
   molecule_1: "benzene"

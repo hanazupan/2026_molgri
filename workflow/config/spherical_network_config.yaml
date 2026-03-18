@@ -10,8 +10,8 @@ grid:
   translation_subgrids_A: [55, [2, 10, 5]]
 
 pseudotrajectory:
-  molecule_1: "graphene"
-  molecule_2: "xylene"
+  molecule_1: "benzene"
+  molecule_2: "benzene"
   structure_ending: "gro"
   trajectory_ending: "xtc"
 
