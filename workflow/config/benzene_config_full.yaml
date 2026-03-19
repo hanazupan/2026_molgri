@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "positions_200rot"
+  unique_network_name: "spherical_positions_272rot"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 200
-  translation_algorithm: "cartesian"
-  periodic_in: [False, False, False]
-  translation_subgrids_A: [ [-3, 3, 20], [ -3, 3, 20], [1, 10, 20] ]
+  N_rotations: 272
+  periodic_in: [ False, False ]
+  translation_algorithm: "spherical"
+  translation_subgrids_A: [ 100, [1, 15, 20] ]
 
 pseudotrajectory:
   molecule_1: "benzene"
@@ -17,17 +17,17 @@ analysis:
   energy_program: GROMACS
   view_index: [ 1 ]
   length_shortened_trajectory_ns: 10
-  energy_types: ["Potential"]
+  energy_types: ["LJ (SR)", "Coulomb (SR)"]
   upper_E_limit: 0
   analyse_first_N_frames: None
 
 sqra:
   cutting_factor: "auto"
-  tolerance_rate_matrix_row_sum: 1e-12
-  sigma: 1e-30
-  tolerance_eigendecomposition: 1e-30
+  tolerance_rate_matrix_row_sum: 1e-16
+  sigma: 0
+  tolerance_eigendecomposition: 0
 
 eigenvectors:
   num_interesting_timescales: 4
-  num_interesting_eigenvectors: 4
+  num_interesting_eigenvectors: 8
   num_extremes_to_plot: "auto"

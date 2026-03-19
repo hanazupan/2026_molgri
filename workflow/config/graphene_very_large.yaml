@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "auto_160_longer"
+  unique_network_name: "graphene_very_large"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 160
+  N_rotations: 272
   translation_algorithm: "cartesian"
   periodic_in: [True, True, False]
-  translation_subgrids_A: [ [None, None, 5], [ None, None, 5], [1.5, 8, 10] ]
+  translation_subgrids_A: [ [None, None, 10], [ None, None, 10], [1.5, 10, 20] ]
 
 pseudotrajectory:
   molecule_1: "graphene"
@@ -24,7 +24,7 @@ msm:
 
 sqra:
   cutting_factor: "auto"
-  tolerance_rate_matrix_row_sum: 1e-12
+  tolerance_rate_matrix_row_sum: 1e-14
   sigma: 0
   tolerance_eigendecomposition: 0
 

@@ -135,20 +135,20 @@ rule plot_sqra_eigenvectors_as_lines:
                     go.Scatter(x=np.arange(selected_array.shape[0]),y=selected_array[:, row], line=dict(color="black"),
                         mode="lines"),row=1+row,col=1+col)
             # todo names of peaks
-        fig.add_hline(
-            y=1,
-            line_color="red",
-            line_width=1,
-            line_dash="dash"
-        )
-        fig.add_hline(
-            y=-1,
-            line_color="blue",
-            line_width=1,
-            line_dash="dash"
-        )
+        # fig.add_hline(
+        #     y=1,
+        #     line_color="red",
+        #     line_width=1,
+        #     line_dash="dash"
+        # )
+        # fig.add_hline(
+        #     y=-1,
+        #     line_color="blue",
+        #     line_width=1,
+        #     line_dash="dash"
+        # )
         fig.update_layout(showlegend=False,plot_bgcolor="white",)
-        fig.update_yaxes(range=[-1, 1], showticklabels=False, ticks="")
+        fig.update_yaxes(showticklabels=False, ticks="") #range=[-1, 1],
         fig.update_xaxes(showticklabels=False,ticks="")
         fig.write_image(output.plot, scale=3)
 
