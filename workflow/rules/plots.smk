@@ -29,7 +29,7 @@ rule violin_plot_E_distributions:
         max_energy = config['analysis']['upper_E_limit']
         energies = df["Binding energy [kJ/mol]"]
 
-        show_violin(energies, max_energy, "Binding Energy", save_as=output.violin_plot, show=False)
+        show_violin(energies, max_energy, "Binding Energy", save_as=output.violin_plot, show=True)
 
 
 rule plot_E_per_assigned_position_grids:
