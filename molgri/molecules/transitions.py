@@ -14,10 +14,62 @@ from scipy.sparse import coo_array, csr_array, diags_array, dok_array
 from scipy.constants import k as kB, N_A
 from scipy.sparse.linalg import eigs
 from sklearn.neighbors import KernelDensity
+from petsc4py import PETSc
+from slepc4py import SLEPc
 
 from molgri.molecules.rate_merger import expand_eigenvector_to_full_length
 from molgri.utils.arrays import k_argmax_in_array, k_argmin_in_array
 
+
+
+def scipy_to_petsc(A):
+    A = A.tocsr()
+    indptr = A.indptr.astype('int32')
+    indices = A.indices.astype('int32')
+
+    petsc_A = PETSc.Mat().createAIJ(
+        size=A.shape,
+        csr=(indptr, indices, A.data)
+    )
+    petsc_A.assemble()
+
+    return petsc_A
+
+def decompose_with_petsc(A, sigma=0.0, num_eigenvectors=12):
+    A = scipy_to_petsc(A)
+    E = SLEPc.EPS().create()
+    E.setOperators(A)
+
+    E.setProblemType(SLEPc.EPS.ProblemType.NHEP)  # general non-Hermitian
+    E.setDimensions(nev=num_eigenvectors)  # number of eigenpairs
+    E.setTolerances(tol=1e-10, max_it=200000)
+
+    # target eigenvalues near zero
+    E.setTarget(sigma)
+    E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_REAL)
+
+    E.setFromOptions()
+    E.solve()
+
+    nconv = E.getConverged()
+    print('nconv', nconv)
+    vals = []
+    vecs = []
+
+    vr, vi = A.getVecs()  # real/imag parts
+
+    for i in range(nconv):
+        eigval = E.getEigenpair(i, vr, vi)
+
+        # convert PETSc vector → NumPy
+        v = vr.getArray().copy()
+
+        vals.append(eigval)
+        vecs.append(v)
+
+    vals = np.array(vals)
+    vecs = np.column_stack(vecs)
+    return vals, vecs
 
 def window(seq: Sequence, len_window: int, step: int = 1) -> Tuple[Any, Any]:
     """
@@ -175,6 +227,8 @@ class SQRA:
         # multiply with sqrt(pi_j/pi_i) = e**((V_i-V_j)*1000/(2*k_B*N_A*T))
         # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
         energy_differences = self.energies[rate_matrix.row] - self.energies[rate_matrix.col]
+        print(np.max(energy_differences), np.min(energy_differences))
+        print(np.max(self.energies)-np.min(self.energies))
 
         if capping_factor!="None":
             energy_differences = np.where(energy_differences < float(capping_factor), energy_differences, float(capping_factor))
@@ -254,7 +308,7 @@ class DecompositionTool:
         third_tuple = (eigenvalues[indices_sum_to_other], eigenvectors[:, indices_sum_to_other])
         return first_tuple, second_tuple, third_tuple
 
-    def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 12) -> tuple:
+    def get_decomposition(self, tol: float, maxiter: int, which: str, sigma: Optional[float], k: int = 24) -> tuple:
         """
         The function to decompose matrices. It wraps the scipy decompose and makes sure:
         - the output is not given as complex numbers
@@ -275,11 +329,12 @@ class DecompositionTool:
         """
         # two options for transpose: large, sparse matrices need specialized methods but small ones perform better
         # with full eigendecomposition
-        if self.matrix_to_decompose.shape[0] > 20000:
-            eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
-                                      sigma=sigma)
-        else:
-            eigenval, eigenvec = eig(self.matrix_to_decompose.toarray(), left=True, right=False)
+        eigenval, eigenvec = decompose_with_petsc(self.matrix_to_decompose.T, sigma, num_eigenvectors=k)
+        # if self.matrix_to_decompose.shape[0] > 20000:
+        #     eigenval, eigenvec = eigs(self.matrix_to_decompose.T, k=k, tol=tol, maxiter=maxiter, which=which,
+        #                               sigma=sigma)
+        # else:
+        #     eigenval, eigenvec = eig(self.matrix_to_decompose.toarray(), left=True, right=False)
         # if imaginary eigenvectors or eigenvalues, raise error
         if not np.allclose(eigenvec.imag.max(), 0, rtol=1e-5, atol=1e-3) or not np.allclose(eigenval.imag.max(), 0,
                                                                                             rtol=1e-5, atol=1e-3):
