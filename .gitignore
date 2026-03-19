@@ -207,6 +207,8 @@ outputs
 output
 nobackup
 januar_outdated_outputs/
+pics
+*.txt
 
 *.odt
 
