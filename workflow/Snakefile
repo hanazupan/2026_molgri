@@ -74,11 +74,11 @@ from pathlib import Path
 
 rule all:
     input:
-        expand(
-            "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/test/split/{frame}/structure.inp",
-            frame=get_frames
-        )
-       # "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/test/output.csv"
+        lambda wc: expand(
+            f"{BASE}/{{frame}}/structure.out",
+            frame=get_frames(wc)
+        ),
+       # "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/test/output.csv",
         # "<output_specific_molecule_network>config_used.yaml",
         # # grids
         # "<outputs_network>grid_info.yaml",

@@ -514,11 +514,13 @@ end\n"""
     #     self.total_text += use_string
     #     self.total_text += "*\n"
 
+    # def _write_molecule_specification(self):
+    #     xyz_filename = Path(self.molecule.xyz_file).name
+    #
+    #     self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {xyz_filename}\n"
+
     def _write_molecule_specification(self):
-        xyz_filename = Path(self.molecule.xyz_file).name
-
-        self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {xyz_filename}\n"
-
+        self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {self.molecule.xyz_file}\n"
 
     def make_input(self, geo_optimization: bool = False):
         self._write_first_line(geo_optimization=geo_optimization)
