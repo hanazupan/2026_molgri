@@ -20,6 +20,22 @@ import MDAnalysis.transformations as trans
 HARTREE_TO_J = physical_constants["Hartree energy"][0]
 AVOGADRO_CONSTANT = physical_constants["Avogadro constant"][0]
 
+def xtc_to_xyz(xtc_file, gro_file, output_xyz):
+    u = mda.Universe(gro_file, xtc_file)
+
+    with open(output_xyz, "w") as f:
+        for i, ts in enumerate(u.trajectory):
+            n = len(u.atoms)
+
+            f.write(f"{n}\n")
+            f.write(f"frame{i}\n")
+
+            for atom in u.atoms:
+                x, y, z = atom.position
+                element = atom.name[0]
+                f.write(f"{element:2s} {x:12.6f} {y:12.6f} {z:12.6f}\n")
+
+
 class QuantumSetup:
 
     """
@@ -514,13 +530,13 @@ end\n"""
     #     self.total_text += use_string
     #     self.total_text += "*\n"
 
-    # def _write_molecule_specification(self):
-    #     xyz_filename = Path(self.molecule.xyz_file).name
-    #
-    #     self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {xyz_filename}\n"
-
     def _write_molecule_specification(self):
-        self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {self.molecule.xyz_file}\n"
+        xyz_filename = Path(self.molecule.xyz_file).name
+
+        self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {xyz_filename}\n"
+
+    # def _write_molecule_specification(self):
+    #     self.total_text += f"* xyzfile {self.molecule.charge} {self.molecule.multiplicity} {self.molecule.xyz_file}\n"
 
     def make_input(self, geo_optimization: bool = False):
         self._write_first_line(geo_optimization=geo_optimization)
@@ -562,3 +578,4 @@ def split_xyz_trajectory(xyz_file: str, output_base_dir: str, structures_per_chu
         chunk_xyz = chunk_dir / "structure.xyz"
         with open(chunk_xyz, "w") as f:
             f.writelines(chunk_lines)
+
