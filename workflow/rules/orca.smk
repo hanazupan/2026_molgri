@@ -9,14 +9,16 @@ REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/spherical_grid_20_42_4"
 LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4"
 GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/pseudosimulation"
 
+#FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
+
 setup = QuantumSetup(
     functional="PBE0",
     basis_set="def2-TZVP",
     solvent=None,
     dispersion_correction="D3",
     num_scf=None,
-    num_cores=1,        # ← IMPORTANT
-    ram_per_core=1000      # ← IMPORTANT
+    num_cores=4,        # ← IMPORTANT
+    ram_per_core=400      # ← IMPORTANT
 )
 
 rule xtc_to_xyz:
@@ -54,7 +56,7 @@ checkpoint split_trajectory:
         split_xyz_trajectory(
             xyz_file=input.xyz,
             output_base_dir=f"{LOCAL_TEST_DIR}",
-            structures_per_chunk=2
+            structures_per_chunk=80
         )
 
         with open(output.flag, "w") as f:
@@ -62,22 +64,21 @@ checkpoint split_trajectory:
         # just create a flag so Snakemake knows we're done
         #Path(output[0]).mkdir(exist_ok=True)
 
-# def get_frames(wildcards):
-#     checkpoints.split_trajectory.get()  # ensures checkpoint runs first
-#
-#     base_dir = Path(f"{LOCAL_TEST_DIR}")
-#
-#     return [
-#         p.name for p in base_dir.iterdir()
-#         if p.is_dir() and p.name.isdigit()
-#     ]
-import os
+def get_frames(wildcards):
+    checkpoints.split_trajectory.get()
 
-def get_frames():
+    base_dir = Path(LOCAL_TEST_DIR)
+
     return sorted([
-        d for d in os.listdir(LOCAL_TEST_DIR)
-        if d.isdigit()
+        p.name for p in base_dir.iterdir()
+        if p.is_dir() and p.name.isdigit()
     ])
+# import os
+# def get_frames():
+#     return sorted([
+#         d for d in os.listdir(LOCAL_TEST_DIR)
+#         if d.isdigit()
+#     ])
 
 rule write_orca_input:
     input:
@@ -101,9 +102,9 @@ rule write_orca_input:
 
 rule copy_to_curta:
     input:
-        lambda wildcards: expand(
+        lambda wc: expand(
             f"{LOCAL_TEST_DIR}/{{frame}}/structure.inp",
-            frame=get_frames()
+            frame=get_frames(wc)
         )
     output:
         touch(f"{LOCAL_TEST_DIR}/copied_to_curta.txt")
@@ -192,9 +193,9 @@ rule read_orca:
 
 rule write_csv:
     input:
-        lambda wildcards: expand(
+        lambda wc: expand(
             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
-            frame=get_frames()
+            frame=get_frames(wc)
         )
     output:
         csv=f"{LOCAL_TEST_DIR}/output.csv"
