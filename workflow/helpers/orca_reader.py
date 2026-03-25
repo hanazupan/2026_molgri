@@ -11,6 +11,7 @@ from scipy import sparse
 from scipy.constants import physical_constants
 from MDAnalysis import Merge
 from pathlib import Path
+from ase.io import read
 
 #from molgri.molecules.pts import Pseudotrajectory
 import MDAnalysis.transformations as trans
@@ -34,6 +35,46 @@ def xtc_to_xyz(xtc_file, gro_file, output_xyz):
                 x, y, z = atom.position
                 element = atom.name[0]
                 f.write(f"{element:2s} {x:12.6f} {y:12.6f} {z:12.6f}\n")
+
+
+def find_invalid_frames_with_overlapping_atoms(
+    trajectory_path: str,
+    rounding_decimals: int = 6
+):
+    """
+    Detect frames where at least two atoms have identical coordinates.
+
+    Args:
+        trajectory_path (str): Path to trajectory.xyz
+        rounding_decimals (int): Precision for coordinate comparison
+
+    Returns:
+        valid_indices (np.ndarray): frames WITHOUT overlaps
+        invalid_indices (np.ndarray): frames WITH overlapping atoms
+    """
+
+    traj = read(trajectory_path, index=":")
+
+    valid_indices = []
+    invalid_indices = []
+
+    for i, atoms in enumerate(traj):
+        coords = atoms.get_positions().round(rounding_decimals)
+
+        # convert each atom position into a tuple
+        coord_tuples = [tuple(c) for c in coords]
+
+        # check if duplicates exist within the frame
+        if len(coord_tuples) != len(set(coord_tuples)):
+            invalid_indices.append(i)
+        else:
+            valid_indices.append(i)
+
+    print(f"Total frames: {len(traj)}")
+    print(f"Valid frames: {len(valid_indices)}")
+    print(f"Invalid frames (overlapping atoms): {len(invalid_indices)}")
+
+    return np.array(valid_indices), np.array(invalid_indices)
 
 
 class QuantumSetup:
@@ -254,7 +295,7 @@ class OrcaReader:
         return int(self.frame_num)
 
 
-def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: str, setup: QuantumSetup,
+def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: str, setup: QuantumSetup,  chunksize: int,
                                   num_points: int, is_pt=True):
     """
     Read a list of orca .out files that were created with the same set-up (functional, basis set ...). Save the
@@ -269,7 +310,7 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
 
     """
 
-    columns = ["File", "Frame", "Functional", "Basis set", "Dispersion correction", "Solvent",
+    columns = ["File", "Frame", "Global_index", "Functional", "Basis set", "Dispersion correction", "Solvent",
                "Energy [hartree]", "Time [h:m:s]", "Normal Finish", "Optimization Complete"]
 
     all_df = []
@@ -295,11 +336,13 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
         rows = []
         for step, energy in enumerate(energies):
             energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+            global_index = chunksize * (frame_index-1) + step
 
             rows.append([
                 short_path,
                 frame_index,
                 step,
+                global_index,
                 energy,
                 energy_kjmol,
                 normal_finish,
@@ -315,6 +358,7 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
             "File",
             "Frame",
             "Step",
+            "Global_index",
             "Energy [hartree]",
             "Energy [kJ/mol]",
             "Normal Finish",
@@ -358,6 +402,155 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
         pass
     combined_df.to_csv(csv_file_to_write, index=False)
     #write_output_file(combined_df, csv_file_to_write, file_type="csv")
+
+def read_energies_into_csv(out_files_to_read: list, csv_file_to_write: str, setup: QuantumSetup,  chunksize: int,
+                                  num_points: int,  invalid_indices: set = None, is_pt=True):
+    """
+    Read a list of orca .out files that were created with the same set-up (functional, basis set ...). Save the
+    energies and global indices.
+
+    Args:
+        out_files_to_read (list): a list of paths, usually to a number of .out files calculated along a molgri pt
+        csv_file_to_write (str): a path to a csv file where the data will be recorded.
+        setup ():
+
+    Returns:
+
+    """
+    if invalid_indices is None:
+        invalid_indices = set()
+
+    all_df = []
+
+    current_traj_index = 0
+
+    for out_file_to_read in out_files_to_read:
+        my_reader = OrcaReader(out_file_to_read)
+        energies = my_reader.extract_energies_orca_output()
+
+        rows = []
+        for step, energy in enumerate(energies):
+
+            # 🔥 skip invalid frames
+            if current_traj_index in invalid_indices:
+                current_traj_index += 1
+                continue
+
+            energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+
+            rows.append([
+                current_traj_index,
+                energy_kjmol,
+            ])
+
+            current_traj_index += 1
+        print("Total energies processed:", current_traj_index)
+        print("Invalid indices:", sorted(invalid_indices))
+
+        df = pd.DataFrame(rows, columns=[
+            "Total index",
+            "Energy [kJ/mol]"
+        ])
+        all_df.append(df)
+
+    combined_df = pd.concat(all_df)
+    combined_df.to_csv(csv_file_to_write, index=False)
+
+
+import re
+from ase.io import read
+
+import re
+
+def extract_frame_indices_from_xyz(trajectory_path: str):
+    """
+    Extract frame indices from raw XYZ file by reading comment lines manually.
+    """
+
+    frame_indices = []
+
+    with open(trajectory_path, "r") as f:
+        lines = f.readlines()
+
+    i = 0
+    while i < len(lines):
+        num_atoms = int(lines[i].strip())   # first line
+        comment = lines[i + 1].strip()      # second line
+
+        # 🔍 extract something like "frame12"
+        match = re.search(r"(\d+)", comment)
+
+        if match:
+            frame_indices.append(int(match.group(1)))
+        else:
+            raise ValueError(f"Could not parse frame index from comment: '{comment}'")
+
+        # jump to next frame
+        i += num_atoms + 2
+
+    print("Extracted frame indices:", frame_indices)
+    return frame_indices
+
+
+import numpy as np
+import pandas as pd
+
+def write_energies_with_indices(
+    out_files_to_read: list,
+    trajectory_path: str,
+    csv_file_to_write: str
+):
+    """
+    Create CSV with:
+    - frame indices from trajectory.xyz
+    - energies in Hartree
+    - invalid frames skipped (based on overlapping atoms)
+
+    Assumes:
+    - number of energies == number of trajectory frames
+    """
+
+    # 🔹 1. get frame indices
+    frame_indices = extract_frame_indices_from_xyz(trajectory_path)
+
+    # 🔹 2. get invalid indices (trajectory positions)
+    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path)
+    invalid_set = set(invalid)
+    frame_indices = filter_frame_indices(frame_indices, invalid)
+    print(frame_indices)
+
+    # 🔹 3. collect all energies (flatten)
+    all_energies = []
+    for out_file in sorted(out_files_to_read):
+        reader = OrcaReader(out_file)
+        energies = reader.extract_energies_orca_output()
+        all_energies.extend(energies)
+
+    # 🔥 sanity check BEFORE filtering
+    if len(all_energies) != len(frame_indices):
+        raise ValueError(
+            f"Mismatch: {len(all_energies)} energies vs {len(frame_indices)} frames"
+        )
+
+    # 🔹 4. build rows (skip invalid frames ONLY here)
+    rows = []
+    for i, (frame_idx, energy) in enumerate(zip(frame_indices, all_energies)):
+        energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+        rows.append([
+            frame_idx,
+            energy_kjmol   # ✅ keep in Hartree
+        ])
+
+    # 🔹 5. write CSV
+    df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
+    df.to_csv(csv_file_to_write, index=False)
+
+def filter_frame_indices(frame_indices, invalid_indices):
+    mask = np.ones(len(frame_indices), dtype=bool)
+    mask[invalid_indices] = False
+    print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
+    return list(np.array(frame_indices)[mask])
+
 
 def nice_str_of(string: str) -> str:
     """

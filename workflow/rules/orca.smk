@@ -1,13 +1,16 @@
-from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, read_important_stuff_into_csv, nice_str_of, split_xyz_trajectory, xtc_to_xyz
-
+from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, filter_frame_indices, write_energies_with_indices
+from workflow.helpers.orca_reader import read_important_stuff_into_csv, read_energies_into_csv, nice_str_of, split_xyz_trajectory, xtc_to_xyz, find_invalid_frames_with_overlapping_atoms, extract_frame_indices_from_xyz
+import numpy as np
 from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/spherical_grid_20_42_4"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/tiny"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4"
-GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/pseudosimulation"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/tiny"
+GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/tiny/pseudosimulation"
+
+CHUNK_SIZE = 2
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -34,6 +37,19 @@ rule xtc_to_xyz:
             output.xyz
         )
 
+rule find_invalid_frames:
+    input:
+        trajectory = "<pseudosimulation>trajectory.xyz"
+    output:
+        valid = "<outputs_indices>valid_indices.npy",
+        invalid = "<outputs_indices>invalid_indices.npy"
+    run:
+        valid_indices, invalid_indices = find_invalid_frames_with_overlapping_atoms(
+            input.trajectory
+        )
+
+        np.save(output.valid, valid_indices)
+        np.save(output.invalid, invalid_indices)
 
 rule copy_trajectory:
     input:
@@ -49,14 +65,14 @@ rule copy_trajectory:
 
 checkpoint split_trajectory:
     input:
-        xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz"
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz"
     output:
         flag=f"{LOCAL_TEST_DIR}/split_done.txt"
     run:
         split_xyz_trajectory(
             xyz_file=input.xyz,
             output_base_dir=f"{LOCAL_TEST_DIR}",
-            structures_per_chunk=80
+            structures_per_chunk= CHUNK_SIZE
         )
 
         with open(output.flag, "w") as f:
@@ -73,6 +89,7 @@ def get_frames(wildcards):
         p.name for p in base_dir.iterdir()
         if p.is_dir() and p.name.isdigit()
     ])
+
 # import os
 # def get_frames():
 #     return sorted([
@@ -191,7 +208,7 @@ rule read_orca:
 #             num_points=len(input)
 #         )
 
-rule write_csv:
+rule write_large_csv:
     input:
         lambda wc: expand(
             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
@@ -204,5 +221,23 @@ rule write_csv:
             out_files_to_read=input,
             csv_file_to_write=output.csv,
             setup=setup,
-            num_points=len(input)
+            num_points=len(input),
+            chunksize=CHUNK_SIZE
+        )
+
+
+rule write_small_csv:
+    input:
+        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+        outs=lambda wc: expand(
+            f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        csv=f"{LOCAL_TEST_DIR}/energy.csv"
+    run:
+        write_energies_with_indices(
+            out_files_to_read=input.outs,
+            trajectory_path=input.traj,
+            csv_file_to_write=output.csv
         )

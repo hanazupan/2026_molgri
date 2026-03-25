@@ -1,7 +1,7 @@
 import numpy as np
 
-input_file = "input.xyz"
-output_file = "cleaned.xyz"
+input_file = "trajectory.xyz"
+output_file = "trajectory.xyz"
 
 # tolerance for coordinate comparison
 tol = 1e-6
