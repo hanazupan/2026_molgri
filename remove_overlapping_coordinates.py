@@ -1,7 +1,7 @@
 import numpy as np
 
 input_file = "trajectory.xyz"
-output_file = "trajectory.xyz"
+output_file = "cleaned_trajectory.xyz"
 
 # tolerance for coordinate comparison
 tol = 1e-6
@@ -69,5 +69,5 @@ while i < len(lines):
 with open(output_file, "w") as f:
     f.writelines(cleaned_lines)
 
-print("\nFertig.")
-print(f"Entfernte Strukturen: {len(removed_structures)}")
+print("\nDone.")
+print(f"Deleted structures: {len(removed_structures)}")

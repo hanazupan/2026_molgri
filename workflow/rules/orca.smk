@@ -1,16 +1,17 @@
 from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, filter_frame_indices, write_energies_with_indices
 from workflow.helpers.orca_reader import read_important_stuff_into_csv, read_energies_into_csv, nice_str_of, split_xyz_trajectory, xtc_to_xyz, find_invalid_frames_with_overlapping_atoms, extract_frame_indices_from_xyz
+from workflow.helpers.remove_overlapping_cooridnates import remove_coordinates
 import numpy as np
 from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/tiny"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_20_7_7_4"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/tiny"
-GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/tiny/pseudosimulation"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_20_7_7_4"
+GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_20_7_7_4/pseudosimulation"
 
-CHUNK_SIZE = 2
+CHUNK_SIZE = 280
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -26,8 +27,8 @@ setup = QuantumSetup(
 
 rule xtc_to_xyz:
     input:
-        xtc = f"{GRID_DIR}/trajectory.xtc",
-        gro = f"{GRID_DIR}/structure.gro"
+        xtc = f"<pseudosimulation>trajectory.xtc",
+        gro = f"<pseudosimulation>structure.gro"
     output:
         xyz = f"{GRID_DIR}/trajectory.xyz"
     run:
@@ -62,6 +63,19 @@ rule copy_trajectory:
         cp {input} {output}
         """
 
+rule clean_trajectory:
+    input:
+        xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz"
+    output:
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz"
+    params:
+        tol=1e-6
+    run:
+        remove_coordinates(
+            input_file=input.xyz,
+            output_file=output.xyz,
+            tol=params.tol
+        )
 
 checkpoint split_trajectory:
     input:

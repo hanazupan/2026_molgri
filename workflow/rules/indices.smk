@@ -34,18 +34,44 @@ checkpoint all_positions_first_rotation_indices:
         write_object(required_indices, output.indices)
 
 
+# checkpoint lowest_E_indices:
+#     """
+#     Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
+#     """
+#     input:
+#         energy_csv = "{path}energy.csv"
+#     output:
+#         indices= "{path}lowest_{N}_binding_energies.txt"
+#     run:
+#         df_energy = read_object(input.energy_csv)
+#         required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
+#         write_object(required_indices, output.indices)
 
 checkpoint lowest_E_indices:
-    """
-    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
-    """
     input:
         energy_csv = "{path}energy.csv"
     output:
         indices= "{path}lowest_{N}_binding_energies.txt"
     run:
         df_energy = read_object(input.energy_csv)
-        required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
+        df_energy.columns = df_energy.columns.str.strip()
+        print(df_energy.columns)
+        if "Total index" in df_energy.columns:
+            # case 1: clean CSV
+            selected = df_energy.nsmallest(
+                int(wildcards.N),
+                "Energy [kJ/mol]"
+            )
+            required_indices = selected["Total index"].values
+
+        else:
+            # case 2: index used as Total index
+            selected = df_energy.nsmallest(
+                int(wildcards.N),
+                "Energy [kJ/mol]"
+            )
+            required_indices = selected.index.values
+        print(required_indices)
         write_object(required_indices, output.indices)
 
 checkpoint find_indices_dominant_eigenvectors:
