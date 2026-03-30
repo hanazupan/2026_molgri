@@ -255,3 +255,14 @@ rule write_small_csv:
             trajectory_path=input.traj,
             csv_file_to_write=output.csv
         )
+
+rule copy_energy_csv:
+    input:
+        f"{LOCAL_TEST_DIR}/energy.csv"
+    output:
+        f"{GRID_DIR}/energy.csv"
+    shell:
+        """
+        echo "energy.csv copied to pseudotrajectory"
+        cp {input} {output}
+        """

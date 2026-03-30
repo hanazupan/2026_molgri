@@ -488,7 +488,7 @@ def extract_frame_indices_from_xyz(trajectory_path: str):
         # jump to next frame
         i += num_atoms + 2
 
-    print("Extracted frame indices:", frame_indices)
+#    print("Extracted frame indices:", frame_indices)
     return frame_indices
 
 
@@ -546,9 +546,10 @@ def write_energies_with_indices(
     df.to_csv(csv_file_to_write, index=False)
 
 def filter_frame_indices(frame_indices, invalid_indices):
+    invalid_indices = np.array(invalid_indices, dtype=int)
     mask = np.ones(len(frame_indices), dtype=bool)
     mask[invalid_indices] = False
-    print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
+    #print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
     return list(np.array(frame_indices)[mask])
 
 
