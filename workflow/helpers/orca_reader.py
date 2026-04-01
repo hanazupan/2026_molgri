@@ -5,18 +5,12 @@ from subprocess import PIPE, run
 import MDAnalysis as mda
 import pandas as pd
 import numpy as np
-import yaml
-from numpy.typing import NDArray
-from scipy import sparse
+import matplotlib.pyplot as plt
 from scipy.constants import physical_constants
-from MDAnalysis import Merge
 from pathlib import Path
 from ase.io import read
+from datetime import timedelta
 from workflow.helpers.io import read_object
-#from molgri.molecules.pts import Pseudotrajectory
-import MDAnalysis.transformations as trans
-
-#from molgri.space.translations import TranslationParser
 
 HARTREE_TO_J = physical_constants["Hartree energy"][0]
 AVOGADRO_CONSTANT = physical_constants["Avogadro constant"][0]
@@ -182,25 +176,6 @@ class OrcaReader:
 
         return time_h_m_s
 
-    def extract_last_energy_orca_output(self) -> list:
-        """
-        Take any orca output file and give me the total energy resulting from the calculation.
-
-        Returns:
-            Energy in the unit of Hartrees
-        """
-        # need the last one so use tail
-        line_energy = subprocess.run(f'grep "^FINAL SINGLE POINT ENERGY" {self.out_file_path} | tail -n 1  | sed '
-                                     f'"s/^FINAL SINGLE POINT '
-                                     f'ENERGY //"', shell=True,
-                                     capture_output=True, text=True)
-        try:
-            line_energy = line_energy.stdout.strip()
-            energy_hartree = float(line_energy)
-        except ValueError:
-            energy_hartree = np.NaN
-
-        return energy_hartree
 
     def extract_energies_orca_output(self) -> list:
         """
@@ -228,69 +203,6 @@ class OrcaReader:
 
         return energies
 
-    def extract_num_atoms(self):
-        line = subprocess.run(
-            f'grep "^Number of atoms" {self.out_file_path}| head -n 1 ',
-            shell=True, capture_output=True, text=True)
-        number_atoms = line.stdout
-        number_atoms = int(number_atoms.strip().split()[-1])
-        return number_atoms
-
-    def extract_optimized_xyz(self) -> str:
-        if self.assert_optimization_complete(throw_error=False):
-            # find the line number with the last occurence of CARTESIAN COORDINATES (ANGSTROEM)
-            line = subprocess.run(
-                f'grep -n "CARTESIAN COORDINATES (ANGSTROEM)" {self.out_file_path} | cut -d: -f1 | tail -n 1 ',
-                shell=True, capture_output=True, text=True)
-            line_number_last_coo = int(line.stdout)
-            # start two lines after that, finish two lines + molecule length later
-            start_point = 2 + line_number_last_coo
-            end_point = 2 + line_number_last_coo + self.extract_num_atoms() -1
-            command = ['head', '-n', f"{end_point}", f"{self.out_file_path}", "|", "tail", "-n", f"+{start_point}"]
-
-            line = subprocess.run(
-                f'head -n {end_point} {self.out_file_path} | tail -n +{start_point}',
-                shell=True, capture_output=True, text=True)
-
-            # starting with num of atoms and comment line
-            result = f"{self.extract_num_atoms()}\n"
-            result += "\n"
-            result += line.stdout
-            return result
-        else:
-            # to indicate an error while preserving pt length the initial structure is copied but all element names are
-            # changed to X
-            print(f"Not complete {self.out_file_path}")
-            return ""
-
-    def extract_last_coordinates_from_opt(self) -> str:
-        """
-        Extract the last structure of the optimization.
-        """
-        # try to find _trj.xyz in the directory
-        for file in os.listdir(self.calculation_directory):
-            if str(file).endswith("_trj.xyz"):
-                orca_traj_xyz_file = os.path.join(self.calculation_directory, file)
-                line_number_last_coo = subprocess.run(
-                    f"""grep -n "Coordinates from" {orca_traj_xyz_file} | tail -n 1 | cut -d: -f1""",
-                    shell=True, capture_output=True).stdout
-                line_with_num_of_atoms = int(line_number_last_coo) - 1
-                command = ['tail', '-n', f"+{line_with_num_of_atoms}", f"{orca_traj_xyz_file}"]
-                result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-                return result.stdout
-        else:
-            raise FileNotFoundError(f"Cannot find any _trj.xyz file in {self.calculation_directory}")
-
-    def extract_last_coordinates_to_file(self, file_path: str):
-        """
-        Same as extract_last_coordinates_from_opt, but immediately write to a file.
-
-        Args:
-            file_path (str): a path where the new file should be
-        """
-        file_contents = self.extract_last_coordinates_from_opt()
-        with open(file_path, "w") as f:
-            f.write(file_contents)
 
     def get_frame_num(self):
         return int(self.frame_num)
@@ -311,20 +223,13 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
 
     """
 
-    columns = ["File", "Frame", "Global_index", "Functional", "Basis set", "Dispersion correction", "Solvent",
-               "Energy [hartree]", "Time [h:m:s]", "Normal Finish", "Optimization Complete"]
-
     all_df = []
-
-
     all_frame_indices = [int(Path(out_file).parts[-2]) for out_file in out_files_to_read]
-    #all_frame_indices = [0]
 
     for out_file_to_read in out_files_to_read:
         my_reader = OrcaReader(out_file_to_read)
 
         frame_index = my_reader.get_frame_num()
-        energy_hartree = my_reader.extract_last_energy_orca_output()
         time_h_m_s = my_reader.extract_time_orca_output()
         normal_finish = my_reader.assert_normal_finish(throw_error=False)
         optimization_complete = my_reader.assert_optimization_complete(throw_error=False)
@@ -373,27 +278,6 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
 
         all_df.append(df)
 
-    # for i, out_file_to_read in enumerate(out_files_to_read):
-    #     my_reader = OrcaReader(out_file_to_read)
-    #     energy_hartree = my_reader.extract_energy_orca_output()
-    #
-    #     if is_pt:
-    #         frame = my_reader.get_frame_num()
-    #     else:
-    #         frame = None
-    #
-    #     time_h_m_s = my_reader.extract_time_orca_output()
-    #
-    #     all_data = [[out_file_to_read, frame, setup.functional, setup.basis_set, setup.dispersion_correction,
-    #                  setup.solvent, energy_hartree, time_h_m_s]]
-    #
-    #     df = pd.DataFrame(all_data, columns=columns)
-    #     df["Energy [kJ/mol]"] = df["Energy [hartree]"] / 1000.0 * (HARTREE_TO_J * AVOGADRO_CONSTANT)
-    #
-    #     df["Normal Finish"] = my_reader.assert_normal_finish(throw_error=False)
-    #     df["Optimization Complete"] = my_reader.assert_optimization_complete(throw_error=False)
-    #     all_df.append(df)
-
     combined_df = pd.concat(all_df)
     try:
         combined_df["Time [h:m:s]"] = pd.to_timedelta(combined_df["Time [h:m:s]"])
@@ -402,63 +286,7 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
         # THIS DELTA TIME THING IS A HEADACHE!!!!
         pass
     combined_df.to_csv(csv_file_to_write, index=False)
-    #write_output_file(combined_df, csv_file_to_write, file_type="csv")
 
-def read_energies_into_csv(out_files_to_read: list, csv_file_to_write: str, setup: QuantumSetup,  chunksize: int,
-                                  num_points: int,  invalid_indices: set = None, is_pt=True):
-    """
-    Read a list of orca .out files that were created with the same set-up (functional, basis set ...). Save the
-    energies and global indices.
-
-    Args:
-        out_files_to_read (list): a list of paths, usually to a number of .out files calculated along a molgri pt
-        csv_file_to_write (str): a path to a csv file where the data will be recorded.
-        setup ():
-
-    Returns:
-
-    """
-    if invalid_indices is None:
-        invalid_indices = set()
-
-    all_df = []
-
-    current_traj_index = 0
-
-    for out_file_to_read in out_files_to_read:
-        my_reader = OrcaReader(out_file_to_read)
-        energies = my_reader.extract_energies_orca_output()
-
-        rows = []
-        for step, energy in enumerate(energies):
-
-            # 🔥 skip invalid frames
-            if current_traj_index in invalid_indices:
-                current_traj_index += 1
-                continue
-
-            energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
-
-            rows.append([
-                current_traj_index,
-                energy_kjmol,
-            ])
-
-            current_traj_index += 1
-        print("Total energies processed:", current_traj_index)
-        print("Invalid indices:", sorted(invalid_indices))
-
-        df = pd.DataFrame(rows, columns=[
-            "Total index",
-            "Energy [kJ/mol]"
-        ])
-        all_df.append(df)
-
-    combined_df = pd.concat(all_df)
-    combined_df.to_csv(csv_file_to_write, index=False)
-
-
-from datetime import timedelta
 
 def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
     all_times_seconds = []
@@ -500,10 +328,6 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
         else:
             f.write("No valid times found.\n")
 
-import re
-from ase.io import read
-
-import re
 
 def extract_frame_indices_from_xyz(trajectory_path: str):
     """
@@ -534,6 +358,12 @@ def extract_frame_indices_from_xyz(trajectory_path: str):
 #    print("Extracted frame indices:", frame_indices)
     return frame_indices
 
+def filter_frame_indices(frame_indices, invalid_indices):
+    invalid_indices = np.array(invalid_indices, dtype=int)
+    mask = np.ones(len(frame_indices), dtype=bool)
+    mask[invalid_indices] = False
+    #print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
+    return list(np.array(frame_indices)[mask])
 
 def write_energies_with_indices(
     out_files_to_read: list,
@@ -557,7 +387,7 @@ def write_energies_with_indices(
     _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path)
     invalid_set = set(invalid)
     frame_indices = filter_frame_indices(frame_indices, invalid)
-    print(frame_indices)
+    # print(frame_indices)
 
     # 🔹 3. collect all energies (flatten)
     all_energies = []
@@ -585,13 +415,6 @@ def write_energies_with_indices(
     df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
     df.to_csv(csv_file_to_write, index=False)
 
-def filter_frame_indices(frame_indices, invalid_indices):
-    invalid_indices = np.array(invalid_indices, dtype=int)
-    mask = np.ones(len(frame_indices), dtype=bool)
-    mask[invalid_indices] = False
-    #print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
-    return list(np.array(frame_indices)[mask])
-
 
 def nice_str_of(string: str) -> str:
     """
@@ -607,37 +430,6 @@ def nice_str_of(string: str) -> str:
     if not string:
         return "no"
     return re.sub(r'[^a-zA-Z0-9]', '', string)
-
-def write_output_file(data, output_path: str, file_type: str = "csv", index: bool = False):
-    """
-    Allgemeine Funktion zum Schreiben von Output-Dateien.
-
-    Args:
-        data: pandas DataFrame ODER String
-        output_path (str): Zielpfad (inkl. Dateiname)
-        file_type (str): "csv" oder "txt"
-        index (bool): ob DataFrame-Index geschrieben werden soll
-    """
-
-    output_path = Path(output_path)
-
-    # 📁 Stelle sicher, dass der Ordner existiert
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if file_type == "csv":
-        if not isinstance(data, pd.DataFrame):
-            raise TypeError("Für CSV muss 'data' ein pandas DataFrame sein.")
-        data.to_csv(output_path, index=index)
-
-    elif file_type == "txt":
-        with open(output_path, "w") as f:
-            f.write(str(data))
-
-    else:
-        raise ValueError(f"Unbekannter file_type: {file_type}")
-
-    print(f"✅ Datei geschrieben: {output_path}")
-
 
 
 class QuantumMolecule:
@@ -678,7 +470,6 @@ class OrcaWriter:
         First line looks something like this: ! PBE0 D4 def2-tzvp Opt <- depends on functional, SP/optimization and
         basis set.
 
-
         Args:
             geo_optimization (bool): if True option Opt will be selected, else SP
         """
@@ -688,32 +479,6 @@ class OrcaWriter:
             optimization_str = ""
 
         self.total_text += f"! {self.setup.functional} {self.setup.dispersion_correction} {self.setup.basis_set} {optimization_str}\n"
-
-#     def _write_fragment_constraint(self):
-#         """
-#
-#         Returns:
-#
-#         """
-#         assert self.molecule.fragment_1_len is not None, "Need to know fragment lengths to constrain them!"
-#         assert self.molecule.fragment_2_len is not None, "Need to know fragment lengths to constrain them!"
-#
-#
-#         self.total_text += f"""
-# %geom
-#
-#
-#     ConnectFragments
-#      {{1 2 C}}      # constrain the internal coordinates
-#               #  connecting fragments 1 and 2
-#     end
-#
-#     Fragments
-#       1 {{0:{self.molecule.fragment_1_len-1}}} end
-#       2 {{{self.molecule.fragment_1_len}:{self.molecule.fragment_1_len+self.molecule.fragment_2_len-1}}} end
-#     end
-#
-# end\n"""
 
     def _write_solvent(self):
         if self.setup.solvent is not None:
@@ -733,36 +498,28 @@ end\n"""
         if self.setup.ram_per_core is not None and self.setup.ram_per_core != "None":
             self.total_text += f"%maxcore {self.setup.ram_per_core}\n"
 
-    def make_entire_trajectory_inp(self, geo_optimization: bool):
-        #constrain_fragments: bool = False
-        # num_atoms = self.molecule.fragment_1_len + self.molecule.fragment_2_len
-        # len_segment_pt = num_atoms + 2
-        # len_segment_pt = num_atoms+2
-        len_pt_file = len(self.xyz_file_lines) - 1
-        len_trajectory = len_pt_file // len_segment_pt
-        for i in range(len_trajectory):
-            # all that comes before molecule
-            self._write_first_line(geo_optimization=geo_optimization)
-            self._write_solvent()
-            self._write_resources()
-            # writing this *xyz frame, don't need the num of atoms
-            # start_line = i * len_segment_pt + 2
-            # end_line = i * len_segment_pt + len_segment_pt
-            start_line = i * len_pt_file + 2
-            end_line = i * len_pt_file + len_pt_file
-            self._write_molecule_specification("".join(self.xyz_file_lines[start_line:end_line]))
-            # all that comes after
-            # if constrain_fragments:
-            #     self._write_fragment_constraint()
+    # def make_entire_trajectory_inp(self, geo_optimization: bool):
+    #     #constrain_fragments: bool = False
+    #     # num_atoms = self.molecule.fragment_1_len + self.molecule.fragment_2_len
+    #     # len_segment_pt = num_atoms + 2
+    #     # len_segment_pt = num_atoms+2
+    #     len_pt_file = len(self.xyz_file_lines) - 1
+    #     len_trajectory = len_pt_file // len_segment_pt
+    #     for i in range(len_trajectory):
+    #         # all that comes before molecule
+    #         self._write_first_line(geo_optimization=geo_optimization)
+    #         self._write_solvent()
+    #         self._write_resources()
+    #         # writing this *xyz frame, don't need the num of atoms
+    #         # start_line = i * len_segment_pt + 2
+    #         # end_line = i * len_segment_pt + len_segment_pt
+    #         start_line = i * len_pt_file + 2
+    #         end_line = i * len_pt_file + len_pt_file
+    #         self._write_molecule_specification("".join(self.xyz_file_lines[start_line:end_line]))
+    #         # all that comes after
+    #         # if constrain_fragments:
+    #         #     self._write_fragment_constraint()
 
-
-    # def _write_molecule_specification(self, use_string):
-    #     """
-    #     Here we don't reference the .xyz file but write coordinates directly into .inp.
-    #     """
-    #     self.total_text += f"* xyz {self.molecule.charge} {self.molecule.multiplicity}\n"
-    #     self.total_text += use_string
-    #     self.total_text += "*\n"
 
     def _write_molecule_specification(self):
         xyz_filename = Path(self.molecule.xyz_file).name
@@ -859,8 +616,7 @@ def extract_structures_with_orca(
     output_dir,
     setup
 ):
-    import os
-    from workflow.helpers.orca_reader import QuantumMolecule, OrcaWriter
+# takes trajectory and extracts the structures with the lowest energies according to orca
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -909,12 +665,7 @@ def extract_structures_with_orca(
 
 def copy_xyz_to_curta(source_dir, target_dir):
     import subprocess
-    subprocess.run(f"cp -r {source_dir} {target_dir}", shell=True, check=True)
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+    subprocess.run(f"scp -r {source_dir} {target_dir}", shell=True, check=True)
 
 
 def read_xyz_trajectory(xyz_file):
