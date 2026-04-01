@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: "cart_20_7_7_4"
+  unique_network_name: "cart_20_7_7_4_gro"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 20
@@ -20,7 +20,7 @@ analysis:
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1 , 2]
+  view_index: [ 1 ]
 
 energy:
   energy_program: GROMACS

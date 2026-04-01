@@ -12,7 +12,7 @@ from scipy.constants import physical_constants
 from MDAnalysis import Merge
 from pathlib import Path
 from ase.io import read
-
+from workflow.helpers.io import read_object
 #from molgri.molecules.pts import Pseudotrajectory
 import MDAnalysis.transformations as trans
 
@@ -25,7 +25,8 @@ def xtc_to_xyz(xtc_file, gro_file, output_xyz):
     u = mda.Universe(gro_file, xtc_file)
 
     with open(output_xyz, "w") as f:
-        for i, ts in enumerate(u.trajectory):
+        #for i, ts in enumerate(u.trajectory):
+        for i, ts in enumerate(u.trajectory, start=3360):
             n = len(u.atoms)
 
             f.write(f"{n}\n")
@@ -457,6 +458,48 @@ def read_energies_into_csv(out_files_to_read: list, csv_file_to_write: str, setu
     combined_df.to_csv(csv_file_to_write, index=False)
 
 
+from datetime import timedelta
+
+def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
+    all_times_seconds = []
+
+    for out_file_to_read in out_files_to_read:
+        my_reader = OrcaReader(out_file_to_read)
+
+        try:
+            time_h_m_s = my_reader.extract_time_orca_output()
+
+            # Convert to seconds
+            td = pd.to_timedelta(time_h_m_s)
+            seconds = td.total_seconds()
+
+            all_times_seconds.append(seconds)
+
+        except Exception as e:
+            print(f"Skipping invalid file: {out_file_to_read} ({e})")
+
+    def format_hms(seconds):
+        return str(timedelta(seconds=int(seconds)))
+
+    with open(txt_file_to_write, "w") as f:
+        if all_times_seconds:
+            # Write individual times
+            f.write("Individual times (h:m:s):\n")
+            for t in all_times_seconds:
+                f.write(f"{format_hms(t)}\n")
+
+            # Stats
+            longest = max(all_times_seconds)
+            shortest = min(all_times_seconds)
+            average = sum(all_times_seconds) / len(all_times_seconds)
+
+            f.write("\nSummary:\n")
+            f.write(f"Longest:  {format_hms(longest)}\n")
+            f.write(f"Shortest: {format_hms(shortest)}\n")
+            f.write(f"Average:  {format_hms(average)}\n")
+        else:
+            f.write("No valid times found.\n")
+
 import re
 from ase.io import read
 
@@ -491,9 +534,6 @@ def extract_frame_indices_from_xyz(trajectory_path: str):
 #    print("Extracted frame indices:", frame_indices)
     return frame_indices
 
-
-import numpy as np
-import pandas as pd
 
 def write_energies_with_indices(
     out_files_to_read: list,
@@ -773,3 +813,180 @@ def split_xyz_trajectory(xyz_file: str, output_base_dir: str, structures_per_chu
         with open(chunk_xyz, "w") as f:
             f.writelines(chunk_lines)
 
+############################################################################################################
+def load_required_indices(path):
+    indices = read_object(path)
+    return list(map(int, indices))
+
+def build_energy_map(energy_csv):
+    df = pd.read_csv(energy_csv)
+    df.columns = df.columns.str.strip()
+
+    if "Total index" in df.columns:
+        return dict(zip(df["Total index"], df["Energy [kJ/mol]"]))
+    else:
+        return dict(zip(df.index, df["Energy [kJ/mol]"]))
+
+def iterate_xyz_frames(traj_path):
+    with open(traj_path, "r") as f:
+        lines = f.readlines()
+
+    i = 0
+    while i < len(lines):
+        natoms = int(lines[i].strip())
+        comment = lines[i + 1].strip()
+        block = lines[i:i + natoms + 2]
+
+        yield natoms, comment, block
+
+        i += natoms + 2
+
+def extract_frame_number(comment):
+    match = re.search(r"frame(\d+)", comment)
+    return int(match.group(1)) if match else None
+
+def write_structure(block, frame_number, energy, out_path):
+    block = block.copy()
+    block[1] = f"frame{frame_number}, E = {energy} kJ/mol\n"
+
+    with open(out_path, "w") as f:
+        f.writelines(block)
+
+def extract_structures_with_orca(
+    traj_path,
+    indices,
+    energy_map,
+    output_dir,
+    setup
+):
+    import os
+    from workflow.helpers.orca_reader import QuantumMolecule, OrcaWriter
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # --- collect frames ---
+    frame_dict = {}
+    for _, comment, block in iterate_xyz_frames(traj_path):
+        frame_number = extract_frame_number(comment)
+        if frame_number in indices:
+            frame_dict[frame_number] = block
+
+    # --- write in correct order ---
+    for i, frame_number in enumerate(indices, start=1):
+        block = frame_dict.get(frame_number)
+
+        if block is None:
+            print(f"Warning: frame {frame_number} not found")
+            continue
+
+        energy = energy_map.get(frame_number, "NaN")
+
+        # 🔹 create subdirectory (1/, 2/, ...)
+        subdir = os.path.join(output_dir, str(i))
+        os.makedirs(subdir, exist_ok=True)
+
+        xyz_path = os.path.join(subdir, f"{i}.xyz")
+
+        # --- write xyz ---
+        block = block.copy()
+        block[1] = f"frame{frame_number}, E = {energy} kJ/mol\n"
+
+        with open(xyz_path, "w") as f:
+            f.writelines(block)
+
+        # --- create ORCA input ---
+        molecule = QuantumMolecule(
+            xyz_file=xyz_path,
+            charge=0,
+            multiplicity=1
+        )
+
+        writer = OrcaWriter(molecule, setup)
+        writer.make_input(geo_optimization=True)
+
+        inp_path = os.path.join(subdir, "opt.inp")
+        writer.write_to_file(inp_path)
+
+def copy_xyz_to_curta(source_dir, target_dir):
+    import subprocess
+    subprocess.run(f"cp -r {source_dir} {target_dir}", shell=True, check=True)
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def read_xyz_trajectory(xyz_file):
+    frames = []
+    with open(xyz_file, "r") as f:
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            n_atoms = int(line.strip())
+            f.readline()  # comment line
+
+            coords = []
+            for _ in range(n_atoms):
+                parts = f.readline().split()
+                coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
+
+            frames.append(np.array(coords))
+
+    return frames
+
+
+def compute_com_distance(frame):
+    mol1 = frame[:12]
+    mol2 = frame[12:]
+
+    com1 = mol1.mean(axis=0)
+    com2 = mol2.mean(axis=0)
+
+    return np.linalg.norm(com1 - com2)
+
+
+def plot_energy_vs_distance(xyz_file, energy_csv, output_png):
+    frames = read_xyz_trajectory(xyz_file)
+    energy_df = pd.read_csv(energy_csv, index_col=0)
+
+    energies = energy_df.iloc[:, 0].to_numpy()
+    distances = np.array([compute_com_distance(f) for f in frames])
+
+    if len(distances) != len(energies):
+        raise ValueError("Mismatch between frames and energies")
+
+    # --- find 3 lowest energies ---
+    lowest_indices = np.argsort(energies)[:100]
+
+    # --- split data ---
+    mask = np.ones(len(energies), dtype=bool)
+    mask[lowest_indices] = False
+
+    lowest_100 = np.argsort(energies)[:100]
+
+    distances = distances[lowest_100]
+    energies = energies[lowest_100]
+
+    # --- plotting ---
+    plt.figure()
+
+    # normal points (blue)
+    plt.scatter(distances[mask], energies[mask], label="All other frames")
+
+    # lowest 3 (red)
+    plt.scatter(
+        distances[lowest_indices],
+        energies[lowest_indices],
+        label="100 lowest energies"
+    )
+
+    plt.xlabel("COM distance [nm]")
+    plt.ylabel("Energy [kJ/mol]")
+    plt.title("Energy vs COM Distance")
+
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_png)
+    plt.close()

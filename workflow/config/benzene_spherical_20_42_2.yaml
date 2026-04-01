@@ -1,11 +1,13 @@
+perform_simulation: True
+
 grid:
-  unique_network_name: "cart_20_7_7_4"
+  unique_network_name: "spherical_grid_20_42_2"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 20
-  translation_algorithm: "cartesian"
-  periodic_in: [False, False, False]
-  translation_subgrids_A: [ [-6,6,7], [-6,6,7], [0, 6, 4] ]
+  periodic_in: [False, False]
+  translation_algorithm: "spherical"
+  translation_subgrids_A: [42, [7, 8, 2]]
 
 pseudotrajectory:
   molecule_1: "benzene"
@@ -13,27 +15,24 @@ pseudotrajectory:
   structure_ending: "gro"
   trajectory_ending: "xtc"
 
-analysis:
-  energy_program: GROMACS
-  length_shortened_trajectory_ns: 10
-  energy_types: ["Potential"]
-  upper_E_limit: 0
-  analyse_first_N_frames: None
-  zoom_level: 0
-  view_index: [ 1 , 2]
-
 energy:
   energy_program: GROMACS
 
 plotting:
   upper_E_limit: 0
 
+
+analysis:
+  energy_program: GROMACS
+  energy_types: ["Potential"]
+  zoom_level: 0
+  view_index: [ 1 ]
+  length_shortened_trajectory_ns: 10
+  analyse_first_N_frames: None
+
 msm:
-  num_interesting_timescales: 4
-  num_interesting_eigenvectors: 4
-  num_extremes_to_plot: 1
-  taus: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]
   tolerance: 0
+  taus: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]
 
 sqra:
   # rate matrix reduction

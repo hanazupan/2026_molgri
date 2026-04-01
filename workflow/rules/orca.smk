@@ -1,15 +1,17 @@
-from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, filter_frame_indices, write_energies_with_indices
+from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, filter_frame_indices, write_energies_with_indices, read_times_into_txt
 from workflow.helpers.orca_reader import read_important_stuff_into_csv, read_energies_into_csv, nice_str_of, split_xyz_trajectory, xtc_to_xyz, find_invalid_frames_with_overlapping_atoms, extract_frame_indices_from_xyz
+from workflow.helpers.orca_reader import load_required_indices, build_energy_map, iterate_xyz_frames, extract_frame_number, write_structure,extract_structures_with_orca
+from workflow.helpers.orca_reader import read_xyz_trajectory, compute_com_distance, plot_energy_vs_distance
 from workflow.helpers.remove_overlapping_cooridnates import remove_coordinates
 import numpy as np
 from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_20_7_7_4"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/spherical_grid_20_42_4"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_20_7_7_4"
-GRID_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_20_7_7_4/pseudosimulation"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4"
+GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
 CHUNK_SIZE = 280
 
@@ -22,7 +24,7 @@ setup = QuantumSetup(
     dispersion_correction="D3",
     num_scf=None,
     num_cores=4,        # ← IMPORTANT
-    ram_per_core=400      # ← IMPORTANT
+    ram_per_core=300      # ← IMPORTANT
 )
 
 rule xtc_to_xyz:
@@ -239,6 +241,20 @@ rule write_large_csv:
             chunksize=CHUNK_SIZE
         )
 
+rule write_times:
+    input:
+        lambda wc: expand(
+            f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        txt=f"{LOCAL_TEST_DIR}/times.txt"
+    run:
+        read_times_into_txt(
+            out_files_to_read=input,
+            txt_file_to_write=output.txt
+        )
+
 
 rule write_small_csv:
     input:
@@ -266,3 +282,61 @@ rule copy_energy_csv:
         echo "energy.csv copied to pseudotrajectory"
         cp {input} {output}
         """
+
+rule extract_low_E_structures:
+    input:
+        en=f"{LOCAL_TEST_DIR}/energy.csv",
+        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+        ind=f"{GRID_DIR}/lowest_{{N_xyz}}_binding_energies.txt"
+    output:
+        directory(f"{GRID_DIR}/lowest_{{N_xyz}}_structures/")
+    params:
+        setup=setup
+    wildcard_constraints:
+        N_xyz=r"\d+"
+    run:
+        from workflow.helpers.orca_reader import (
+            load_required_indices,
+            build_energy_map,
+            extract_structures_with_orca,
+        )
+
+        indices = load_required_indices(input.ind)
+        energy_map = build_energy_map(input.en)
+
+        extract_structures_with_orca(
+            traj_path=input.traj,
+            indices=indices,
+            energy_map=energy_map,
+            output_dir=output[0],
+            setup=params.setup,
+        )
+
+rule copy_xyz_to_curta:
+    input:
+        f"{GRID_DIR}/lowest_{{N_xyz}}_structures/"
+    output:
+        touch(f"{LOCAL_TEST_DIR}/copied_low_E_to_curta_{{N_xyz}}.txt")
+    shell:
+        """
+        set -euo pipefail
+
+        echo "=== Creating remote directory ==="
+        ssh curta "mkdir -p {REMOTE_TEST_DIR}"
+
+        echo "=== Copying via SCP ==="
+        scp -r {input} curta:{REMOTE_TEST_DIR}
+
+        echo "=== Done ==="
+
+        touch {output}
+        """
+
+rule plot_energy_vs_distance:
+    input:
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}/energy.csv"
+    output:
+        f"{LOCAL_TEST_DIR}/energy_vs_distance_100_lowest_highlighted.png"
+    run:
+        plot_energy_vs_distance(input.xyz, input.energy, output[0])
