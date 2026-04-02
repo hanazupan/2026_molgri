@@ -1,17 +1,17 @@
 from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, write_energies_with_indices, read_times_into_txt
-from workflow.helpers.orca_reader import read_important_stuff_into_csv, read_energies_into_csv, split_xyz_trajectory, find_invalid_frames_with_overlapping_atoms
+from workflow.helpers.orca_reader import read_important_stuff_into_csv, split_xyz_trajectory, find_invalid_frames_with_overlapping_atoms, xtc_to_xyz
 from workflow.helpers.remove_overlapping_cooridnates import remove_coordinates
 import numpy as np
 from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/spherical_grid_20_42_4"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_100_1_1_100"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_100_1_1_100"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
-CHUNK_SIZE = 280
+CHUNK_SIZE = 500
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 

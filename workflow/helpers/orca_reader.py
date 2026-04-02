@@ -20,7 +20,7 @@ def xtc_to_xyz(xtc_file, gro_file, output_xyz):
 
     with open(output_xyz, "w") as f:
         #for i, ts in enumerate(u.trajectory):
-        for i, ts in enumerate(u.trajectory, start=3360):
+        for i, ts in enumerate(u.trajectory):
             n = len(u.atoms)
 
             f.write(f"{n}\n")
