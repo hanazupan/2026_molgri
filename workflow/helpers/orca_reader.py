@@ -78,11 +78,12 @@ class QuantumSetup:
     Just a simple class to collect variables connected to QM calculation set-up (that are not molecule-specific).
     """
 
-    def __init__(self, functional: str, basis_set: str, solvent: str = None, dispersion_correction: str = "",
+    def __init__(self, functional: str, basis_set: str, solvent: str = None, mini: str = True, dispersion_correction: str = "",
                  num_scf: int = 15, num_cores: int = None, ram_per_core: int = None):
         self.functional = functional
         self.basis_set = basis_set
         self.solvent = solvent
+        self.mini = mini
         self.dispersion_correction = dispersion_correction
         self.num_scf = num_scf
         self.num_cores = num_cores
@@ -297,9 +298,18 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
         try:
             time_h_m_s = my_reader.extract_time_orca_output()
 
-            # Convert to seconds
-            td = pd.to_timedelta(time_h_m_s)
+            if not time_h_m_s:
+                raise ValueError("Empty time string")
+
+            td = pd.to_timedelta(time_h_m_s, errors="coerce")
+
+            if pd.isna(td):
+                raise ValueError(f"Invalid timedelta: {time_h_m_s}")
+
             seconds = td.total_seconds()
+
+            if pd.isna(seconds):
+                raise ValueError("NaN seconds")
 
             all_times_seconds.append(seconds)
 
@@ -379,7 +389,7 @@ def write_energies_with_indices(
     Assumes:
     - number of energies == number of trajectory frames
     """
-
+    import pandas as pd
     # 🔹 1. get frame indices
     frame_indices = extract_frame_indices_from_xyz(trajectory_path)
 
@@ -408,10 +418,87 @@ def write_energies_with_indices(
         energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
         rows.append([
             frame_idx,
-            energy_kjmol   # ✅ keep in Hartree
+            energy_kjmol   # converted to kJ/mol
         ])
 
     # 🔹 5. write CSV
+    df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
+    df.to_csv(csv_file_to_write, index=False)
+
+    import pandas as pd
+
+def read_xyzact_dat(dat_files):
+    """
+    Reads structure.xyzact.dat files.
+
+    Expected format:
+        index   energy (Hartree)
+
+    Returns:
+        list of (frame_index, energy)
+    """
+    data = []
+
+    for file in sorted(dat_files):
+        with open(file, "r") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+
+                parts = line.split()
+                frame_idx = int(float(parts[0]))
+                energy = float(parts[1])
+
+                data.append((frame_idx, energy))
+
+    return data
+
+def write_energies_from_xyzact_dat(
+        dat_file: str,
+        trajectory_path: str,
+        csv_file_to_write: str
+):
+    """
+    Create CSV with:
+    - frame indices from trajectory.xyz
+    - energies from structure.xyzact.dat
+    - invalid frames skipped (based on overlapping atoms)
+    """
+
+    # 🔹 1. get frame indices from trajectory
+    frame_indices = extract_frame_indices_from_xyz(trajectory_path)
+
+    # 🔹 2. detect invalid frames
+    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path)
+    invalid_set = set(invalid)
+
+    # 🔹 3. filter frame indices
+    frame_indices = filter_frame_indices(frame_indices, invalid)
+
+    # 🔹 4. read energies from .dat
+    dat_data = read_xyzact_dat(dat_file)
+
+    # split into lists
+    dat_indices = [x[0] for x in dat_data]
+    dat_energies = [x[1] for x in dat_data]
+
+    # 🔥 sanity check
+    if len(dat_energies) != len(frame_indices):
+        raise ValueError(
+            f"Mismatch: {len(dat_energies)} energies vs {len(frame_indices)} frames"
+        )
+
+    # 🔹 5. build rows
+    rows = []
+    for frame_idx, energy in zip(frame_indices, dat_energies):
+        energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+
+        rows.append([
+            frame_idx,
+            energy_kjmol
+        ])
+
+    # 🔹 6. write CSV
     df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
     df.to_csv(csv_file_to_write, index=False)
 
@@ -486,6 +573,12 @@ class OrcaWriter:
             self.total_text += f'SMDSOLVENT "{self.setup.solvent}"\n'
             self.total_text += "END\n"
 
+    def _write_output_minimisation(self):
+        if self.setup.mini is True:
+            self.total_text += "%output\n"
+            self.total_text += "    PrintLevel Mini\n"
+            self.total_text += "end\n"
+
     def _write_resources(self):
         # limit the number of SCF cycles to make hopeless calculations fail quickly
         if self.setup.num_scf is not None:
@@ -532,6 +625,7 @@ end\n"""
     def make_input(self, geo_optimization: bool = False):
         self._write_first_line(geo_optimization=geo_optimization)
         self._write_solvent()
+        self._write_output_minimisation()
         self._write_resources()
 
         # # skip first 2 lines of xyz (atom count + comment)
@@ -628,7 +722,7 @@ def extract_structures_with_orca(
             frame_dict[frame_number] = block
 
     # --- write in correct order ---
-    for i, frame_number in enumerate(indices, start=1):
+    for i, frame_number in enumerate(indices):
         block = frame_dict.get(frame_number)
 
         if block is None:
@@ -698,7 +792,7 @@ def compute_com_distance(frame):
     return np.linalg.norm(com1 - com2)
 
 
-def plot_energy_vs_distance(xyz_file, energy_csv, output_png):
+def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
     frames = read_xyz_trajectory(xyz_file)
     energy_df = pd.read_csv(energy_csv, index_col=0)
 
@@ -708,17 +802,19 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png):
     if len(distances) != len(energies):
         raise ValueError("Mismatch between frames and energies")
 
-    # --- find 3 lowest energies ---
-    lowest_indices = np.argsort(energies)[:100]
+    lowest_indices = np.argsort(energies)[:n_lowest]
 
-    # --- split data ---
+    # Subset for plotting
+    distances_lowest = distances[lowest_indices]
+    energies_lowest = energies[lowest_indices]
+
+    # Mask for all other frames
     mask = np.ones(len(energies), dtype=bool)
     mask[lowest_indices] = False
 
-    lowest_100 = np.argsort(energies)[:100]
-
-    distances = distances[lowest_100]
-    energies = energies[lowest_100]
+    plt.scatter(distances[mask], energies[mask], label="All other frames")  # all frames except 100 lowest
+    plt.scatter(distances_lowest, energies_lowest, label=f"{n_lowest} lowest energies")
+   # print(len(frames), len(energies))
 
     # --- plotting ---
     plt.figure()
@@ -730,7 +826,7 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png):
     plt.scatter(
         distances[lowest_indices],
         energies[lowest_indices],
-        label="100 lowest energies"
+        label=f"{n_lowest} lowest energies"
     )
 
     plt.xlabel("COM distance [nm]")
@@ -741,3 +837,188 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png):
     plt.tight_layout()
     plt.savefig(output_png)
     plt.close()
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
+    frames = read_xyz_trajectory(xyz_file)
+    energy_df = pd.read_csv(energy_csv, index_col=0)
+
+    energies = energy_df.iloc[:, 0].to_numpy()
+    distances = np.array([compute_com_distance(f) for f in frames])
+
+    if len(distances) != len(energies):
+        raise ValueError("Mismatch between frames and energies")
+
+    # 🔹 get indices of 100 lowest energies
+    n = min(n_lowest, len(energies))
+    lowest_indices = np.argsort(energies)[:n]
+
+    # 🔹 subset
+    distances_lowest = distances[lowest_indices]
+    energies_lowest = energies[lowest_indices]
+
+    # --- plotting ---
+    plt.figure()
+
+    min_idx = lowest_indices[0]
+
+    plt.scatter(
+        distances_lowest,
+        energies_lowest,
+        label="Lowest 100"
+    )
+
+    plt.scatter(
+        distances[min_idx],
+        energies[min_idx],
+        marker="x",
+        s=100,
+        label="Global minimum"
+    )
+
+    plt.xlabel("COM distance [nm]")
+    plt.ylabel("Energy [kJ/mol]")
+    plt.title("100 Lowest Energies vs COM Distance")
+
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_png)
+    plt.close()
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def compute_plane_normal(coords):
+    """Return normal vector of a molecule using PCA (robust plane fit)."""
+    coords_centered = coords - coords.mean(axis=0)
+    _, _, vh = np.linalg.svd(coords_centered)
+    return vh[-1]
+
+
+def angle_between(v1, v2):
+    """Return angle (deg) between two vectors."""
+    v1 = v1 / np.linalg.norm(v1)
+    v2 = v2 / np.linalg.norm(v2)
+    return np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1, 1)))
+
+
+def compute_angles(frame):
+    """Compute angles of molecule 2 relative to xy, xz, yz planes."""
+    mol2 = frame[12:]
+    normal = compute_plane_normal(mol2)
+
+    x = np.array([1, 0, 0])
+    y = np.array([0, 1, 0])
+    z = np.array([0, 0, 1])
+
+    return (
+        angle_between(normal, z),  # xy-plane
+        angle_between(normal, y),  # xz-plane
+        angle_between(normal, x),  # yz-plane
+    )
+
+def make_plot(angles, energies, lowest, mask, title, filename):
+    plt.figure()
+    plt.scatter(angles[mask], energies[mask])
+    plt.scatter(angles[lowest], energies[lowest])
+    plt.xlabel("Angle [deg]")
+    plt.ylabel("Energy")
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest):
+    """Plot energy vs angles and save directly to given output paths."""
+
+    frames = read_xyz_trajectory(xyz_file)
+    energies = pd.read_csv(energy_csv).iloc[:, 0].to_numpy()
+
+    if len(frames) != len(energies):
+        raise ValueError("Mismatch between frames and energies")
+
+    angles_xy, angles_xz, angles_yz = [], [], []
+
+    for frame in frames:
+        a_xy, a_xz, a_yz = compute_angles(frame)
+        angles_xy.append(a_xy)
+        angles_xz.append(a_xz)
+        angles_yz.append(a_yz)
+
+    angles_xy = np.array(angles_xy)
+    angles_xz = np.array(angles_xz)
+    angles_yz = np.array(angles_yz)
+
+    lowest = np.argsort(energies)[:n_lowest]
+    mask = np.ones(len(energies), dtype=bool)
+    mask[lowest] = False
+
+    # make_plot now takes full paths
+    make_plot(angles_xy, energies, lowest, mask, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest, mask, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest, mask, "YZ plane", yz_path)
+
+
+def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest):
+    """
+    Plot the lowest `n_lowest` energies vs angles relative to XY, XZ, YZ planes.
+
+    Parameters
+    ----------
+    xyz_file : str
+        Path to XYZ trajectory file
+    energy_csv : str
+        Path to CSV containing energies
+    xy_path : str
+        Output path for XY plane plot
+    xz_path : str
+        Output path for XZ plane plot
+    yz_path : str
+        Output path for YZ plane plot
+    n_lowest : int
+        Number of lowest energies to highlight
+    """
+
+    def make_plot(angles, energies, lowest_idx, title, filename):
+        mask = np.ones(len(energies), dtype=bool)
+        mask[lowest_idx] = False
+
+        plt.figure()
+        plt.scatter(angles[mask], energies[mask], label="Other points")
+        plt.scatter(angles[lowest_idx], energies[lowest_idx], color='red', label=f"Lowest {len(lowest_idx)}")
+        plt.xlabel("Angle [deg]")
+        plt.ylabel("Energy [kJ/mol]")
+        plt.title(title)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close()
+
+    # --- main computation ---
+    frames = read_xyz_trajectory(xyz_file)
+    energies = pd.read_csv(energy_csv, index_col=0).iloc[:, 0].to_numpy()
+
+    if len(frames) != len(energies):
+        raise ValueError("Mismatch between frames and energies")
+
+    angles_xy, angles_xz, angles_yz = [], [], []
+    for frame in frames:
+        a_xy, a_xz, a_yz = compute_angles(frame)  # uses external compute_angles
+        angles_xy.append(a_xy)
+        angles_xz.append(a_xz)
+        angles_yz.append(a_yz)
+
+    angles_xy = np.array(angles_xy)
+    angles_xz = np.array(angles_xz)
+    angles_yz = np.array(angles_yz)
+
+    lowest_idx = np.argsort(energies)[:n_lowest]
+
+    make_plot(angles_xy, energies, lowest_idx, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest_idx, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest_idx, "YZ plane", yz_path)

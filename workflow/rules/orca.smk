@@ -1,5 +1,6 @@
 from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, write_energies_with_indices, read_times_into_txt
 from workflow.helpers.orca_reader import read_important_stuff_into_csv, split_xyz_trajectory, find_invalid_frames_with_overlapping_atoms, xtc_to_xyz
+from workflow.helpers.orca_reader import plot_energy_vs_angles, plot_energy_vs_distance, plot_lowest_energy_vs_distance, plot_lowest_energy_vs_angles
 from workflow.helpers.remove_overlapping_cooridnates import remove_coordinates
 import numpy as np
 from pathlib import Path
@@ -254,21 +255,38 @@ rule write_times:
         )
 
 
-rule write_small_csv:
+# rule write_small_csv:
+#     input:
+#         traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+#         outs=lambda wc: expand(
+#             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
+#             frame=get_frames(wc)
+#         )
+#     output:
+#         csv=f"{LOCAL_TEST_DIR}/energy.csv"
+#     run:
+#         write_energies_with_indices(
+#             out_files_to_read=input.outs,
+#             trajectory_path=input.traj,
+#             csv_file_to_write=output.csv
+#         )
+
+rule write_small_csv_xyzact:
     input:
-        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
-        outs=lambda wc: expand(
-            f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
+        traj="<output_specific_molecule_network>trajectory.xyz",
+        dat=lambda wc: expand(
+            "<output_specific_molecule_network>{frame}/structure.xyzact.dat",
             frame=get_frames(wc)
         )
     output:
-        csv=f"{LOCAL_TEST_DIR}/energy.csv"
+        csv="<output_specific_molecule_network>energy.csv"
     run:
-        write_energies_with_indices(
-            out_files_to_read=input.outs,
+        write_energies_from_xyzact_dat(
+            dat_file=input.dat,
             trajectory_path=input.traj,
             csv_file_to_write=output.csv
         )
+
 
 rule copy_energy_csv:
     input:
@@ -335,6 +353,51 @@ rule plot_energy_vs_distance:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
-        f"{LOCAL_TEST_DIR}/energy_vs_distance_100_lowest_highlighted.png"
+        f"{LOCAL_TEST_DIR}/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
     run:
-        plot_energy_vs_distance(input.xyz, input.energy, output[0])
+        plot_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
+
+
+rule plot_lowest_energy_vs_distance:
+    input:
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}/energy.csv"
+    output:
+        f"{LOCAL_TEST_DIR}/{{n_low_e}}_lowest_energy_vs_distance.png"
+    run:
+        plot_lowest_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
+
+rule plot_energy_vs_angles:
+    input:
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}/energy.csv"
+    output:
+        xy=f"{LOCAL_TEST_DIR}/energy_vs_angles_xy.png",
+        xz=f"{LOCAL_TEST_DIR}/energy_vs_angles_xz.png",
+        yz=f"{LOCAL_TEST_DIR}/energy_vs_angles_yz.png"
+    run:
+        plot_energy_vs_angles(
+            input.xyz,
+            input.energy,
+            output.xy,
+            output.xz,
+            output.yz
+        )
+
+rule plot_lowest_energy_vs_angles:
+    input:
+        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}/energy.csv"
+    output:
+        xy=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xy.png",
+        xz=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xz.png",
+        yz=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_yz.png"
+    run:
+        plot_lowest_energy_vs_angles(
+            input.xyz,
+            input.energy,
+            output.xy,
+            output.xz,
+            output.yz,
+            n_lowest=int(wildcards.N_low_E),
+        )

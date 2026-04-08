@@ -1,13 +1,13 @@
 perform_simulation: True
 
 grid:
-  unique_network_name: "spherical_grid_20_42_4"
+  unique_network_name: "spherical_grid_20_42_4+2_gro"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 20
   periodic_in: [False, False]
   translation_algorithm: "spherical"
-  translation_subgrids_A: [42, [3, 6, 4]]
+  translation_subgrids_A: [42, [3, 8, 6]]
 
 pseudotrajectory:
   molecule_1: "benzene"

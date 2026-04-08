@@ -65,41 +65,44 @@ include: "rules/orca.smk"
 
 N=[1, 5, 20, 50]
 N_xyz =[10]
+N_low_E=20
+n_low_e=20
 view_index=config["analysis"]["view_index"]
 zoom_level = config["analysis"]["zoom_level"]
 
 
-def all_inputs(wildcards):
-    frames = get_frames(wildcards)
+# def all_inputs(wildcards):
+#     frames = get_frames(wildcards)
+#
+#     return [
+#         f"{GRID_DIR}/trajectory.xyz",
+#         f"{LOCAL_TEST_DIR}/trajectory.xyz",
+#         f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+#         f"{LOCAL_TEST_DIR}/split_done.txt",
+#         f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
+#         ] + \
+#         expand(
+#             f"{LOCAL_TEST_DIR}/{{frame}}/structure.xyz",
+#             frame=frames
+#         ) + \
+#         expand(
+#             f"{LOCAL_TEST_DIR}/{{frame}}/structure.inp",
+#             frame=frames
+#         )
 
-    return [
-        f"{GRID_DIR}/trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/split_done.txt",
-        f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
-        ] + \
-        expand(
-            f"{LOCAL_TEST_DIR}/{{frame}}/structure.xyz",
-            frame=frames
-        ) + \
-        expand(
-            f"{LOCAL_TEST_DIR}/{{frame}}/structure.inp",
-            frame=frames
-        )
 
 rule all:
     input:
-        "<output_specific_molecule_network>config_used.yaml",
-        # grids
-        "<outputs_network>grid_info.yaml",
-        "<outputs_network>grid.npy",
-        # pseudotrajectory
-        "<pseudosimulation>structure.gro",
-        "<pseudosimulation>trajectory.xtc",
-        # #expand("<pseudosimulation>trajectory_slices/frame_{i}.gro", i=[8550891, 9472648, 8584358, 9641038, 11979713]),
-        "<pseudosimulation>energy.csv",
-        all_inputs,
+        # "<output_specific_molecule_network>config_used.yaml",
+        # # grids
+        # "<outputs_network>grid_info.yaml",
+        # "<outputs_network>grid.npy",
+        # # pseudotrajectory
+        # "<pseudosimulation>structure.gro",
+        # "<pseudosimulation>trajectory.xtc",
+        # # #expand("<pseudosimulation>trajectory_slices/frame_{i}.gro", i=[8550891, 9472648, 8584358, 9641038, 11979713]),
+        # "<pseudosimulation>energy.csv",
+        # all_inputs,
         #f"{LOCAL_TEST_DIR}/curta_started.txt",
         # # lambda wc: expand(
         #     f"{BASE}/{{frame}}/structure.out",
@@ -109,7 +112,14 @@ rule all:
 	    # f"{LOCAL_TEST_DIR}/energy.csv",
 	    # f"{GRID_DIR}/energy.csv",
         # f"{LOCAL_TEST_DIR}/times.txt",
-        # f"{LOCAL_TEST_DIR}/energy_vs_distance_100_lowest_highlighted.png",
+        expand(f"{LOCAL_TEST_DIR}/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png",n_low_e=[20]),
+        f"{LOCAL_TEST_DIR}/lowest_energy_vs_distance.png",
+        f"{LOCAL_TEST_DIR}/energy_vs_angles_xy.png",
+        f"{LOCAL_TEST_DIR}/energy_vs_angles_yz.png",
+        f"{LOCAL_TEST_DIR}/energy_vs_angles_xz.png",
+        expand(f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xy.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xz.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_yz.png",N_low_E=[20]),
         # expand(f"{GRID_DIR}/lowest_{{N_xyz}}_structures/", N_xyz=N_xyz),
         # expand(f"{LOCAL_TEST_DIR}/copied_low_E_to_curta_{{N_xyz}}.txt", N_xyz=N_xyz),
         # # expand(f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png",
@@ -122,9 +132,9 @@ rule all:
         # # # find interesting indices
         # # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
         # #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
-        expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
-	        sim_pseudo_wrapped=["pseudosimulation"],
-	        zoom_level=zoom_level, view_index=view_index, N=[1, 5, 20]),
+        # expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
+	    #     sim_pseudo_wrapped=["pseudosimulation"],
+	    #     zoom_level=zoom_level, view_index=view_index, N=[1, 5, 20]),
         # "<outputs_indices>all_positions_first_rotation.txt",
         # "<outputs_indices>all_rotations_first_position.txt",
        # expand(f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
@@ -164,6 +174,5 @@ rule all:
         # # # specific plots for the system
         # #expand("<outputs_other_plots>{which}/ring_vector.png", which=["simulation", "pseudosimulation"]),
         # expand("<outputs_other_plots>{which}/ring_position_lowest_{N}.png", N=[1, 3, 10, 100, 250, 500], which=["simulation", "pseudosimulation"]),
-
 
 
