@@ -7,12 +7,12 @@ from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_100_1_1_100"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_10_3_3_3"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_100_1_1_100"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_10_3_3_3"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
-CHUNK_SIZE = 500
+CHUNK_SIZE = 270
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -255,22 +255,22 @@ rule write_times:
         )
 
 
-# rule write_small_csv:
-#     input:
-#         traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
-#         outs=lambda wc: expand(
-#             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
-#             frame=get_frames(wc)
-#         )
-#     output:
-#         csv=f"{LOCAL_TEST_DIR}/energy.csv"
-#     run:
-#         write_energies_with_indices(
-#             out_files_to_read=input.outs,
-#             trajectory_path=input.traj,
-#             csv_file_to_write=output.csv
-#         )
-
+rule write_small_csv:
+    input:
+        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+        outs=lambda wc: expand(
+            f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        csv=f"{LOCAL_TEST_DIR}/energy.csv"
+    run:
+        write_energies_with_indices(
+            out_files_to_read=input.outs,
+            trajectory_path=input.traj,
+            csv_file_to_write=output.csv
+        )
+"""
 rule write_small_csv_xyzact:
     input:
         traj="<output_specific_molecule_network>trajectory.xyz",
@@ -286,7 +286,7 @@ rule write_small_csv_xyzact:
             trajectory_path=input.traj,
             csv_file_to_write=output.csv
         )
-
+"""
 
 rule copy_energy_csv:
     input:
