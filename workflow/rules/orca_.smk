@@ -7,12 +7,12 @@ from pathlib import Path
 
 # path on curta
 REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_10_3_3_3"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_50_19_19_19"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_10_3_3_3"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_50_19_19_19"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
-CHUNK_SIZE = 270
+CHUNK_SIZE = 13718
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -104,7 +104,18 @@ def get_frames(wildcards):
         p.name for p in base_dir.iterdir()
         if p.is_dir() and p.name.isdigit()
     ])
+"""
+def get_frames(wildcards):
+    checkpoint_output = checkpoints.split_trajectory.get(**wildcards)
 
+    from pathlib import Path
+    base_dir = Path(LOCAL_TEST_DIR)
+
+    return sorted([
+        p.name for p in base_dir.iterdir()
+        if p.is_dir() and p.name.isdigit()
+    ])
+"""
 # import os
 # def get_frames():
 #     return sorted([
@@ -148,17 +159,17 @@ rule copy_to_curta:
         touch {output}
         """
 
-rule run_orca_curta:
-    input:
-        f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
-    output:
-        touch(f"{LOCAL_TEST_DIR}/curta_started.txt")
-    shell:
-        f"""
-        echo "=== Running ORCA on Curta ==="
-        ssh curta "cd {REMOTE_TEST_DIR} && bash ~/run/submit_on_curta.sh"
-        touch {output}
-        """
+# rule run_orca_curta:
+#     input:
+#         f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
+#     output:
+#         touch(f"{LOCAL_TEST_DIR}/curta_started.txt")
+#     shell:
+#         f"""
+#         echo "=== Running ORCA on Curta ==="
+#         ssh curta "cd {REMOTE_TEST_DIR} && bash ~/run/submit_on_curta.sh"
+#         touch {output}
+#         """
 
 rule copy_back_from_curta:
     input:
@@ -254,10 +265,23 @@ rule write_times:
             txt_file_to_write=output.txt
         )
 
+rule collect_energies:
+    input:
+        outs=lambda wc: [
+            f"{LOCAL_TEST_DIR}/lowest_{wc.N_xyz}_structures/{frame}/opt.out"
+            for frame in get_frames(wc)
+        ]
+    output:
+        csv=f"{LOCAL_TEST_DIR}/lowest_{{N_xyz}}_orca_energies.csv"
+    run:
+        write_lowest_opt_energies_from_dirs(
+            out_files_to_read=input.outs,
+            csv_file_to_write=output.csv
+        )
 
 rule write_small_csv:
     input:
-        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+        traj=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         outs=lambda wc: expand(
             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
             frame=get_frames(wc)
@@ -273,7 +297,7 @@ rule write_small_csv:
 """
 rule write_small_csv_xyzact:
     input:
-        traj="<output_specific_molecule_network>trajectory.xyz",
+        tiraj="<output_specific_molecule_network>cleaned_trajectory.xyz",
         dat=lambda wc: expand(
             "<output_specific_molecule_network>{frame}/structure.xyzact.dat",
             frame=get_frames(wc)
@@ -367,8 +391,6 @@ rule plot_lowest_energy_vs_distance:
     run:
         plot_lowest_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
 
-
-
 rule plot_energy_vs_angles:
     input:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
@@ -384,9 +406,8 @@ rule plot_energy_vs_angles:
             output.xy,
             output.xz,
             output.yz,
-            n_lowest=int(wildcards.N_low_E)
-        ) 
-
+	    n_lowest=int(wildcards.N_low_E)
+        )
 
 rule plot_lowest_energy_vs_angles:
     input:
@@ -405,3 +426,16 @@ rule plot_lowest_energy_vs_angles:
             output.yz,
             n_lowest=int(wildcards.N_low_E),
         )
+
+rule trim_structures:
+    input:
+	xyzs=lambda wc: f"{LOCAL_TEST_DIR}/{wc.frame}/structure.xyz",
+	outs=lambda wc: f"{LOCAL_TEST_DIR}/{wc.frame}/structure.out"
+    output:
+        new_xyzs=f"{LOCAL_TEST_DIR}/{{frame}}/structure_new.xyz"
+    run:
+        trim_xyz_from_out(
+            dirs=[wildcards.frame],
+            base_dir=LOCAL_TEST_DIR
+        )
+

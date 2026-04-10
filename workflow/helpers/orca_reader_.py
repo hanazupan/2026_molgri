@@ -382,7 +382,7 @@ def write_energies_with_indices(
 ):
     """
     Create CSV with:
-    - frame indices from trajectory.xyz
+    - frame indices from cleaned_trajectory.xyz
     - energies in Hartree
     - invalid frames skipped (based on overlapping atoms)
 
@@ -426,6 +426,59 @@ def write_energies_with_indices(
     df.to_csv(csv_file_to_write, index=False)
 
     import pandas as pd
+
+def write_lowest_opt_energies_from_dirs(
+    out_files_to_read: list,
+    csv_file_to_write: str
+):
+
+    rows = []
+
+    # 🔹 loop like in your original function
+    for out_file_to_read in sorted(out_files_to_read):
+        my_reader = OrcaReader(out_file_to_read)
+
+        # 🔹 extract directory (e.g. "1" from "1/opt.out")
+        directory = os.path.dirname(out_file_to_read)
+        dir_name = os.path.basename(directory)
+
+        # 🔹 build xyz path dynamically (e.g. "1/1.xyz")
+        xyz_file = os.path.join(directory, f"{dir_name}.xyz")
+
+        # 🔹 1. read xyz comment line
+        with open(xyz_file, "r") as f:
+            lines = f.readlines()
+            comment_line = lines[1].strip()
+
+        frame_match = re.search(r"frame(\d+)", comment_line)
+        energy_xyz_match = re.search(r"E\s*=\s*([-\d\.]+)", comment_line)
+
+        frame_idx = int(frame_match.group(1)) if frame_match else None
+        energy_xyz = float(energy_xyz_match.group(1)) if energy_xyz_match else None
+
+        # 🔹 2. extract energies from ORCA output
+        energies = my_reader.extract_energies_orca_output()
+        if len(energies) == 0:
+            continue
+
+        last_energy = energies[-1]
+
+        # 🔹 3. convert to kJ/mol
+        energy_kjmol = last_energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+
+        # 🔹 4. collect row
+        rows.append([
+            int(dir_name),
+            frame_idx,
+            energy_kjmol
+        ])
+
+    # 🔹 5. sort by lowest energy
+    rows.sort(key=lambda x: x[2])
+
+    # 🔹 6. write CSV
+    df = pd.DataFrame(rows, columns=["Directory", "Frame", "Energy [kJ/mol]"])
+    df.to_csv(csv_file_to_write, index=False)
 
 def read_xyzact_dat(dat_files):
     """
@@ -978,8 +1031,7 @@ def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_low
     make_plot(angles_yz, energies, lowest, mask, "YZ plane", yz_path)
 
 
-
-def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest, cutoff=1e10):
+def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest, cutoff=1e10 ):
     """
     Plot the lowest `n_lowest` energies vs angles relative to XY, XZ, YZ planes.
 
@@ -1005,7 +1057,8 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
 
         plt.figure()
         plt.scatter(angles[mask], energies[mask], label="Other points")
-        plt.scatter(angles[lowest_idx], energies[lowest_idx], color='red', label=f"Lowest {len(lowest_idx)}")
+        plt.scatter(angles[lowest_idx], energies[lowest_idx], color='red',
+                    label=f"Lowest {len(lowest_idx)}")
         plt.xlabel("Angle [deg]")
         plt.ylabel("Energy [kJ/mol]")
         plt.title(title)
@@ -1023,7 +1076,7 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
 
     angles_xy, angles_xz, angles_yz = [], [], []
     for frame in frames:
-        a_xy, a_xz, a_yz = compute_angles(frame)  # uses external compute_angles
+        a_xy, a_xz, a_yz = compute_angles(frame)
         angles_xy.append(a_xy)
         angles_xz.append(a_xz)
         angles_yz.append(a_yz)
@@ -1051,3 +1104,31 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
     make_plot(angles_xz, energies, lowest_idx, "XZ plane", xz_path)
     make_plot(angles_yz, energies, lowest_idx, "YZ plane", yz_path)
 
+
+def trim_xyz_from_out(dirs, base_dir):
+    import os
+
+    for d in dirs:
+        dpath = os.path.join(base_dir, str(d))
+        out_file = os.path.join(dpath, "structure.out")
+        xyz_file = os.path.join(dpath, "structure.xyz")
+        new_xyz = os.path.join(dpath, "structure_new.xyz")
+
+        # --- get cutoff from .out ---
+        with open(out_file) as f:
+            for line in f:
+                if "MULTIPLE XYZ STEP" in line:
+                    step = int(line.strip().split()[-1]) - 1
+                    break
+
+        # --- read xyz ---
+        with open(xyz_file) as f:
+            lines = f.readlines()
+
+        n_atoms = int(lines[0].strip())
+        frame_len = n_atoms + 2
+
+        # --- write trimmed xyz ---
+        start = step * frame_len
+        with open(new_xyz, "w") as f:
+            f.writelines(lines[start:])
