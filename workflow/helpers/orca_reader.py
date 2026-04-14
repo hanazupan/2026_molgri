@@ -792,12 +792,20 @@ def compute_com_distance(frame):
     return np.linalg.norm(com1 - com2)
 
 
-def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
+def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest, cutoff=1e10):
     frames = read_xyz_trajectory(xyz_file)
     energy_df = pd.read_csv(energy_csv, index_col=0)
 
     energies = energy_df.iloc[:, 0].to_numpy()
+    # convert to relative energies
+    energies = energies - np.min(energies)
     distances = np.array([compute_com_distance(f) for f in frames])
+
+    # 🔹 FILTER: remove very large energies
+    valid_mask = energies <= cutoff
+
+    energies = energies[valid_mask]
+    distances = distances[valid_mask]
 
     if len(distances) != len(energies):
         raise ValueError("Mismatch between frames and energies")
@@ -811,22 +819,22 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
     # Mask for all other frames
     mask = np.ones(len(energies), dtype=bool)
     mask[lowest_indices] = False
-
-    plt.scatter(distances[mask], energies[mask], label="All other frames")  # all frames except 100 lowest
-    plt.scatter(distances_lowest, energies_lowest, label=f"{n_lowest} lowest energies")
-   # print(len(frames), len(energies))
+    min_idx = np.argmin(energies)
 
     # --- plotting ---
     plt.figure()
 
     # normal points (blue)
-    plt.scatter(distances[mask], energies[mask], label="All other frames")
+    plt.scatter(distances[mask], energies[mask], label="All")
+    plt.scatter(distances_lowest, energies_lowest, label=f"Lowest {n_lowest}")
 
-    # lowest 3 (red)
     plt.scatter(
-        distances[lowest_indices],
-        energies[lowest_indices],
-        label=f"{n_lowest} lowest energies"
+        distances[min_idx],
+        energies[min_idx],
+        marker="x",
+        color='red',
+        s=100,
+        label="Global minimum"
     )
 
     plt.xlabel("COM distance [nm]")
@@ -842,46 +850,65 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
+def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, N_lowest, n_lowest, cutoff=1e10):
     frames = read_xyz_trajectory(xyz_file)
     energy_df = pd.read_csv(energy_csv, index_col=0)
 
     energies = energy_df.iloc[:, 0].to_numpy()
+    # convert to relative energies
+    energies = energies - np.min(energies)
     distances = np.array([compute_com_distance(f) for f in frames])
+
+    # 🔹 FILTER: remove very large energies
+    valid_mask = energies <= cutoff
+
+    energies = energies[valid_mask]
+    distances = distances[valid_mask]
 
     if len(distances) != len(energies):
         raise ValueError("Mismatch between frames and energies")
 
-    # 🔹 get indices of 100 lowest energies
+    # 🔹 select N lowest points (to plot)
+    N = min(N_lowest, len(energies))
+    lowest_N_idx = np.argsort(energies)[:N]
+
+    # subset everything to N lowest
+    energies = energies[lowest_N_idx]
+    distances = distances[lowest_N_idx]
+
+    # 🔹 select n lowest within those
     n = min(n_lowest, len(energies))
-    lowest_indices = np.argsort(energies)[:n]
+    highlight_idx = np.argsort(energies)[:n]
+    min_idx = np.argmin(energies)
 
     # 🔹 subset
-    distances_lowest = distances[lowest_indices]
-    energies_lowest = energies[lowest_indices]
+    distances_lowest = distances[highlight_idx]
+    energies_lowest = energies[highlight_idx]
 
     # --- plotting ---
     plt.figure()
-
-    min_idx = lowest_indices[0]
+    if N != n:
+        plt.scatter(distances, energies, label=f"Lowest {len(lowest_N_idx)}")
 
     plt.scatter(
         distances_lowest,
         energies_lowest,
-        label="Lowest 100"
+        label=f"Lowest {n}"
     )
 
     plt.scatter(
         distances[min_idx],
         energies[min_idx],
         marker="x",
+        color='red',
         s=100,
         label="Global minimum"
     )
 
     plt.xlabel("COM distance [nm]")
+    #plt.gca().ticklabel_format(useOffset=False, axis='y')
     plt.ylabel("Energy [kJ/mol]")
-    plt.title("100 Lowest Energies vs COM Distance")
+    plt.title(f"{N} Lowest Energies vs COM Distance")
 
     plt.legend()
     plt.tight_layout()
@@ -922,14 +949,16 @@ def compute_angles(frame):
         angle_between(normal, x),  # yz-plane
     )
 
-def make_plot(angles, energies, lowest, mask, title, filename):
+def make_plot(angles, energies, lowest, min_idx, title, filename):
     plt.figure()
-    plt.scatter(angles[mask], energies[mask])
-    plt.scatter(angles[lowest], energies[lowest])
+    plt.scatter(angles, energies, label="All")
+    plt.scatter(angles[lowest], energies[lowest], label=f"Lowest {len(lowest)}")
+    plt.scatter(angles[min_idx], energies[min_idx], marker="x", color='red', s=100, label="Global minimum")
     plt.xlabel("Angle [deg]")
-    plt.ylabel("Energy")
+    plt.ylabel("Energy [kJ/mol]")
     plt.title(title)
     plt.tight_layout()
+    plt.legend()
     plt.savefig(filename)
     plt.close()
 
@@ -937,7 +966,10 @@ def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_low
     """Plot energy vs angles and save directly to given output paths."""
 
     frames = read_xyz_trajectory(xyz_file)
-    energies = pd.read_csv(energy_csv).iloc[:, 0].to_numpy()
+    energies = pd.read_csv(energy_csv, index_col=0).iloc[:, 0].to_numpy()
+    # convert to relative energies
+    energies = energies - np.min(energies)
+
 
     if len(frames) != len(energies):
         raise ValueError("Mismatch between frames and energies")
@@ -968,18 +1000,19 @@ def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_low
     # 🔹 recompute lowest after filtering
     n = min(n_lowest, len(energies))
 
-    lowest = np.argsort(energies)[:n_lowest]
+    lowest = np.argsort(energies)[:n]
     mask = np.ones(len(energies), dtype=bool)
     mask[lowest] = False
+    min_idx = np.argmin(energies)
 
     # make_plot now takes full paths
-    make_plot(angles_xy, energies, lowest, mask, "XY plane", xy_path)
-    make_plot(angles_xz, energies, lowest, mask, "XZ plane", xz_path)
-    make_plot(angles_yz, energies, lowest, mask, "YZ plane", yz_path)
+    make_plot(angles_xy, energies, lowest, min_idx, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest, min_idx, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest, min_idx, "YZ plane", yz_path)
 
 
 
-def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest, cutoff=1e10):
+def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, N_lowest, n_lowest, cutoff=1e10):
     """
     Plot the lowest `n_lowest` energies vs angles relative to XY, XZ, YZ planes.
 
@@ -999,13 +1032,16 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
         Number of lowest energies to highlight
     """
 
-    def make_plot(angles, energies, lowest_idx, title, filename):
+    def make_plot(angles, energies, lowest_N_idx, lowest_idx, min_idx, title, filename):
         mask = np.ones(len(energies), dtype=bool)
         mask[lowest_idx] = False
 
         plt.figure()
-        plt.scatter(angles[mask], energies[mask], label="Other points")
-        plt.scatter(angles[lowest_idx], energies[lowest_idx], color='red', label=f"Lowest {len(lowest_idx)}")
+        if {len(lowest_N_idx)} != {len(lowest_idx)}:
+            plt.scatter(angles[mask], energies[mask], label=f"Lowest {len(lowest_N_idx)}")
+
+        plt.scatter(angles[lowest_idx], energies[lowest_idx], label=f"Lowest {len(lowest_idx)}")
+        plt.scatter(angles[min_idx], energies[min_idx], marker="x", color='red', s=100, label="Global minimum")
         plt.xlabel("Angle [deg]")
         plt.ylabel("Energy [kJ/mol]")
         plt.title(title)
@@ -1017,6 +1053,9 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
     # --- main computation ---
     frames = read_xyz_trajectory(xyz_file)
     energies = pd.read_csv(energy_csv, index_col=0).iloc[:, 0].to_numpy()
+    # convert to relative energies
+    energies = energies - np.min(energies)
+
 
     if len(frames) != len(energies):
         raise ValueError("Mismatch between frames and energies")
@@ -1043,11 +1082,23 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
     if len(energies) == 0:
         raise ValueError("No valid energies left after filtering")
 
-    # 🔹 recompute lowest after filtering
-    n = min(n_lowest, len(energies))
-    lowest_idx = np.argsort(energies)[:n]
+    # 🔹 select N lowest points (to plot)
+    N = min(N_lowest, len(energies))
+    lowest_N_idx = np.argsort(energies)[:N]
 
-    make_plot(angles_xy, energies, lowest_idx, "XY plane", xy_path)
-    make_plot(angles_xz, energies, lowest_idx, "XZ plane", xz_path)
-    make_plot(angles_yz, energies, lowest_idx, "YZ plane", yz_path)
+    # subset everything to N lowest
+    energies = energies[lowest_N_idx]
+    angles_xy = angles_xy[lowest_N_idx]
+    angles_xz = angles_xz[lowest_N_idx]
+    angles_yz = angles_yz[lowest_N_idx]
+
+    # 🔹 select n lowest within those
+    n = min(n_lowest, len(energies))
+    highlight_idx = np.argsort(energies)[:n]
+    min_idx = np.argmin(energies)
+
+    # plot
+    make_plot(angles_xy, energies, lowest_N_idx, highlight_idx, min_idx, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest_N_idx, highlight_idx, min_idx, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest_N_idx, highlight_idx, min_idx, "YZ plane", yz_path)
 

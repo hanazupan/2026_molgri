@@ -6,13 +6,13 @@ import numpy as np
 from pathlib import Path
 
 # path on curta
-REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_10_3_3_3"
+REMOTE_BASE_DIR = "/home/nadjar02/MA/bnz_hfb"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_100_1_1_100_gro"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_10_3_3_3"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_f6benzene/cart_100_1_1_100_gro"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
-CHUNK_SIZE = 270
+CHUNK_SIZE = 100
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -22,7 +22,7 @@ setup = QuantumSetup(
     solvent=None,
     dispersion_correction="D3",
     num_scf=None,
-    num_cores=4,        # ← IMPORTANT
+    num_cores=8,        # ← IMPORTANT
     ram_per_core=300      # ← IMPORTANT
 )
 
@@ -148,29 +148,29 @@ rule copy_to_curta:
         touch {output}
         """
 
-rule run_orca_curta:
-    input:
-        f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
-    output:
-        touch(f"{LOCAL_TEST_DIR}/curta_started.txt")
-    shell:
-        f"""
-        echo "=== Running ORCA on Curta ==="
-        ssh curta "cd {REMOTE_TEST_DIR} && bash ~/run/submit_on_curta.sh"
-        touch {output}
-        """
+# rule run_orca_curta:
+#     input:
+#         f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
+#     output:
+#         touch(f"{LOCAL_TEST_DIR}/curta_started.txt")
+#     shell:
+#         f"""
+#         echo "=== Running ORCA on Curta ==="
+#         ssh curta "cd {REMOTE_TEST_DIR} && bash ~/run/submit_on_curta.sh"
+#         touch {output}
+#         """
 
-rule copy_back_from_curta:
-    input:
-        f"{LOCAL_TEST_DIR}/curta_started.txt"
-    output:
-        touch(f"{LOCAL_TEST_DIR}/copied_back.txt")
-    shell:
-        f"""
-        echo "=== Copying results back ==="
-        rsync -av curta:{REMOTE_TEST_DIR}/ {LOCAL_TEST_DIR}/
-        touch {output}
-        """
+# rule copy_back_from_curta:
+#     input:
+#         f"{LOCAL_TEST_DIR}/curta_started.txt"
+#     output:
+#         touch(f"{LOCAL_TEST_DIR}/copied_back.txt")
+#     shell:
+#         f"""
+#         echo "=== Copying results back ==="
+#         rsync -av curta:{REMOTE_TEST_DIR}/ {LOCAL_TEST_DIR}/
+#         touch {output}
+#         """
 
 # rule run_orca_locally:
 #     input:
@@ -353,7 +353,7 @@ rule plot_energy_vs_distance:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
-        f"{LOCAL_TEST_DIR}/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
+        f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
     run:
         plot_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
 
@@ -363,9 +363,9 @@ rule plot_lowest_energy_vs_distance:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
-        f"{LOCAL_TEST_DIR}/{{n_low_e}}_lowest_energy_vs_distance.png"
+        f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png"
     run:
-        plot_lowest_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
+        plot_lowest_energy_vs_distance(input.xyz, input.energy, output[0], N_lowest=int(wildcards.N_low_E), n_lowest=int(wildcards.n_low_e))
 
 
 
@@ -374,9 +374,9 @@ rule plot_energy_vs_angles:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
-        xy=f"{LOCAL_TEST_DIR}/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",
-        xz=f"{LOCAL_TEST_DIR}/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",
-        yz=f"{LOCAL_TEST_DIR}/energy_vs_angles_{{N_low_E}}_highlighted_yz.png"
+        xy=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",
+        xz=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",
+        yz=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_yz.png"
     run:
         plot_energy_vs_angles(
             input.xyz,
@@ -393,9 +393,9 @@ rule plot_lowest_energy_vs_angles:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
-        xy=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xy.png",
-        xz=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_xz.png",
-        yz=f"{LOCAL_TEST_DIR}/lowest_{{N_low_E}}_energy_vs_angles_yz.png"
+        xy=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",
+        xz=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xz.png",
+        yz=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_yz.png"
     run:
         plot_lowest_energy_vs_angles(
             input.xyz,
@@ -403,5 +403,6 @@ rule plot_lowest_energy_vs_angles:
             output.xy,
             output.xz,
             output.yz,
-            n_lowest=int(wildcards.N_low_E),
+            N_lowest=int(wildcards.N_low_E),
+            n_lowest=int(wildcards.n_low_e),
         )

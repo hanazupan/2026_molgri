@@ -9,7 +9,7 @@ grid:
 
 pseudotrajectory:
   molecule_1: "benzene"
-  molecule_2: "benzene"
+  molecule_2: "f6benzene"
   structure_ending: "gro"
   trajectory_ending: "xtc"
 

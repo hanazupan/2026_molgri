@@ -8,8 +8,8 @@ grid:
   translation_subgrids_A: [ [0,0,1], [0,0,1], [2, 12, 100] ]
 
 pseudotrajectory:
-  molecule_1: "benzene"
-  molecule_2: "benzene"
+  molecule_1: "f6benzene"
+  molecule_2: "f6benzene"
   structure_ending: "gro"
   trajectory_ending: "xtc"
 
@@ -20,7 +20,7 @@ analysis:
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1 , 2]
+  view_index: [ 1,2 ]
 
 energy:
   energy_program: GROMACS
