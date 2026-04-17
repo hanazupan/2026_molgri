@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: cart_10_3_3_3
+  unique_network_name: cart_10_3_3_3_gro
   rotation_algorithm: hypercube
   rotation_random_seed: 1
   N_rotations: 10
@@ -14,11 +14,11 @@ pseudotrajectory:
 analysis:
   energy_program: GROMACS
   length_shortened_trajectory_ns: 10
-  energy_types: [LJ (SR), Coulomb (SR)]
+  energy_types: ["LJ (SR)", "Coulomb (SR)"]
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [1, 2]
+  view_index: [1, 2, 4, 5]
 msm:
   num_interesting_timescales: 4
   num_interesting_eigenvectors: 4
@@ -29,9 +29,10 @@ eigenvectors:
   num_interesting_eigenvectors: 4
   num_extremes_to_plot: auto
 sqra:
-  capping_factor: None
-  cutting_factor: auto
-  tolerance_rate_matrix_row_sum: 1e-12
+  # rate matrix reduction
+  capping_factor: 1e20
+  cutting_factor: "auto"
+  tolerance_rate_matrix_row_sum: 1e-1
+  # eigendecomposition
   tolerance_eigendecomposition: 0
   sigma: 0
-

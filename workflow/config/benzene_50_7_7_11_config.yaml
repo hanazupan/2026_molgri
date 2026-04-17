@@ -20,7 +20,7 @@ analysis:
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1 , 2]
+  view_index: [ 1 , 2 , 4, 5, 6, 7]
 
 energy:
   energy_program: GROMACS

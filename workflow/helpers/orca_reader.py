@@ -289,14 +289,16 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
     combined_df.to_csv(csv_file_to_write, index=False)
 
 
-def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
+def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str, setup: QuantumSetup):
     all_times_seconds = []
+    #my_setup = QuantumSetup(set_up=QuantumSetup)
 
     for out_file_to_read in out_files_to_read:
         my_reader = OrcaReader(out_file_to_read)
 
         try:
             time_h_m_s = my_reader.extract_time_orca_output()
+            energies = my_reader.extract_energies_orca_output()
 
             if not time_h_m_s:
                 raise ValueError("Empty time string")
@@ -321,20 +323,29 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
 
     with open(txt_file_to_write, "w") as f:
         if all_times_seconds:
-            # Write individual times
-            f.write("Individual times (h:m:s):\n")
-            for t in all_times_seconds:
-                f.write(f"{format_hms(t)}\n")
-
             # Stats
             longest = max(all_times_seconds)
             shortest = min(all_times_seconds)
             average = sum(all_times_seconds) / len(all_times_seconds)
+            time_per_structure = average / len(energies)
 
-            f.write("\nSummary:\n")
+            f.write("Summary:\n")
             f.write(f"Longest:  {format_hms(longest)}\n")
             f.write(f"Shortest: {format_hms(shortest)}\n")
-            f.write(f"Average:  {format_hms(average)}\n")
+            f.write(f"Average:  {format_hms(average)}\n\n")
+
+            f.write(f"Number of structures:  {len(energies)}\n")
+            f.write(f"Average time per structure [s]:  {time_per_structure}\n")
+            f.write(f"Average time per structure [h:m:s]:  {format_hms(time_per_structure)}\n\n")
+
+            f.write(f"Number of cores: {setup.num_cores}\n")
+            f.write(f"Ram per core: {setup.ram_per_core}\n\n")
+
+            # Write individual times
+            f.write("Individual times [h:m:s]:\n")
+            for t in all_times_seconds:
+                f.write(f"{format_hms(t)}\n")
+
         else:
             f.write("No valid times found.\n")
 

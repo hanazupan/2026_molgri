@@ -16,11 +16,11 @@ pseudotrajectory:
 analysis:
   energy_program: GROMACS
   length_shortened_trajectory_ns: 10
-  energy_types: ["Potential"]
+  energy_types: ["LJ (SR)", "Coulomb (SR)"]
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1 , 2]
+  view_index: [ 1 , 2 , 4 , 5, 6]
 
 energy:
   energy_program: GROMACS
@@ -39,7 +39,7 @@ sqra:
   # rate matrix reduction
   capping_factor: None
   cutting_factor: "auto"
-  tolerance_rate_matrix_row_sum: 1e-12
+  tolerance_rate_matrix_row_sum: 1e-10
   # eigendecomposition
   tolerance_eigendecomposition: 0
   sigma: 0

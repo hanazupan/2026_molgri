@@ -6,10 +6,10 @@ import numpy as np
 from pathlib import Path
 
 # path on curta
-REMOTE_BASE_DIR = "/home/nadjar02/MA/bnz_hfb"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_100_1_1_100_gro"
+REMOTE_BASE_DIR = "/home/nadjar02/MA/f6benzene"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_50_7_7_11"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_f6benzene/cart_100_1_1_100_gro"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_f6benzene/cart_100_1_1_100"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
 CHUNK_SIZE = 100
@@ -251,7 +251,8 @@ rule write_times:
     run:
         read_times_into_txt(
             out_files_to_read=input,
-            txt_file_to_write=output.txt
+            txt_file_to_write=output.txt,
+            setup=setup
         )
 
 
@@ -350,7 +351,8 @@ rule copy_xyz_to_curta:
 
 rule plot_energy_vs_distance:
     input:
-        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        xyz = f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
         f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
@@ -360,7 +362,8 @@ rule plot_energy_vs_distance:
 
 rule plot_lowest_energy_vs_distance:
     input:
-        xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        xyz = f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
         f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png"
@@ -372,6 +375,7 @@ rule plot_lowest_energy_vs_distance:
 rule plot_energy_vs_angles:
     input:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
         xy=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",
@@ -391,6 +395,7 @@ rule plot_energy_vs_angles:
 rule plot_lowest_energy_vs_angles:
     input:
         xyz=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}/trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}/energy.csv"
     output:
         xy=f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",
