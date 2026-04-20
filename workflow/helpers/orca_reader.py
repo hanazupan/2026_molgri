@@ -227,8 +227,18 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
     all_df = []
     all_frame_indices = [int(Path(out_file).parts[-2]) for out_file in out_files_to_read]
 
-    for out_file_to_read in out_files_to_read:
-        my_reader = OrcaReader(out_file_to_read)
+    import re
+
+    def get_frame_number(path: str) -> int:
+        # adapt regex to your folder structure
+        # e.g. ".../10/structure.out" -> 10
+        return int(re.search(r"/(\d+)/", path).group(1))
+
+    for out_file in sorted(out_files_to_read, key=get_frame_number):
+        my_reader = OrcaReader(out_file)
+
+    # for out_file_to_read in out_files_to_read:
+    #     my_reader = OrcaReader(out_file_to_read)
 
         frame_index = my_reader.get_frame_num()
         time_h_m_s = my_reader.extract_time_orca_output()
@@ -236,7 +246,7 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
         optimization_complete = my_reader.assert_optimization_complete(throw_error=False)
 
         base_path = "/home/nadjar02/MA/2026_molgri/nobackup"
-        short_path = out_file_to_read.replace(base_path, "")
+        short_path = out_file.replace(base_path, "")
 
         energies = my_reader.extract_energies_orca_output()
 
@@ -293,8 +303,19 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str, setup: 
     all_times_seconds = []
     #my_setup = QuantumSetup(set_up=QuantumSetup)
 
-    for out_file_to_read in out_files_to_read:
-        my_reader = OrcaReader(out_file_to_read)
+    def get_frame_number(path: str) -> int:
+        # adapt regex to your folder structure
+        # e.g. ".../10/structure.out" -> 10
+        return int(re.search(r"/(\d+)/", path).group(1))
+
+    all_energies = []
+    for out_file in sorted(out_files_to_read, key=get_frame_number):
+        my_reader = OrcaReader(out_file)
+        # energies = reader.extract_energies_orca_output()
+        # all_energies.extend(energies)
+
+    # for out_file_to_read in out_files_to_read:
+    #     my_reader = OrcaReader(out_file_to_read)
 
         try:
             time_h_m_s = my_reader.extract_time_orca_output()
@@ -401,6 +422,7 @@ def write_energies_with_indices(
     - number of energies == number of trajectory frames
     """
     import pandas as pd
+    import re
     # 🔹 1. get frame indices
     frame_indices = extract_frame_indices_from_xyz(trajectory_path)
 
@@ -410,12 +432,23 @@ def write_energies_with_indices(
     frame_indices = filter_frame_indices(frame_indices, invalid)
     # print(frame_indices)
 
-    # 🔹 3. collect all energies (flatten)
+    def get_frame_number(path: str) -> int:
+        # adapt regex to your folder structure
+        # e.g. ".../10/structure.out" -> 10
+        return int(re.search(r"/(\d+)/", path).group(1))
+
     all_energies = []
-    for out_file in sorted(out_files_to_read):
+    for out_file in sorted(out_files_to_read, key=get_frame_number):
         reader = OrcaReader(out_file)
         energies = reader.extract_energies_orca_output()
         all_energies.extend(energies)
+
+    # 🔹 3. collect all energies (flatten)
+    # all_energies = []
+    # for out_file in sorted(out_files_to_read):
+    #     reader = OrcaReader(out_file)
+    #     energies = reader.extract_energies_orca_output()
+    #     all_energies.extend(energies)
 
     # 🔥 sanity check BEFORE filtering
     if len(all_energies) != len(frame_indices):

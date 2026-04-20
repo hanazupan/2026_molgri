@@ -1,11 +1,11 @@
 grid:
-  unique_network_name: "cart_50_7_7_11"
+  unique_network_name: "cart_10_1_2_3"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
-  N_rotations: 50
+  N_rotations: 10
   translation_algorithm: "cartesian"
   periodic_in: [False, False, False]
-  translation_subgrids_A: [ [-9,9,7], [-9,9,7], [-9, 9, 11] ]
+  translation_subgrids_A: [ [5.0, 5.0 ,1], [ 0.0, 5.0, 2], [0, 5.0, 3] ]
 
 pseudotrajectory:
   molecule_1: "benzene"
@@ -23,7 +23,17 @@ analysis:
   view_index: [ 1 , 2 , 4, 5, 6, 7, 8]
 
 energy:
-  energy_program: GROMACS
+  energy_program: ORCA
+
+orca:
+  CHUNK_SIZE : 30
+  functional: "PBE0"
+  basis_set: "def2-TZVP"
+  solvent: None
+  dispersion_correction: "D3"
+  num_scf: None
+  num_cores: 4       # ← IMPORTANT
+  ram_per_core: 300
 
 plotting:
   upper_E_limit: 0

@@ -6,13 +6,13 @@ import numpy as np
 from pathlib import Path
 
 # path on curta
-REMOTE_BASE_DIR = "/home/nadjar02/MA/f6benzene"
-REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_50_7_7_11"
+REMOTE_BASE_DIR = "/home/nadjar02/MA/benzene"
+REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}/cart_10_1_2_3"
 #path on qcm
-LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_f6benzene/cart_100_1_1_100"
+LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_10_1_2_3"
 GRID_DIR = f"{LOCAL_TEST_DIR}/pseudosimulation"
 
-CHUNK_SIZE = 100
+CHUNK_SIZE = 30
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 
@@ -22,7 +22,7 @@ setup = QuantumSetup(
     solvent=None,
     dispersion_correction="D3",
     num_scf=None,
-    num_cores=8,        # ← IMPORTANT
+    num_cores=4,        # ← IMPORTANT
     ram_per_core=300      # ← IMPORTANT
 )
 
@@ -258,7 +258,7 @@ rule write_times:
 
 rule write_small_csv:
     input:
-        traj=f"{LOCAL_TEST_DIR}/trajectory.xyz",
+        traj=f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
         outs=lambda wc: expand(
             f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
             frame=get_frames(wc)
