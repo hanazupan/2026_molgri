@@ -108,8 +108,9 @@ checkpoint split_trajectory:
 #         if p.is_dir() and p.name.isdigit()
 #     ])
 
-
 import os
+import re
+
 # def get_frames(wildcards):
 #     return sorted([
 #         d for d in os.listdir(LOCAL_TEST_DIR)
@@ -122,8 +123,32 @@ import os
 #         if d.isdigit()
 #     ])
 
+def get_total_structures(config):
+    grid = config["grid"]
+    n_rot = grid["N_rotations"]
+    sub = grid["translation_subgrids_A"]
+
+    factors = []
+
+    for x in sub:
+        if isinstance(x, list):
+            # take last element (e.g. [2, 12, 100] -> 100)
+            factors.append(x[-1])
+        else:
+            # scalar (e.g. 42)
+            factors.append(x)
+
+    total = n_rot
+    for f in factors:
+        total *= f
+
+    return total
+
 def get_frames(wildcards):
-    return list(range(1, 21))
+    #total = list(range(1, get_total_structures(config)))
+    total = get_total_structures(config)
+    n_files = total/CHUNK_SIZE
+    return list(range(1, int(n_files) + 1))
 
 rule write_orca_input:
     input:
