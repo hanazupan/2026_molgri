@@ -1,4 +1,4 @@
-configfile: "workflow/config/benzene_10_1_2_3_config.yaml"
+configfile: "workflow/config/benzene_100_1_1_100_config.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>",
@@ -27,6 +27,10 @@ pathvars:
     #outputs
     output_specific_molecule = f"<output_directory><molecules>",
     output_specific_molecule_network = f"<output_specific_molecule><network>",
+
+    #curta
+    remote_base_directory = "/home/nadjar02/MA",
+    remote_test_dir = f"<remote_base_directory><molecules><network>",
 
     # network
     outputs_network = "<output_specific_molecule_network>network/",
@@ -71,28 +75,29 @@ view_index=config["analysis"]["view_index"]
 zoom_level = config["analysis"]["zoom_level"]
 
 
-def all_inputs(wildcards):
+def orca_inputs(wildcards):
     frames = get_frames(wildcards)
+    # frames = list(range(1, 43))
+    print(frames)
 
     return [
-        f"{GRID_DIR}/trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
-        f"{LOCAL_TEST_DIR}/split_done.txt",
-        f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
+        f"{GRID_DIR}trajectory.xyz",
+        f"{LOCAL_TEST_DIR}trajectory.xyz",
+        f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        f"{LOCAL_TEST_DIR}split_done.txt",
+        # f"{LOCAL_TEST_DIR}copied_to_curta.txt"
         ] + \
         expand(
-            f"{LOCAL_TEST_DIR}/{{frame}}/structure.xyz",
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.xyz",
             frame=frames
         ) + \
         expand(
-            f"{LOCAL_TEST_DIR}/{{frame}}/structure.inp",
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.inp",
             frame=frames
         )
 
-
-rule all:
-    input:
+def make_grid():
+    return [
         "<output_specific_molecule_network>config_used.yaml",
         # # grids
         "<outputs_network>grid_info.yaml",
@@ -102,24 +107,55 @@ rule all:
         "<pseudosimulation>trajectory.xtc",
         # # #expand("<pseudosimulation>trajectory_slices/frame_{i}.gro", i=[8550891, 9472648, 8584358, 9641038, 11979713]),
         "<pseudosimulation>energy.csv",
-        # all_inputs,
-        #f"{LOCAL_TEST_DIR}/curta_started.txt",
-	    # lambda wc: expand(
-        #     f"{LOCAL_TEST_DIR}/{{frame}}/structure.out",
-        #     frame=get_frames(wc)
-        # ),
-        # f"{LOCAL_TEST_DIR}/output.csv",
-	    # f"{LOCAL_TEST_DIR}/energy.csv",
-	    # f"{GRID_DIR}/energy.csv",
-        # f"{LOCAL_TEST_DIR}/times.txt",
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png",n_low_e=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png",N_low_E=[100], n_low_e=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",N_low_E=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_yz.png",N_low_E=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",N_low_E=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",N_low_E=[100], n_low_e=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xz.png",N_low_E=[100], n_low_e=[20]),
-        # expand(f"{LOCAL_TEST_DIR}/molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_yz.png",N_low_E=[100], n_low_e=[20]),
+    ]
+
+def orca_energies(wildcards):
+    frames = get_frames(wildcards)
+    return [
+        f"{LOCAL_TEST_DIR}output.csv",
+        f"{LOCAL_TEST_DIR}energy.csv",
+        f"{GRID_DIR}energy.csv",
+        f"{LOCAL_TEST_DIR}times.txt",
+    ]
+
+def distance_angles_plots():
+    return [
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png",n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_yz.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xz.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_yz.png",N_low_E=[100],n_low_e=[20]),
+    ]
+
+def lowest_energy_plots():
+    return [
+        expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
+            sim_pseudo_wrapped=["pseudosimulation"],
+            zoom_level=zoom_level,view_index=view_index,N=[1, 5, 20]),
+    ]
+
+def eigenvector_plots():
+    return [
+        f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
+        # rules.plot_sqra_eigenvectors_as_lines.output,
+        # rules.plot_sqra_eigenvalues.output,
+        # rules.get_eigenvectors_sum_1.input,
+        rules.get_eigenvectors_sum_0.input,
+        rules.get_eigenvectors_sum_other.input,
+        rules.plot_sqra_eigenvectors_as_lines.output,
+    ]
+
+rule all:
+    input:
+        # make_grid(),
+        #orca_inputs,
+        orca_energies,
+        distance_angles_plots(),
+        lowest_energy_plots(),
+        eigenvector_plots(),
         # # expand(f"{GRID_DIR}/lowest_{{N_xyz}}_structures/", N_xyz=N_xyz),
         # expand(f"{LOCAL_TEST_DIR}/copied_low_E_to_curta_{{N_xyz}}.txt", N_xyz=N_xyz),
         # # expand(f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png",
@@ -132,9 +168,7 @@ rule all:
         # # # find interesting indices
         # # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
         # #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
-        # expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
-	    #     sim_pseudo_wrapped=["pseudosimulation"],
-	    #     zoom_level=zoom_level, view_index=view_index, N=[1, 5, 20]),
+
         # "<outputs_indices>all_positions_first_rotation.txt",
         # "<outputs_indices>all_rotations_first_position.txt",
        # expand(f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
@@ -157,13 +191,7 @@ rule all:
         #zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], tau=[1, 10, 100]),
         # # sqra
         #"<outputs_transitions>sqra/reduced_sqra.npz",
-        # f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
-        # # rules.plot_sqra_eigenvectors_as_lines.output,
-        # # rules.plot_sqra_eigenvalues.output,
-        # # rules.get_eigenvectors_sum_1.input,
-        # rules.get_eigenvectors_sum_0.input,
-        # rules.get_eigenvectors_sum_other.input,
-        # rules.plot_sqra_eigenvectors_as_lines.output
+
         #expand(f"<outputs_molecular_plots>eigenvectors/sqra/stacked_{{color}}_{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
         #zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], i=[1,2,3], color=["red", "blue"]),
         # f"<outputs_other_plots>array_sqra.png",

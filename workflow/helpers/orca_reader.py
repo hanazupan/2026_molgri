@@ -337,7 +337,7 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str, setup: 
             all_times_seconds.append(seconds)
 
         except Exception as e:
-            print(f"Skipping invalid file: {out_file_to_read} ({e})")
+            print(f"Skipping invalid file: {out_file} ({e})")
 
     def format_hms(seconds):
         return str(timedelta(seconds=int(seconds)))
@@ -483,7 +483,12 @@ def read_xyzact_dat(dat_files):
     """
     data = []
 
-    for file in sorted(dat_files):
+    def get_frame_number(path: str) -> int:
+        # adapt regex to your folder structure
+        # e.g. ".../10/structure.out" -> 10
+        return int(re.search(r"/(\d+)/", path).group(1))
+
+    for file in sorted(dat_files, key=get_frame_number):
         with open(file, "r") as f:
             for line in f:
                 if not line.strip():
