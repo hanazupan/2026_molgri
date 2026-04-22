@@ -16,17 +16,26 @@ pseudotrajectory:
   trajectory_ending: "xtc"
 
 energy:
-  energy_program: GROMACS
+  energy_program: ORCA
+
+orca:
+  CHUNK_SIZE : 210
+  functional: "PBE0"
+  basis_set: "def2-TZVP"
+  solvent: None
+  dispersion_correction: "D3"
+  num_scf: None
+  num_cores: 8
+  ram_per_core: 300
 
 plotting:
   upper_E_limit: 0
-
 
 analysis:
   energy_program: GROMACS
   energy_types: ["LJ (SR)", "Coulomb (SR)"]
   zoom_level: 0
-  view_index: [ 1 ,2 ,4, 5, 6, 7]
+  view_index: [ 1 ,2 ,4, 5, 6, 7, 8]
   length_shortened_trajectory_ns: 10
   analyse_first_N_frames: None
 

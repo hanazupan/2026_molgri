@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: cart_10_3_3_3_gro
+  unique_network_name: cart_10_3_3_3
   rotation_algorithm: hypercube
   rotation_random_seed: 1
   N_rotations: 10
@@ -19,6 +19,17 @@ analysis:
   analyse_first_N_frames: None
   zoom_level: 0
   view_index: [1, 2, 4, 5]
+energy:
+  energy_program: ORCA
+orca:
+  CHUNK_SIZE: 270
+  functional: "PBE0"
+  basis_set: "def2-TZVP"
+  solvent: None
+  dispersion_correction: "D3"
+  num_scf: None
+  num_cores: 4
+  ram_per_core: 300
 msm:
   num_interesting_timescales: 4
   num_interesting_eigenvectors: 4

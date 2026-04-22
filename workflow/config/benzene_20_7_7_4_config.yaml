@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: "cart_20_7_7_4"
+  unique_network_name: "cart_20_7_7_4_gro"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 20
@@ -20,10 +20,20 @@ analysis:
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1 , 2 , 4 , 5, 6,7]
+  view_index: [ 1 , 2 , 4 , 5, 6,7, 8]
 
 energy:
-  energy_program: GROMACS
+  energy_program: ORCA
+
+orca:
+  CHUNK_SIZE : 280
+  functional: "PBE0"
+  basis_set: "def2-TZVP"
+  solvent: None
+  dispersion_correction: "D3"
+  num_scf: None
+  num_cores: 4
+  ram_per_core: 400
 
 plotting:
   upper_E_limit: 0
