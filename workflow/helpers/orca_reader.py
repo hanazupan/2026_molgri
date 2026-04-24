@@ -31,7 +31,7 @@ def xtc_to_xyz(xtc_file, gro_file, output_xyz):
                 element = atom.name[0]
                 f.write(f"{element:2s} {x:12.6f} {y:12.6f} {z:12.6f}\n")
 
-
+'''
 def find_invalid_frames_with_overlapping_atoms(
     trajectory_path: str,
     rounding_decimals: int = 6
@@ -70,7 +70,115 @@ def find_invalid_frames_with_overlapping_atoms(
     print(f"Invalid frames (overlapping atoms): {len(invalid_indices)}")
 
     return np.array(valid_indices), np.array(invalid_indices)
+'''
 
+def has_duplicates(coords, tol: float):
+    """
+    Checks for duplicate coordinates within tolerance.
+    Returns number of overlapping coordinates.
+    """
+    duplicates = 0
+    n = len(coords)
+
+    for i in range(n):
+        for j in range(i+1, n):
+            if np.allclose(coords[i], coords[j], atol=tol):
+                duplicates += 1
+
+    return duplicates
+
+def remove_coordinates(input_file: str, output_file: str, tol=1e-6):
+    structures = []
+    removed_structures = []
+
+    with open(input_file) as f:
+        lines = f.readlines()
+
+    i = 0
+    structure_index = 1
+    cleaned_lines = []
+
+    while i < len(lines):
+
+        n_atoms = int(lines[i].strip())
+        comment = lines[i+1]
+
+        atom_lines = lines[i+2:i+2+n_atoms]
+
+        coords = []
+        parsed_atoms = []
+
+        for line in atom_lines:
+            parts = line.split()
+            element = parts[0]
+            x, y, z = map(float, parts[1:4])
+
+            coords.append([x, y, z])
+            parsed_atoms.append(line)
+
+        coords = np.array(coords)
+
+        dup_count = has_duplicates(coords, tol)
+
+        if dup_count > 0:
+            print(f"Structure {structure_index} deleted: {dup_count} overlapping coordinates")
+            removed_structures.append(structure_index)
+        else:
+            cleaned_lines.append(f"{n_atoms}\n")
+            cleaned_lines.append(comment)
+            cleaned_lines.extend(parsed_atoms)
+
+        structure_index += 1
+        i += n_atoms + 2
+
+
+    with open(output_file, "w") as f:
+        f.writelines(cleaned_lines)
+
+    print("\nDone.")
+    print(f"Deleted structures: {len(removed_structures)}")
+
+
+def find_invalid_frames_with_overlapping_atoms(
+    trajectory_path: str,
+    tol: float
+):
+    """
+    Detect frames where at least two atoms overlap within a tolerance.
+
+    Args:
+        trajectory_path (str): Path to trajectory.xyz
+        tol (float): distance tolerance for detecting overlaps
+
+    Returns:
+        valid_indices (np.ndarray): frames WITHOUT overlaps
+        invalid_indices (np.ndarray): frames WITH overlapping atoms
+    """
+
+    import numpy as np
+    from ase.io import read
+
+    traj = read(trajectory_path, index=":")
+
+    valid_indices = []
+    invalid_indices = []
+
+    for i, atoms in enumerate(traj):
+        coords = atoms.get_positions()
+
+        # use same logic as in remove_coordinates
+        dup_count = has_duplicates(coords, tol)
+
+        if dup_count > 0:
+            invalid_indices.append(i)
+        else:
+            valid_indices.append(i)
+
+    print(f"Total frames: {len(traj)}")
+    print(f"Valid frames: {len(valid_indices)}")
+    print(f"Invalid frames (overlapping atoms): {len(invalid_indices)}")
+
+    return np.array(valid_indices), np.array(invalid_indices)
 
 class QuantumSetup:
 
@@ -407,10 +515,12 @@ def filter_frame_indices(frame_indices, invalid_indices):
     #print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
     return list(np.array(frame_indices)[mask])
 
+'''
 def write_energies_with_indices(
     out_files_to_read: list,
     trajectory_path: str,
-    csv_file_to_write: str
+    csv_file_to_write: str,
+    tol: float
 ):
     """
     Create CSV with:
@@ -427,7 +537,7 @@ def write_energies_with_indices(
     frame_indices = extract_frame_indices_from_xyz(trajectory_path)
 
     # 🔹 2. get invalid indices (trajectory positions)
-    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path)
+    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path, tol=tol)
     invalid_set = set(invalid)
     frame_indices = filter_frame_indices(frame_indices, invalid)
     # print(frame_indices)
@@ -469,7 +579,67 @@ def write_energies_with_indices(
     df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
     df.to_csv(csv_file_to_write, index=False)
 
+'''
+def write_energies_with_indices(
+    out_files_to_read: list,
+    trajectory_path: str,
+    csv_file_to_write: str,
+    tol: float
+):
     import pandas as pd
+    import re
+
+    # 🔹 1. get all frame indices (NO filtering)
+    frame_indices = extract_frame_indices_from_xyz(trajectory_path)
+
+    # 🔹 2. get invalid frame positions (trajectory indices)
+    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path, tol=tol)
+    invalid_set = set(invalid)
+
+    def get_frame_number(path: str) -> int:
+        return int(re.search(r"/(\d+)/", path).group(1))
+
+    # 🔹 3. collect energies (only valid ones exist)
+    valid_energies = []
+    for out_file in sorted(out_files_to_read, key=get_frame_number):
+        reader = OrcaReader(out_file)
+        energies = reader.extract_energies_orca_output()
+        valid_energies.extend(energies)
+
+    # 🔹 4. determine penalty energy
+    if not valid_energies:
+        raise ValueError("No valid energies found.")
+
+    max_energy = max(valid_energies)
+    penalty_energy = 1.2 * max_energy
+
+    # 🔹 5. rebuild full energy list INCLUDING invalid frames
+    all_energies = []
+    valid_idx = 0
+
+    for i in range(len(frame_indices)):
+        if i in invalid_set:
+            all_energies.append(penalty_energy)
+        else:
+            if valid_idx >= len(valid_energies):
+                raise ValueError("Not enough valid energies to fill frames.")
+            all_energies.append(valid_energies[valid_idx])
+            valid_idx += 1
+
+    if valid_idx != len(valid_energies):
+        raise ValueError("Unused energies remain after assignment.")
+
+    # 🔹 6. build rows
+    rows = []
+    for frame_idx, energy in zip(frame_indices, all_energies):
+        energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+        rows.append([frame_idx, energy_kjmol])
+
+    # 🔹 7. write CSV
+    df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
+    df.to_csv(csv_file_to_write, index=False)
+
+import pandas as pd
 
 def read_xyzact_dat(dat_files):
     """

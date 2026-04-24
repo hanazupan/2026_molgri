@@ -1,7 +1,7 @@
 from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, write_energies_with_indices, read_times_into_txt, write_energies_from_xyzact_dat
 from workflow.helpers.orca_reader import read_important_stuff_into_csv, split_xyz_trajectory, find_invalid_frames_with_overlapping_atoms, xtc_to_xyz
 from workflow.helpers.orca_reader import plot_energy_vs_angles, plot_energy_vs_distance, plot_lowest_energy_vs_distance, plot_lowest_energy_vs_angles
-from workflow.helpers.remove_overlapping_cooridnates import remove_coordinates
+from workflow.helpers.orca_reader import remove_coordinates
 import numpy as np
 from pathlib import Path
 
@@ -18,6 +18,7 @@ GRID_DIR = "<pseudosimulation>"
 
 #FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
 CHUNK_SIZE = config["orca"]["CHUNK_SIZE"]
+tolerance = float(config["orca"]["tolerance_atom_overlap"])
 
 setup = QuantumSetup(
     functional=config["orca"]["functional"],
@@ -26,7 +27,7 @@ setup = QuantumSetup(
     dispersion_correction=config["orca"]["dispersion_correction"],
     num_scf=config["orca"]["num_scf"],
     num_cores=config["orca"]["num_cores"],
-    ram_per_core=config["orca"]["ram_per_core"],
+    ram_per_core=config["orca"]["ram_per_core"]
 )
 
 rule xtc_to_xyz:
@@ -73,7 +74,7 @@ rule clean_trajectory:
     output:
         xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz"
     params:
-        tol=1e-6
+        tol=2e-2
     run:
         remove_coordinates(
             input_file=input.xyz,
@@ -296,7 +297,7 @@ rule write_times:
 
 rule write_small_csv:
     input:
-        traj=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        traj=f"{LOCAL_TEST_DIR}trajectory.xyz",
         outs=lambda wc: expand(
             f"{LOCAL_TEST_DIR}{{frame}}/structure.out",
             frame=get_frames(wc)
@@ -307,7 +308,8 @@ rule write_small_csv:
         write_energies_with_indices(
             out_files_to_read=input.outs,
             trajectory_path=input.traj,
-            csv_file_to_write=output.csv
+            csv_file_to_write=output.csv,
+	    tol=tolerance
         )
 
 # rule write_small_csv_xyzact:

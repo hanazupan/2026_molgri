@@ -20,7 +20,7 @@ analysis:
   upper_E_limit: 0
   analyse_first_N_frames: None
   zoom_level: 0
-  view_index: [ 1,2,3,4,5,6,7,8]
+  view_index: [ 1,2,4,5,6,7,8]
 
 energy:
   energy_program: ORCA
@@ -34,6 +34,7 @@ orca:
   num_scf: None
   num_cores: 4
   ram_per_core: 300
+  tolerance_atom_overlap: 2e-2
 
 plotting:
   upper_E_limit: 0
