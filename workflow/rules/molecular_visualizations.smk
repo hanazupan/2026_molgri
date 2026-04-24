@@ -22,7 +22,7 @@ pathvars:
 def input_base(where, what, wc):
     structure_path = find_the_right_structure(what)
     return {"structure": structure_path,
-            "structure1": "<pseudosimulation>molecule1.gro",
+            "structure1": "<pseudosimulation>molecule1.<ext_str>",
             "grid_info": "<outputs_network>grid_info.yaml",
             "translation_rotation_script": f"<inputs_vmd>script{wc.view_index}.log",
             "grid": "<outputs_network>grid.npy"}
@@ -44,11 +44,11 @@ rule new_vmd_plot_one_frame:
         frame_plot=f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.tga",
         frame_plot_png = f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png"
     params:
-        draw_m1 = True,
-        draw_m2 = True,
-        draw_rectangular_box = True,
-        draw_gridpoints = True,
-        center_on_box = True
+        draw_m1 = config["analysis"]["plot_m1_as"],
+        draw_m2 = config["analysis"]["plot_m2_as"],
+        draw_rectangular_box = False,
+        draw_gridpoints = False,
+        center_on_box = False
     run:
 
         n1 = get_num_atoms(input.structure1)
@@ -118,6 +118,10 @@ def input_lowestE(wc):
     result["all_frame_gros"] = find_the_right_frames(where, what, indices)
     return result
 
+rule lowest20:
+    input:
+        f"<outputs_molecular_plots>lowest_energy/pseudosimulation/20_lowest_zoom0_view2.png"
+
 rule lowestE_overlapping_frames:
     input:
         unpack(input_lowestE)
@@ -125,6 +129,9 @@ rule lowestE_overlapping_frames:
         vmdlog=f"<outputs_vmd>{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}",
         frame_plot=f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.tga",
         frame_plot_png = f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png"
+    params:
+        draw_m1 = config["analysis"]["plot_m1_as"],
+        draw_m2 = config["analysis"]["plot_m2_as"],
     run:
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
@@ -134,12 +141,12 @@ rule lowestE_overlapping_frames:
 
         my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
             num_frames=len(input.all_frame_gros),
-            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(wildcards.zoom_level), translation_rotation_script=input.translation_rotation_script)
 
         names_all_frames = ' '.join(input.all_frame_gros)
-
+        print(f"vmd {input.structure} {names_all_frames} < {output.vmdlog}")
         shell("vmd  -dispdev text {input.structure} {names_all_frames} < {output.vmdlog}")
         shell("convert {output.frame_plot} {output.frame_plot_png}")
 
@@ -163,6 +170,9 @@ rule all_translations_overlapping_frames:
         vmdlog=f"<outputs_vmd>overlapping_all_translations_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}",
         frame_plot=f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.tga",
         frame_plot_png = f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
+    params:
+        draw_m1 = config["analysis"]["plot_m1_as"],
+        draw_m2 = config["analysis"]["plot_m2_as"],
     run:
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
@@ -172,7 +182,7 @@ rule all_translations_overlapping_frames:
 
         my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
             num_frames=len(input.all_frame_gros),
-            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(wildcards.zoom_level), translation_rotation_script=input.translation_rotation_script)
 
@@ -200,6 +210,9 @@ rule all_rotations_overlapping_frames:
         vmdlog=f"<outputs_vmd>overlapping_all_rotations_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}",
         frame_plot=f"<outputs_molecular_plots>all_rotations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.tga",
         frame_plot_png = f"<outputs_molecular_plots>all_rotations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png"
+    params:
+        draw_m1 = config["analysis"]["plot_m1_as"],
+        draw_m2 = config["analysis"]["plot_m2_as"],
     run:
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
@@ -209,7 +222,7 @@ rule all_rotations_overlapping_frames:
 
         my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
             num_frames=len(input.all_frame_gros),
-            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(wildcards.zoom_level), translation_rotation_script=input.translation_rotation_script)
 

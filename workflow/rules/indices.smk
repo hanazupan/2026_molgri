@@ -33,7 +33,9 @@ checkpoint all_positions_first_rotation_indices:
         required_indices = np.array(list(range(0,total_N_points,rotation_points)))
         write_object(required_indices, output.indices)
 
-
+rule lowest10:
+    input:
+        "<pseudosimulation>lowest_10_binding_energies.txt"
 
 checkpoint lowest_E_indices:
     """
@@ -45,7 +47,12 @@ checkpoint lowest_E_indices:
         indices= "{path}lowest_{N}_binding_energies.txt"
     run:
         df_energy = read_object(input.energy_csv)
+        print(np.argmin(df_energy["Energy [kJ/mol]"].to_numpy()), np.min(df_energy["Energy [kJ/mol]"].to_numpy()))
+        print(df_energy.tail())
+        df = df_energy.sort_values(by="Energy [kJ/mol]",ascending=True)
+        print(df.head())
         required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
+        print(required_indices)
         write_object(required_indices, output.indices)
 
 checkpoint find_indices_dominant_eigenvectors:

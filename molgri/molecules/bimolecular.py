@@ -78,6 +78,7 @@ def get_bimolecular_pseudotrajectory(universe_static: Universe, universe_moving:
     m1 = move_to_center(universe_static)
     m2 = move_to_center(universe_moving)
 
+
     structure = get_bimolecular_structure(m1, m2)
     full_coordinates = combine_coordinates(m1.atoms.positions, np.array(moving_coordinates))
 

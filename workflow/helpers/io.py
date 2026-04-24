@@ -8,6 +8,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import yaml
+from MDAnalysis.topology.guessers import guess_masses
 from numpy.typing import NDArray
 from scipy.sparse import save_npz, sparray, load_npz, spmatrix
 import MDAnalysis as md
@@ -27,6 +28,8 @@ def write_object(my_object, filename) -> None:
         function = _write_trajectory
     elif file_extension == ".gro":
         function = _write_structure
+    elif file_extension == ".xyz":
+        function = _write_xyz
     elif file_extension == ".csv":
         function = _write_csv
     elif file_extension == ".txt":
@@ -46,7 +49,7 @@ def read_object(filename, **kwargs):
         function = _read_sparse_array
     elif file_extension == ".pkl":
         function = _read_network
-    elif file_extension == ".gro":
+    elif file_extension == ".gro" or file_extension == ".xyz":
         function = _read_molecular_structure
     elif file_extension == ".xvg":
         function = _read_energy
@@ -128,8 +131,27 @@ def _write_trajectory(universe, filename: str) -> None:
         for ts in universe.trajectory:
             W.write(universe.atoms)
 
+def _write_xyz(universe, filename: str) -> None:
+    with md.coordinates.XYZ.XYZWriter(filename, n_atoms=universe.atoms.n_atoms) as W:
+        for ts in universe.trajectory:
+            W.write(universe.atoms)
+
 def _read_molecular_structure(filename: str, *args, **kwargs) -> md.Universe:
-    return md.Universe(filename)
+    u = md.Universe(filename)
+
+    # guess masses
+    u.add_TopologyAttr('elements')
+    dict_labels = {"1": "H", "2": "C", "3": "O", "4": "O", "5": "O", "6": "Zr", "OW": "O", "HW1": "H", "HW2": "H",
+                   "7": "Ar", "CD1": "C", "CD2": "C", "CE1": "C", "CE2": "C", "CG": "C", "CZ": "C", "HD1": "H",
+                   "HD2": "H", "HE1": "H", "HE2": "H", "HG": "H", "HZ": "H"}
+    initial_labels = u.atoms.names
+    u.atoms.elements = [dict_labels[name] if name in dict_labels.keys() else name for name in u.atoms.names]
+
+    u.add_TopologyAttr('masses')
+    u.atoms.masses = guess_masses(u.atoms.elements)
+
+    u.atoms.elements = initial_labels
+    return u
 
 def _write_yaml(dict_like_file, filename: str) -> None:
     FlowSeqDumper.add_representer(list, represent_flow_sequence)

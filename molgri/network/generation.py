@@ -147,7 +147,13 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
         nodes = []
         for coo_i, coo in enumerate(ith_subgrid):
             hull = (coo - delta_coo / 2, coo + delta_coo / 2)
-            nodes.append(OneDimTranslationNode(labels[i], coo_i, coo, hull))
+            # if not periodic, the largest element is the edge to bulk
+            if not periodic_in[i] and coo_i == np.argmax(ith_subgrid):
+                is_edge_to_bulk = True
+            else:
+                is_edge_to_bulk = False
+            nodes.append(OneDimTranslationNode(labels[i], coo_i, coo, hull, is_edge_to_bulk))
+
         G = nx.Graph()
         G.add_nodes_from(nodes)
         # now add edges to these sub-graphs - this is without periodicity
@@ -157,7 +163,7 @@ def _build_cartesian_network(xyz_subgrids: tuple, periodic_in: list) -> Cartesia
         if periodic_in[i]:
             G.add_edge(nodes[0], nodes[-1], edge_type=labels[i])
         sub_networks.append(G)
-        print(G.number_of_edges())
+
 
     # now combine the sub-networks
     xy_network = nx.cartesian_product(sub_networks[0], sub_networks[1])

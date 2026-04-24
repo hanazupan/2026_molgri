@@ -27,11 +27,12 @@ class OneDimTranslationNode:
     node can represent a x-, y-, z-coordinate or also radius.
     """
 
-    def __init__(self, direction: str, index: int, coordinate: float, hull: tuple) -> None:
+    def __init__(self, direction: str, index: int, coordinate: float, hull: tuple, is_boundary_to_bulk: bool=False) -> None:
         self.index = index
         self.name = direction
         self.coordinate = coordinate
         self.hull = hull
+        self.is_boundary_to_bulk = is_boundary_to_bulk
 
     def __str__(self) -> str:
         return f"{self.name} grid, index: {self.index}, coordinate: {self.coordinate}"
@@ -80,6 +81,9 @@ class SphericalTranslationNode(AbstractNode):
 
     def __repr__(self):
         return self.__str__()
+
+    def is_boundary_to_bulk(self) -> bool:
+        return self.r.is_boundary_to_bulk
 
     def get_two_indices(self) -> list:
         """
@@ -157,6 +161,9 @@ class TranslationNode(AbstractNode):
 
     def __str__(self):
         return f'({self.x.index}, {self.y.index}, {self.z.index})'
+
+    def is_boundary_to_bulk(self) -> bool:
+        return np.any([self.x.is_boundary_to_bulk, self.y.is_boundary_to_bulk, self.z.is_boundary_to_bulk])
 
     def get_three_indices(self) -> list:
         """

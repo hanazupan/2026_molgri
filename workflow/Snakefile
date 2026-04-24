@@ -20,6 +20,7 @@ pathvars:
     # inputs
     inputs = "inputs/",
     inputs_gromacs =f"<inputs>default_gromacs/<molecules>",
+    inputs_orca =f"<inputs>default_orca/<molecules>",
     inputs_vmd =f"<inputs>vmd_scripts/<molecules>",
     inputs_structures = f"<inputs>one_molecule_structures/",
 
@@ -50,7 +51,10 @@ pathvars:
 include: "rules/general.smk"
 include: "rules/grids.smk"
 include: "rules/pseudosimulation.smk"
-include: "rules/gromacs.smk"
+if config["analysis"]["energy_program"] == "GROMACS":
+    include: "rules/gromacs.smk"
+elif config["analysis"]["energy_program"] == "ORCA":
+    include: "rules/orca.smk"
 include: "rules/indices.smk"
 include: "rules/assign.smk"
 include: "rules/plots.smk"
@@ -65,69 +69,77 @@ N=[1, 5, 10, 50]
 view_index=config["analysis"]["view_index"]
 zoom_level = config["analysis"]["zoom_level"]
 
+DESIRED_RESULTS = ["<output_specific_molecule_network>config_used.yaml"]
+
+if "make_grid" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<outputs_network>grid_info.yaml", "<outputs_network>grid.npy"])
+
+if "make_pseudotrajectory" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<pseudosimulation>structure.<ext_str>", "<pseudosimulation>trajectory.<ext_trj>"])
+
+if "get_energy_pseudosimulation" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<pseudosimulation>energy.csv"])
+
+if "get_energy_simulation" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<simulation>energy.csv"])
+
+if "plot_some_frames" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [expand(f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png",
+            sim_pseudo_wrapped=["pseudosimulation"], frame_index=[5, 300, 2000, 2236, 1554, 2176, 6900, 7000, 7999], zoom_level=zoom_level, view_index=view_index)]
+    )
+
+if "plot_lowest_energies" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
+            sim_pseudo_wrapped=["pseudosimulation"], zoom_level=zoom_level, view_index=view_index, N=[1, 2, 4, 5, 10, 20, 30, 50])]
+    )
+
+if "assign_trajectory"  in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<outputs_assignment>wrapped_trajectory.<ext_trj>", "<outputs_assignment>full_assignment.npy",
+         expand(f"<outputs_molecular_plots>compare_to_assignment/overlapping_frame_{{i}}zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
+             zoom_level=[8],view_index=[1],COM_or_full=["COM", "full"], i=[5390, 44854, 83546, 27, 3567])]
+    )
+
+if "sqra"  in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [rules.get_eigenvectors_sum_0.input, rules.get_eigenvectors_sum_other.input, rules.save_sqra_its.output,
+         rules.plot_sqra_eigenvectors_as_lines.output, rules.plot_sqra_eigenvalues.output]
+    )
+
+if "prepare_all_on_curta" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [ "<pseudosimulation>all_orca_inp_exist.touch", "<pseudosimulation>trajectory_completely_split.touch",
+          rules.copy_runfiles_to_curta.output]
+    )
+
+if "msm" in  config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
+         "<outputs_other_plots>its.png", rules.get_all_eigenvectors.input, rules.plot_all_eigenvectors_as_lines.input,
+        expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
+            zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], tau=[1, 10, 100]),]
+    )
+
+if "all_translations_all_rotations" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        ["<outputs_indices>all_positions_first_rotation.txt", "<outputs_indices>all_rotations_first_position.txt",
+         expand(f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
+             zoom_level=zoom_level, view_index=view_index, COM_or_full = ["full"]),
+         expand(f"<outputs_molecular_plots>all_rotations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
+             zoom_level=[8], view_index=[1], COM_or_full =["COM", "full"]),]
+    )
+
+if "make_pseudotrajectory_lammps" in config["analysis"]["parts_to_perform"]:
+    DESIRED_RESULTS.extend(
+        [rules.convert_to_lammps.output,]
+    )
+
 rule all:
     input:
-        "<output_specific_molecule_network>config_used.yaml",
-        # grids
-        "<outputs_network>grid_info.yaml",
-        "<outputs_network>grid.npy",
-        # pseudotrajectory
-        "<pseudosimulation>structure.gro",
-        "<pseudosimulation>trajectory.xtc",
-        #expand("<pseudosimulation>trajectory_slices/frame_{i}.gro", i=[8550891, 9472648, 8584358, 9641038, 11979713]),
-        "<pseudosimulation>energy.csv",
-        # expand(f"<outputs_frame_plots>{{sim_pseudo_wrapped}}/frame_{{frame_index}}_zoom{{zoom_level}}_view{{view_index}}.png",
-        # sim_pseudo_wrapped=["pseudosimulation"], frame_index=list(range(200)),
-        # zoom_level=[0], view_index=[1]),
-        # post-processing real simulation
-        # "<simulation>trajectory.<ext_trj>",
-        # # energy along trajectory and pseudotrajectory
-        # "<simulation>energy.csv",
-        # # find interesting indices
-        # expand("<outputs_indices>{traj_or_pseudo}_lowest_{N}_binding_energies.txt",
-        #     traj_or_pseudo=["simulation", "pseudosimulation"], N=[1, 5, 10, 50]),
-        expand(f"<outputs_molecular_plots>lowest_energy/{{sim_pseudo_wrapped}}/{{N}}_lowest_zoom{{zoom_level}}_view{{view_index}}.png",
-            sim_pseudo_wrapped=["pseudosimulation"],
-            zoom_level=zoom_level, view_index=view_index, N=[1, 5, 20]),
-        # "<outputs_indices>all_positions_first_rotation.txt",
-        # "<outputs_indices>all_rotations_first_position.txt",
-        # expand(f"<outputs_molecular_plots>all_translations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-        # zoom_level=[8], view_index=[1], COM_or_full = ["COM", "full"]),
-        # expand(f"<outputs_molecular_plots>all_rotations/zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-        #        zoom_level=[8], view_index=[1], COM_or_full =["COM", "full"]),
-        # # wrap and assign the trajectory
-        # "<outputs_assignment>wrapped_trajectory.<ext_trj>",
-        # "<outputs_assignment>full_assignment.npy",
-        # expand(f"<outputs_molecular_plots>compare_to_assignment/overlapping_frame_{{i}}zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-        #     zoom_level=[8],view_index=[1],COM_or_full=["COM", "full"], i=[5390, 44854, 83546, 27, 3567]),
-        # #"<outputs_other_plots>hist_full_assignment.png",
-        # # msm
-        # expand(f"<outputs_transitions>{{tau}}/msm.npz", tau=[1, 5, 10, 20]),
-        # "<outputs_other_plots>its.png",
-        # rules.get_all_eigenvectors.input,
-        # rules.plot_all_eigenvectors_as_lines.input,
-        # expand(
-        # f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-        # zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], tau=[1, 10, 100]),
-        # # sqra
-        # "<outputs_transitions>sqra/reduced_sqra.npz",
-        # "<outputs_transitions>sqra/eigenvectors.npy",
-        rules.plot_sqra_eigenvectors_as_lines.output,
-        rules.plot_sqra_eigenvalues.output,
-        rules.get_eigenvectors_sum_1.input,
-        rules.get_eigenvectors_sum_0.input,
-        rules.get_eigenvectors_sum_other.input
-        # expand(f"<outputs_molecular_plots>eigenvectors/sqra/stacked_{{color}}_{{i}}th_eigenvector_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-        # zoom_level=zoom_level, view_index=view_index, COM_or_full=["full"], i=[1,2,3], color=["red", "blue"]),
-        #f"<outputs_other_plots>array_sqra.png",
-
-        # "<outputs_other_plots>grouped_by_zcoo_eigenvectors_for_tau_sqra.png",
-        # "<outputs_other_plots>grouped_by_trans_eigenvectors_for_tau_sqra.png",
-        # "<outputs_other_plots>grouped_by_rotation_eigenvectors_for_tau_sqra.png"
-        # #
-        # # # specific plots for the system
-        # #expand("<outputs_other_plots>{which}/ring_vector.png", which=["simulation", "pseudosimulation"]),
-        # expand("<outputs_other_plots>{which}/ring_position_lowest_{N}.png", N=[1, 3, 10, 100, 250, 500], which=["simulation", "pseudosimulation"]),
-
-
-
+        DESIRED_RESULTS

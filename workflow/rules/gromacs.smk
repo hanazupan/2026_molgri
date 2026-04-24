@@ -14,7 +14,7 @@ rule add_timesteps_to_pt:
     """
     input:
         trajectory=f"<pseudosimulation>trajectory.<ext_trj>",
-        structure_tpr=f"<pseudosimulation>structure.gro",
+        structure_tpr=f"<pseudosimulation>structure.<ext_str>",
         index=f"<pseudosimulation>index.ndx",
         runfile=f"<pseudosimulation>production.mdp"
     output:
@@ -50,6 +50,7 @@ def input_function_trajectory_slice(wc):
             "structure_tpr": f"{path_other_files}structure.<ext_str>",
             "index": f"{path_other_files}index.ndx",
             "runfile": f"{path_other_files}production.mdp"}
+
 
 rule trajectory_slice:
     """

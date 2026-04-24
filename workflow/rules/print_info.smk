@@ -20,10 +20,14 @@ rule print_lowest_energies:
         energy_csv =f"<pseudosimulation>energy.csv"
     run:
         df = read_object(input.energy_csv)
+        print(df.loc[71582], df.iloc[71582])
         df = df.sort_values(by="Energy [kJ/mol]",ascending=True)
-        print(df.head(20))
-        df = df.sort_values(by="Energy [kJ/mol]",ascending=False)
-        print(df.head(20))
+        #print(df.head(20))
+        print(df.loc[71582], df.iloc[71582])
+        df = df.sort_index()
+        print(df.loc[71582],df.iloc[71582])
+        #df = df.sort_values(by="Energy [kJ/mol]",ascending=False)
+        #print(df.head(20))
 
 rule print_position_assignment:
     input:
@@ -72,15 +76,11 @@ rule print_grid_interpretation:
     Use this rule if you want to quickly look at the indices and understand them.
     """
     input:
-        indices_csv =f"<outputs_network>grid.npy"
+        indices_csv =f"nobackup/benzene_benzene/162_sph_272rot/network/grid.npy"
     run:
         import numpy as np
-        grid_array = read_object(input.indices_csv)
-        for index in [159, 168, 150, 125, 71]:
-            print(np.linalg.norm(grid_array[index]))
-        print("High E")
-        for index in [161, 170, 152, 224, 98, 233]:
-            print(np.linalg.norm(grid_array[index]))
+        my_grid = read_object(input.indices_csv)
+        print(len(my_grid))
 
 rule print_position_subgrids:
     input:
@@ -96,14 +96,14 @@ import numpy as np
 
 rule print_rate_matrix:
     input:
-        rate_matrix = "<outputs_transitions>sqra/reduced_sqra.npz" #reduced_sqra
+        rate_matrix = "<outputs_transitions>sqra/sqra.npz",
+        reduced_rate_matrix = "<outputs_transitions>sqra/reduced_sqra.npz" #reduced_sqra
     run:
         matrix = read_object(input.rate_matrix).todense()
-        for i in [0, 22, 968]:
-            row = matrix[i]
-            print(f"sum row ", np.sum(row))
-            column = matrix.T[i]
-            print(f"sum column ",np.sum(column))
+        print("Shape full matrix ", matrix.shape)
+        matrix = read_object(input.reduced_rate_matrix).todense()
+        print("Shape reduced matrix ", matrix.shape)
+
 
 rule display_matrices:
     input:

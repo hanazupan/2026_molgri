@@ -55,6 +55,7 @@ rule create_translation_network:
         translation_network = build_translation_network(subgrids,periodic_in)
         write_object(translation_network, output.network_file)
 
+
 rule create_full_network:
     input:
         rotation_network_file = "<outputs_network>rotation_network/network.pkl",
@@ -62,12 +63,13 @@ rule create_full_network:
     benchmark:
         f"<outputs_network>network_creation.txt"
     output:
-        network_file = f"<outputs_network>network.pkl"
+        network_file = f"<outputs_network>network.pkl",
     run:
         rotation_network = read_object(input.rotation_network_file)
         translation_network = read_object(input.translation_network_file)
         full_network = create_full_network(translation_network, rotation_network)
         write_object(full_network, output.network_file)
+
 
 rule save_network_properties:
     input:
@@ -80,9 +82,12 @@ rule save_network_properties:
         numerical_edge_type = "<outputs_network>edge_types.npz",
         distances = "<outputs_network>distances.npz",
         surfaces = "<outputs_network>surfaces.npz",
-        volumes = "<outputs_network>volumes.npy"
+        volumes = "<outputs_network>volumes.npy",
+        boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
     run:
         full_network = read_object(input.network_file)
+        boundaries_to_bulk = np.array([n.is_boundary_to_bulk() for n in full_network.sorted_nodes])
+        write_object(boundaries_to_bulk, output.boundaries_to_bulk)
         write_object(full_network.grid, output.grid)
         write_object(full_network.volumes, output.volumes)
 

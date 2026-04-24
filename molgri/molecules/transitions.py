@@ -173,35 +173,15 @@ class SQRA:
     distances, surfaces, volumes - but only one energy evaluation per cell
     """
 
-    def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array):
+    def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array, bulk_neighbours: NDArray):
         self.energies = energies
         self.volumes = volumes
         self.distances = distances
         self.surfaces = surfaces
-        # self.rate_matrix = None
-        # self.reduced_rate_matrix = None
-        # self.energy_differences = None
-        # self.indices_to_keep = list(range(self.surfaces.shape[0]))
+        self.bulk_neighbours = bulk_neighbours
 
-    # def cut_high_energy_states(self, cutting_factor: float):
-    #     self.indices_to_keep = list(range(self.surfaces.shape[0]))
-    #     # now perform removal of rows and columns
-    #     if cutting_factor != "None":
-    #         as_coo = self.rate_matrix.tocoo()
-    #         indices_data_to_remove = np.where(self.energy_differences > float(cutting_factor))[0]
-    #         indices_rows_to_remove = as_coo.row[indices_data_to_remove]
-    #         print(indices_rows_to_remove, len(indices_rows_to_remove), 9597 in indices_rows_to_remove, 5546 in indices_rows_to_remove,
-    #               1578 in indices_rows_to_remove, 5197 in indices_rows_to_remove, 7820 not in indices_rows_to_remove,
-    #               9820 not in indices_rows_to_remove, 6940 not in indices_rows_to_remove)
-    #         self.reduced_rate_matrix = remove_rows_cols(self.rate_matrix.tocsr(), indices_rows_to_remove)
-    #         self.indices_to_keep = list(set(self.indices_to_keep) - set(indices_rows_to_remove))
-    #         self.indices_to_keep.sort()
-    #         self.reduced_rate_matrix = normalize_rate_matrix(self.reduced_rate_matrix)
-    #     else:
-    #         self.reduced_rate_matrix = normalize_rate_matrix(self.rate_matrix)
-    #     return self.reduced_rate_matrix, self.indices_to_keep
 
-    def get_rate_matrix(self, D: float, T: float, capping_factor: float) -> csr_array:
+    def get_rate_matrix(self, D: float, T: float, capping_factor: float, flow_to_bulk: float) -> csr_array:
         """
         This is the method that gets from cell properties (energies, volumes) and adjacency properties (distances,
         surfaces) to the full rate matrix.
@@ -227,20 +207,23 @@ class SQRA:
         # multiply with sqrt(pi_j/pi_i) = e**((V_i-V_j)*1000/(2*k_B*N_A*T))
         # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
         energy_differences = self.energies[rate_matrix.row] - self.energies[rate_matrix.col]
-        print(np.max(energy_differences), np.min(energy_differences))
-        print(np.max(self.energies)-np.min(self.energies))
+        energy_differences[np.isnan(energy_differences)] = np.inf
+        import pandas as pd
+        print(pd.DataFrame(energy_differences).describe())
 
         if capping_factor!="None":
             energy_differences = np.where(energy_differences < float(capping_factor), energy_differences, float(capping_factor))
 
         pi_exponent = energy_differences * 1000 / (2 * kB * N_A * T)
         rate_matrix.data *= np.exp(pi_exponent)
+        print(pd.DataFrame(rate_matrix.data).describe())
 
         # normalize
         rate_matrix.setdiag(0)
         sums = rate_matrix.sum(axis=1)
         sum_diag = diags_array(-sums, format="csr")
         all_together = rate_matrix + sum_diag
+        print(pd.DataFrame(all_together.data).describe())
         return all_together
 
 
@@ -288,7 +271,7 @@ class DecompositionTool:
             shape (total_len, 12)
         """
         print(f"Matrix size is {self.matrix_to_decompose.shape}")
-        eigenvalues, eigenvectors = self.get_decomposition(tol=tolerance, maxiter=1000000, which="SR", sigma=sigma,
+        eigenvalues, eigenvectors = self.get_decomposition(tol=tolerance, maxiter=10000, which="SR", sigma=sigma,
                                                            **kwargs)
         # now divide into three categories: sum +-1, sum 0, sum other
         indices_sum_to_0 = []

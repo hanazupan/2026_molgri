@@ -19,23 +19,28 @@ rule make_sqra:
         energies = "<pseudosimulation>energy.csv",
         volumes = "<outputs_network>volumes.npy",
         distances= "<outputs_network>distances.npz",
-        surfaces= "<outputs_network>surfaces.npz"
+        surfaces= "<outputs_network>surfaces.npz",
+        boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
     output:
         rate_matrix = f"<outputs_transitions>sqra/sqra.npz",
     params:
         T_in_K = 293,
-        diffusion_coefficient = 1,
+        diffusion_coefficient = config["sqra"]["diffusion_coefficient"],
         capping_factor = config["sqra"]["capping_factor"],
+        flow_to_bulk = config["sqra"]["rate_diffusion_to_bulk"]
     run:
         my_energy = read_object(input.energies)
         my_energy_array = my_energy["Energy [kJ/mol]"].to_numpy()
+        print("When making sqra len of energy array is ", len(my_energy_array))
         volumes = read_object(input.volumes)
         distances = read_object(input.distances)
         surfaces = read_object(input.surfaces)
+        bulk_neighbours = read_object(input.boundaries_to_bulk)
 
-        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces)
+        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces, bulk_neighbours = bulk_neighbours )
         rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K,
-            capping_factor=params.capping_factor)
+            capping_factor=params.capping_factor, flow_to_bulk=float(params.flow_to_bulk))
+        print("Written initial sqra has shape ", rate_matrix.shape)
         write_object(rate_matrix, output.rate_matrix)
 
 rule reduce_sqra_size:
@@ -70,7 +75,7 @@ rule reduce_sqra_size:
             print("CUTTING FACTOR is set to be ", params.cutting_factor)
             reduced_sqra, indices_to_keep = delete_rows_columns(sqra,"sqra", float(params.cutting_factor))
 
-
+        print("Written matrix has shape ", reduced_sqra.shape)
         write_object(reduced_sqra, output.reduced_sqra)
         write_object(np.array(indices_to_keep),output.indices_to_keep)
 
@@ -99,6 +104,7 @@ rule run_decomposition_sqra:
         total_length = int(grid_info["N_total"])
         kept_indices = read_object(input.indices_to_keep)
         my_matrix = read_object(input.reduced_sqra)
+        print("Read out matrx has shape ", my_matrix.shape)
         dt = DecompositionTool(my_matrix, kept_indices, total_length)
         sum_to_0, sum_to_1, sum_to_other = dt.decompose_sqra(sigma=float(params.sigma_sqra), tolerance=float(params.tolerance))
         write_object(sum_to_0[0], output.eigenvalues_sum_0)
@@ -224,11 +230,47 @@ rule plot_sqra_eigenvalues:
         )
         fig.update_layout(
             width=1500,
-            height=300
+            height=300,
+            font = dict(size=18)
         )
         fig.update_xaxes(showticklabels=False,ticks="")
         fig.update_yaxes(showticklabels=False,ticks="")
 
+        fig.write_image(output.plot, scale=3)
+
+rule save_sqra_its:
+    input:
+        eigenvalues_sum_0 = f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
+    output:
+        its = f"<outputs_transitions>sqra/its.txt"
+    run:
+        eigenvals = read_object(input.eigenvalues_sum_0)
+        its = np.array([-1 / (eigenval) for eigenval in eigenvals])
+        for i, it in enumerate(its):
+            print(f"{i}-th ITS: {it} ns")
+        write_object(its, output.its)
+
+rule plot_sqra_its:
+    input:
+        eigenvalues_sum_0 = f"<outputs_transitions>sqra/eigenvalues_sum_0.npy",
+    output:
+        plot = f"<outputs_other_plots>its_sqra.png"
+    run:
+        eigenvals = read_object(input.eigenvalues_sum_0)
+        its = [-1 / (eigenval) for eigenval in eigenvals]
+
+        fig = go.Figure()
+
+        for it in its:
+            fig.add_hline(it,line=dict(color="black",dash="dash",width=1),opacity=1)
+        fig.update_layout(xaxis_title=r"$\tau$",yaxis_title="ITS",xaxis=dict(range=[0, 1]),
+            yaxis=dict(range=[0, np.max(its) + 0.2]))
+
+        fig.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font=dict(size=18)
+        )
         fig.write_image(output.plot, scale=3)
 
 checkpoint sqra_find_indices_dominant_eigenvectors:
@@ -346,6 +388,8 @@ rule eigenvector_sum_1_overlapping_frames:
         frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_1_view{{view_index}}_{{COM_or_full}}.png"
     params:
         zoom_level = config["analysis"]["zoom_level"],
+        draw_m1 = config["analysis"]["plot_m1_as"],
+        draw_m2 = config["analysis"]["plot_m2_as"],
     run:
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
@@ -355,7 +399,7 @@ rule eigenvector_sum_1_overlapping_frames:
 
         my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
             num_frames=len(input.all_frame_gros),
-            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
 
@@ -401,6 +445,8 @@ rule eigenvector_sum_other_overlapping_frames:
         frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_other_view{{view_index}}_{{COM_or_full}}.png"
     params:
         zoom_level = config["analysis"]["zoom_level"],
+        draw_m1= config["analysis"]["plot_m1_as"],
+        draw_m2= config["analysis"]["plot_m2_as"],
     run:
         n1 = get_num_atoms(input.structure1)
         box_limits, gridpoints = collect_box_information(input)
@@ -410,7 +456,7 @@ rule eigenvector_sum_other_overlapping_frames:
 
         my_vmd.prepare_frame_script(vmd_name=output.vmdlog, plot_name=output.frame_plot,
             num_frames=len(input.all_frame_gros),
-            box_limits=box_limits, draw_m1=True, draw_m2=True,
+            box_limits=box_limits, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
 
@@ -461,6 +507,8 @@ rule eigenvector_sum_0_overlapping_frames:
         frame_plot_png = f"<outputs_molecular_plots>eigenvectors/sqra/individual/{{i}}th_eigenvector_sum_0_view{{view_index}}_{{COM_or_full}}.png"
     params:
         zoom_level = config["analysis"]["zoom_level"],
+        draw_m1= config["analysis"]["plot_m1_as"],
+        draw_m2= config["analysis"]["plot_m2_as"],
     run:
         from molgri.images.create_vmdlog import VMDCreator
         from workflow.helpers.io import get_num_atoms, read_object
@@ -472,7 +520,7 @@ rule eigenvector_sum_0_overlapping_frames:
         my_vmd = VMDCreator(f"index < {n1}",f"index >= {n1}")
 
         my_vmd.prepare_eigenvector_script(num_red=len(input.pos_e_structures), num_blue=len(input.neg_e_structures),
-            vmd_name=output.vmdlog, plot_name=output.frame_plot,
+            vmd_name=output.vmdlog, plot_name=output.frame_plot, draw_m1=params.draw_m1, draw_m2=params.draw_m2,
             box_limits=box_limits, draw_rectangular_box=False, gridpoints=None,
             zoom_level=int(params.zoom_level), translation_rotation_script=input.translation_rotation_script)
 
