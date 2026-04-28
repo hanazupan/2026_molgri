@@ -33,19 +33,9 @@ checkpoint all_positions_first_rotation_indices:
         required_indices = np.array(list(range(0,total_N_points,rotation_points)))
         write_object(required_indices, output.indices)
 
-
-# checkpoint lowest_E_indices:
-#     """
-#     Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
-#     """
-#     input:
-#         energy_csv = "{path}energy.csv"
-#     output:
-#         indices= "{path}lowest_{N}_binding_energies.txt"
-#     run:
-#         df_energy = read_object(input.energy_csv)
-#         required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
-#         write_object(required_indices, output.indices)
+rule lowest10:
+    input:
+        "<pseudosimulation>lowest_10_binding_energies.txt"
 
 checkpoint lowest_E_indices:
     input:
@@ -54,23 +44,11 @@ checkpoint lowest_E_indices:
         indices= "{path}lowest_{N}_binding_energies.txt"
     run:
         df_energy = read_object(input.energy_csv)
-        df_energy.columns = df_energy.columns.str.strip()
-        print(df_energy.columns)
-        if "Total index" in df_energy.columns:
-            # case 1: clean CSV
-            selected = df_energy.nsmallest(
-                int(wildcards.N),
-                "Energy [kJ/mol]"
-            )
-            required_indices = selected["Total index"].values
-
-        else:
-            # case 2: index used as Total index
-            selected = df_energy.nsmallest(
-                int(wildcards.N),
-                "Energy [kJ/mol]"
-            )
-            required_indices = selected.index.values
+        print(np.argmin(df_energy["Energy [kJ/mol]"].to_numpy()), np.min(df_energy["Energy [kJ/mol]"].to_numpy()))
+        print(df_energy.tail())
+        df = df_energy.sort_values(by="Energy [kJ/mol]",ascending=True)
+        print(df.head())
+        required_indices = np.array(df_energy.nsmallest(int(wildcards.N), "Energy [kJ/mol]").index)
         print(required_indices)
         write_object(required_indices, output.indices)
 

@@ -1,0 +1,11 @@
+! SP PBE0 D4 def2-tzvp
+
+%output
+  PrintLevel Mini
+end
+
+%scf
+    MaxIter 15
+end
+
+*xyzfile 2 1 trajectory.xyz

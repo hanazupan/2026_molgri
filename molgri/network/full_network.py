@@ -26,6 +26,9 @@ class FullNode(AbstractNode):
     def __str__(self):
         return f'({str(self.translation_node)}, {str(self.rotation_node)})'
 
+    def is_boundary_to_bulk(self) -> bool:
+        return self.translation_node.is_boundary_to_bulk()
+
     def __lt__(self, other: FullNode):
         """
         How do we know a node is "larger" (should come later in sorting)

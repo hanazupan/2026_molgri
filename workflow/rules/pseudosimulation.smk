@@ -87,14 +87,13 @@ rule create_pseudotrajectory:
         trajectory = f"<pseudosimulation>trajectory.<ext_trj>"
     run:
         from molgri.molecules.bimolecular import get_bimolecular_pseudotrajectory, move_to_center
+
         m1 = read_object(input.molecule_1)
         m2 = read_object(input.molecule_2)
-
 
         network = read_object(input.network)
         weights = m2.atoms.masses
         coordinates = network.create_pseudotrajectory_coordinates_from(m2.atoms.positions, weights)
-
         pt = get_bimolecular_pseudotrajectory(m1, m2, coordinates)
         write_object(pt, output.trajectory)
 

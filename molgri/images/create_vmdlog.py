@@ -8,6 +8,11 @@ from numpy.typing import NDArray, ArrayLike
 VMD_COLOR_DICT = {"black": 16, "yellow": 4, "orange": 3, "green": 7, "blue": 0, "cyan": 10, "purple": 11,
               "gray": 2, "pink": 9, "red": 1, "magenta": 27, "silver": 6, "gold": 5, "lime": 12}
 
+VMD_BOND_TYPE_DICT = {"CPK": "CPK 1.000000 0.300000 10.000000 10.000000",
+                      "VDW": "VDW 1.000000 12.000000",
+                      "Licorice": "Licorice 0.300000 10.000000 10.000000",
+                      "DynamicBonds": "DynamicBonds 1.600000 0.300000 6.000000",
+                      "Cartoon": "NewCartoon"}
 
 class VMDCreator:
     """
@@ -284,7 +289,7 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         self.translations_rotations_script = path_translation_rotation_script
         
     def prepare_frame_script(self, vmd_name: str, plot_name: str, num_frames: int, box_limits: list,
-                             draw_m1: bool = True, draw_m2: bool = True, draw_rectangular_box: bool = True,
+                             draw_m1: str, draw_m2: str, draw_rectangular_box: bool = True,
                              gridpoints: NDArray = None, zoom_level: int = 1, translation_rotation_script: str = None):
         """
         Plot one or multiple (overlapping) frames. Assumes the script will be run with additional "structure" first 
@@ -292,16 +297,18 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         one or more additional frames that should all be plotted.
         """
         self._start_new_file()
+
         if translation_rotation_script:
             self.load_translation_rotation_script(translation_rotation_script)
-        if draw_m1:
+        if draw_m1 != "None":
             # plot only one non-zero frame since they are all the same
             self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
-                                       representation="Licorice", trajectory_frames=[1]) #DynamicBonds 1.600000 0.300000 6.000000
-        if draw_m2:
+                                       representation=VMD_BOND_TYPE_DICT[draw_m1], trajectory_frames=[1]) #
+        if draw_m2 != "None":
             # plot all provided frames except 0
             self._add_representation(first_molecule=False, second_molecule=True, periodic="zZ",
-                                       representation="Licorice", trajectory_frames=list(range(1, num_frames+1)))
+                                       representation=VMD_BOND_TYPE_DICT[draw_m2], trajectory_frames=list(range(1,
+                                                                                                                num_frames+1)))
         if draw_rectangular_box:
             self.add_box(*box_limits)
         if gridpoints is not None:
@@ -327,20 +334,21 @@ graphics top sphere {{ {coordinate[0]} {coordinate[1]} {coordinate[2]} }} radius
         self._start_new_file()
         if translation_rotation_script:
             self.load_translation_rotation_script(translation_rotation_script)
-        if draw_m1:
+        if draw_m1 != "None":
             # plot only one non-zero frame since they are all the same
             self._add_representation(first_molecule=True, second_molecule=False, periodic="Z",
-                                       representation="Licorice", trajectory_frames=[1])
-        if draw_m2:
+                                       representation=VMD_BOND_TYPE_DICT[draw_m1], trajectory_frames=[1])
+        if draw_m2 != "None":
             # plot red frames
             if num_red > 0:
                 self._add_representation(first_molecule=False, second_molecule=True, periodic=None,
                                          coloring= "ColorID", color="red",
-                                        representation="Licorice", trajectory_frames=list(range(1, num_red+1)))
+                                        representation=VMD_BOND_TYPE_DICT[draw_m2], trajectory_frames=list(range(1,
+                                                                                                                 num_red+1)))
             # plot blue frames
             if num_blue > 0:
                 self._add_representation(first_molecule=False, second_molecule=True, periodic=None, color="blue",
-                                         representation="Licorice", coloring="ColorID",
+                                         representation=VMD_BOND_TYPE_DICT[draw_m2],  coloring="ColorID",
                                          trajectory_frames=list(range(num_red+1, num_red + num_blue + 1)))
         if draw_rectangular_box:
             self.add_box(*box_limits)
