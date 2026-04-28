@@ -31,7 +31,7 @@ def xtc_to_xyz(xtc_file, gro_file, output_xyz):
                 element = atom.name[0]
                 f.write(f"{element:2s} {x:12.6f} {y:12.6f} {z:12.6f}\n")
 
-'''
+
 def find_invalid_frames_with_overlapping_atoms(
     trajectory_path: str,
     rounding_decimals: int = 6
@@ -70,115 +70,7 @@ def find_invalid_frames_with_overlapping_atoms(
     print(f"Invalid frames (overlapping atoms): {len(invalid_indices)}")
 
     return np.array(valid_indices), np.array(invalid_indices)
-'''
 
-def has_duplicates(coords, tol: float):
-    """
-    Checks for duplicate coordinates within tolerance.
-    Returns number of overlapping coordinates.
-    """
-    duplicates = 0
-    n = len(coords)
-
-    for i in range(n):
-        for j in range(i+1, n):
-            if np.allclose(coords[i], coords[j], atol=tol):
-                duplicates += 1
-
-    return duplicates
-
-def remove_coordinates(input_file: str, output_file: str, tol=1e-6):
-    structures = []
-    removed_structures = []
-
-    with open(input_file) as f:
-        lines = f.readlines()
-
-    i = 0
-    structure_index = 1
-    cleaned_lines = []
-
-    while i < len(lines):
-
-        n_atoms = int(lines[i].strip())
-        comment = lines[i+1]
-
-        atom_lines = lines[i+2:i+2+n_atoms]
-
-        coords = []
-        parsed_atoms = []
-
-        for line in atom_lines:
-            parts = line.split()
-            element = parts[0]
-            x, y, z = map(float, parts[1:4])
-
-            coords.append([x, y, z])
-            parsed_atoms.append(line)
-
-        coords = np.array(coords)
-
-        dup_count = has_duplicates(coords, tol)
-
-        if dup_count > 0:
-            print(f"Structure {structure_index} deleted: {dup_count} overlapping coordinates")
-            removed_structures.append(structure_index)
-        else:
-            cleaned_lines.append(f"{n_atoms}\n")
-            cleaned_lines.append(comment)
-            cleaned_lines.extend(parsed_atoms)
-
-        structure_index += 1
-        i += n_atoms + 2
-
-
-    with open(output_file, "w") as f:
-        f.writelines(cleaned_lines)
-
-    print("\nDone.")
-    print(f"Deleted structures: {len(removed_structures)}")
-
-
-def find_invalid_frames_with_overlapping_atoms(
-    trajectory_path: str,
-    tol: float
-):
-    """
-    Detect frames where at least two atoms overlap within a tolerance.
-
-    Args:
-        trajectory_path (str): Path to trajectory.xyz
-        tol (float): distance tolerance for detecting overlaps
-
-    Returns:
-        valid_indices (np.ndarray): frames WITHOUT overlaps
-        invalid_indices (np.ndarray): frames WITH overlapping atoms
-    """
-
-    import numpy as np
-    from ase.io import read
-
-    traj = read(trajectory_path, index=":")
-
-    valid_indices = []
-    invalid_indices = []
-
-    for i, atoms in enumerate(traj):
-        coords = atoms.get_positions()
-
-        # use same logic as in remove_coordinates
-        dup_count = has_duplicates(coords, tol)
-
-        if dup_count > 0:
-            invalid_indices.append(i)
-        else:
-            valid_indices.append(i)
-
-    print(f"Total frames: {len(traj)}")
-    print(f"Valid frames: {len(valid_indices)}")
-    print(f"Invalid frames (overlapping atoms): {len(invalid_indices)}")
-
-    return np.array(valid_indices), np.array(invalid_indices)
 
 class QuantumSetup:
 
@@ -335,18 +227,8 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
     all_df = []
     all_frame_indices = [int(Path(out_file).parts[-2]) for out_file in out_files_to_read]
 
-    import re
-
-    def get_frame_number(path: str) -> int:
-        # adapt regex to your folder structure
-        # e.g. ".../10/structure.out" -> 10
-        return int(re.search(r"/(\d+)/", path).group(1))
-
-    for out_file in sorted(out_files_to_read, key=get_frame_number):
-        my_reader = OrcaReader(out_file)
-
-    # for out_file_to_read in out_files_to_read:
-    #     my_reader = OrcaReader(out_file_to_read)
+    for out_file_to_read in out_files_to_read:
+        my_reader = OrcaReader(out_file_to_read)
 
         frame_index = my_reader.get_frame_num()
         time_h_m_s = my_reader.extract_time_orca_output()
@@ -354,7 +236,7 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
         optimization_complete = my_reader.assert_optimization_complete(throw_error=False)
 
         base_path = "/home/nadjar02/MA/2026_molgri/nobackup"
-        short_path = out_file.replace(base_path, "")
+        short_path = out_file_to_read.replace(base_path, "")
 
         energies = my_reader.extract_energies_orca_output()
 
@@ -407,27 +289,14 @@ def read_important_stuff_into_csv(out_files_to_read: list, csv_file_to_write: st
     combined_df.to_csv(csv_file_to_write, index=False)
 
 
-def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str, setup: QuantumSetup):
+def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str):
     all_times_seconds = []
-    #my_setup = QuantumSetup(set_up=QuantumSetup)
 
-    def get_frame_number(path: str) -> int:
-        # adapt regex to your folder structure
-        # e.g. ".../10/structure.out" -> 10
-        return int(re.search(r"/(\d+)/", path).group(1))
-
-    all_energies = []
-    for out_file in sorted(out_files_to_read, key=get_frame_number):
-        my_reader = OrcaReader(out_file)
-        # energies = reader.extract_energies_orca_output()
-        # all_energies.extend(energies)
-
-    # for out_file_to_read in out_files_to_read:
-    #     my_reader = OrcaReader(out_file_to_read)
+    for out_file_to_read in out_files_to_read:
+        my_reader = OrcaReader(out_file_to_read)
 
         try:
             time_h_m_s = my_reader.extract_time_orca_output()
-            energies = my_reader.extract_energies_orca_output()
 
             if not time_h_m_s:
                 raise ValueError("Empty time string")
@@ -445,36 +314,27 @@ def read_times_into_txt(out_files_to_read: list, txt_file_to_write: str, setup: 
             all_times_seconds.append(seconds)
 
         except Exception as e:
-            print(f"Skipping invalid file: {out_file} ({e})")
+            print(f"Skipping invalid file: {out_file_to_read} ({e})")
 
     def format_hms(seconds):
         return str(timedelta(seconds=int(seconds)))
 
     with open(txt_file_to_write, "w") as f:
         if all_times_seconds:
+            # Write individual times
+            f.write("Individual times (h:m:s):\n")
+            for t in all_times_seconds:
+                f.write(f"{format_hms(t)}\n")
+
             # Stats
             longest = max(all_times_seconds)
             shortest = min(all_times_seconds)
             average = sum(all_times_seconds) / len(all_times_seconds)
-            time_per_structure = average / len(energies)
 
-            f.write("Summary:\n")
+            f.write("\nSummary:\n")
             f.write(f"Longest:  {format_hms(longest)}\n")
             f.write(f"Shortest: {format_hms(shortest)}\n")
-            f.write(f"Average:  {format_hms(average)}\n\n")
-
-            f.write(f"Number of structures:  {len(energies)}\n")
-            f.write(f"Average time per structure [s]:  {time_per_structure}\n")
-            f.write(f"Average time per structure [h:m:s]:  {format_hms(time_per_structure)}\n\n")
-
-            f.write(f"Number of cores: {setup.num_cores}\n")
-            f.write(f"Ram per core: {setup.ram_per_core}\n\n")
-
-            # Write individual times
-            f.write("Individual times [h:m:s]:\n")
-            for t in all_times_seconds:
-                f.write(f"{format_hms(t)}\n")
-
+            f.write(f"Average:  {format_hms(average)}\n")
         else:
             f.write("No valid times found.\n")
 
@@ -515,16 +375,14 @@ def filter_frame_indices(frame_indices, invalid_indices):
     #print("Filtered frame indices:", list(np.array(frame_indices)[mask]))
     return list(np.array(frame_indices)[mask])
 
-'''
 def write_energies_with_indices(
     out_files_to_read: list,
     trajectory_path: str,
-    csv_file_to_write: str,
-    tol: float
+    csv_file_to_write: str
 ):
     """
     Create CSV with:
-    - frame indices from trajectory.xyz
+    - frame indices from cleaned_trajectory.xyz
     - energies in Hartree
     - invalid frames skipped (based on overlapping atoms)
 
@@ -532,33 +390,21 @@ def write_energies_with_indices(
     - number of energies == number of trajectory frames
     """
     import pandas as pd
-    import re
     # 🔹 1. get frame indices
     frame_indices = extract_frame_indices_from_xyz(trajectory_path)
 
     # 🔹 2. get invalid indices (trajectory positions)
-    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path, tol=tol)
+    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path)
     invalid_set = set(invalid)
     frame_indices = filter_frame_indices(frame_indices, invalid)
     # print(frame_indices)
 
-    def get_frame_number(path: str) -> int:
-        # adapt regex to your folder structure
-        # e.g. ".../10/structure.out" -> 10
-        return int(re.search(r"/(\d+)/", path).group(1))
-
+    # 🔹 3. collect all energies (flatten)
     all_energies = []
-    for out_file in sorted(out_files_to_read, key=get_frame_number):
+    for out_file in sorted(out_files_to_read):
         reader = OrcaReader(out_file)
         energies = reader.extract_energies_orca_output()
         all_energies.extend(energies)
-
-    # 🔹 3. collect all energies (flatten)
-    # all_energies = []
-    # for out_file in sorted(out_files_to_read):
-    #     reader = OrcaReader(out_file)
-    #     energies = reader.extract_energies_orca_output()
-    #     all_energies.extend(energies)
 
     # 🔥 sanity check BEFORE filtering
     if len(all_energies) != len(frame_indices):
@@ -579,67 +425,60 @@ def write_energies_with_indices(
     df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
     df.to_csv(csv_file_to_write, index=False)
 
-'''
-def write_energies_with_indices(
-    out_files_to_read: list,
-    trajectory_path: str,
-    csv_file_to_write: str,
-    tol: float
-):
     import pandas as pd
-    import re
 
-    # 🔹 1. get all frame indices (NO filtering)
-    frame_indices = extract_frame_indices_from_xyz(trajectory_path)
+def write_lowest_opt_energies_from_dirs(
+    out_files_to_read: list,
+    csv_file_to_write: str
+):
 
-    # 🔹 2. get invalid frame positions (trajectory indices)
-    _, invalid = find_invalid_frames_with_overlapping_atoms(trajectory_path, tol=tol)
-    invalid_set = set(invalid)
-
-    def get_frame_number(path: str) -> int:
-        return int(re.search(r"/(\d+)/", path).group(1))
-
-    # 🔹 3. collect energies (only valid ones exist)
-    valid_energies = []
-    for out_file in sorted(out_files_to_read, key=get_frame_number):
-        reader = OrcaReader(out_file)
-        energies = reader.extract_energies_orca_output()
-        valid_energies.extend(energies)
-
-    # 🔹 4. determine penalty energy
-    if not valid_energies:
-        raise ValueError("No valid energies found.")
-
-    max_energy = max(valid_energies)
-    penalty_energy = 1.2 * max_energy
-
-    # 🔹 5. rebuild full energy list INCLUDING invalid frames
-    all_energies = []
-    valid_idx = 0
-
-    for i in range(len(frame_indices)):
-        if i in invalid_set:
-            all_energies.append(penalty_energy)
-        else:
-            if valid_idx >= len(valid_energies):
-                raise ValueError("Not enough valid energies to fill frames.")
-            all_energies.append(valid_energies[valid_idx])
-            valid_idx += 1
-
-    if valid_idx != len(valid_energies):
-        raise ValueError("Unused energies remain after assignment.")
-
-    # 🔹 6. build rows
     rows = []
-    for frame_idx, energy in zip(frame_indices, all_energies):
-        energy_kjmol = energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
-        rows.append([frame_idx, energy_kjmol])
 
-    # 🔹 7. write CSV
-    df = pd.DataFrame(rows, columns=["Total index", "Energy [kJ/mol]"])
+    # 🔹 loop like in your original function
+    for out_file_to_read in sorted(out_files_to_read):
+        my_reader = OrcaReader(out_file_to_read)
+
+        # 🔹 extract directory (e.g. "1" from "1/opt.out")
+        directory = os.path.dirname(out_file_to_read)
+        dir_name = os.path.basename(directory)
+
+        # 🔹 build xyz path dynamically (e.g. "1/1.xyz")
+        xyz_file = os.path.join(directory, f"{dir_name}.xyz")
+
+        # 🔹 1. read xyz comment line
+        with open(xyz_file, "r") as f:
+            lines = f.readlines()
+            comment_line = lines[1].strip()
+
+        frame_match = re.search(r"frame(\d+)", comment_line)
+        energy_xyz_match = re.search(r"E\s*=\s*([-\d\.]+)", comment_line)
+
+        frame_idx = int(frame_match.group(1)) if frame_match else None
+        energy_xyz = float(energy_xyz_match.group(1)) if energy_xyz_match else None
+
+        # 🔹 2. extract energies from ORCA output
+        energies = my_reader.extract_energies_orca_output()
+        if len(energies) == 0:
+            continue
+
+        last_energy = energies[-1]
+
+        # 🔹 3. convert to kJ/mol
+        energy_kjmol = last_energy * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
+
+        # 🔹 4. collect row
+        rows.append([
+            int(dir_name),
+            frame_idx,
+            energy_kjmol
+        ])
+
+    # 🔹 5. sort by lowest energy
+    rows.sort(key=lambda x: x[2])
+
+    # 🔹 6. write CSV
+    df = pd.DataFrame(rows, columns=["Directory", "Frame", "Energy [kJ/mol]"])
     df.to_csv(csv_file_to_write, index=False)
-
-import pandas as pd
 
 def read_xyzact_dat(dat_files):
     """
@@ -653,12 +492,7 @@ def read_xyzact_dat(dat_files):
     """
     data = []
 
-    def get_frame_number(path: str) -> int:
-        # adapt regex to your folder structure
-        # e.g. ".../10/structure.out" -> 10
-        return int(re.search(r"/(\d+)/", path).group(1))
-
-    for file in sorted(dat_files, key=get_frame_number):
+    for file in sorted(dat_files):
         with open(file, "r") as f:
             for line in f:
                 if not line.strip():
@@ -1011,20 +845,12 @@ def compute_com_distance(frame):
     return np.linalg.norm(com1 - com2)
 
 
-def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest, cutoff=1e10):
+def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
     frames = read_xyz_trajectory(xyz_file)
     energy_df = pd.read_csv(energy_csv, index_col=0)
 
     energies = energy_df.iloc[:, 0].to_numpy()
-    # convert to relative energies
-    energies = energies - np.min(energies)
     distances = np.array([compute_com_distance(f) for f in frames])
-
-    # 🔹 FILTER: remove very large energies
-    valid_mask = energies <= cutoff
-
-    energies = energies[valid_mask]
-    distances = distances[valid_mask]
 
     if len(distances) != len(energies):
         raise ValueError("Mismatch between frames and energies")
@@ -1038,25 +864,25 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest, cutoff=1
     # Mask for all other frames
     mask = np.ones(len(energies), dtype=bool)
     mask[lowest_indices] = False
-    min_idx = np.argmin(energies)
+
+    plt.scatter(distances[mask], energies[mask], label="All other frames")  # all frames except 100 lowest
+    plt.scatter(distances_lowest, energies_lowest, label=f"{n_lowest} lowest energies")
+   # print(len(frames), len(energies))
 
     # --- plotting ---
     plt.figure()
 
     # normal points (blue)
-    plt.scatter(distances[mask], energies[mask], label="All")
-    plt.scatter(distances_lowest, energies_lowest, label=f"Lowest {n_lowest}")
+    plt.scatter(distances[mask], energies[mask], label="All other frames")
 
+    # lowest 3 (red)
     plt.scatter(
-        distances[min_idx],
-        energies[min_idx],
-        marker="x",
-        color='red',
-        s=100,
-        label="Global minimum"
+        distances[lowest_indices],
+        energies[lowest_indices],
+        label=f"{n_lowest} lowest energies"
     )
 
-    plt.xlabel("COM distance [Å]")
+    plt.xlabel("COM distance [nm]")
     plt.ylabel("Energy [kJ/mol]")
     plt.title("Energy vs COM Distance")
 
@@ -1069,65 +895,46 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, N_lowest, n_lowest, cutoff=1e10):
+def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest):
     frames = read_xyz_trajectory(xyz_file)
     energy_df = pd.read_csv(energy_csv, index_col=0)
 
     energies = energy_df.iloc[:, 0].to_numpy()
-    # convert to relative energies
-    energies = energies - np.min(energies)
     distances = np.array([compute_com_distance(f) for f in frames])
-
-    # 🔹 FILTER: remove very large energies
-    valid_mask = energies <= cutoff
-
-    energies = energies[valid_mask]
-    distances = distances[valid_mask]
 
     if len(distances) != len(energies):
         raise ValueError("Mismatch between frames and energies")
 
-    # 🔹 select N lowest points (to plot)
-    N = min(N_lowest, len(energies))
-    lowest_N_idx = np.argsort(energies)[:N]
-
-    # subset everything to N lowest
-    energies = energies[lowest_N_idx]
-    distances = distances[lowest_N_idx]
-
-    # 🔹 select n lowest within those
+    # 🔹 get indices of 100 lowest energies
     n = min(n_lowest, len(energies))
-    highlight_idx = np.argsort(energies)[:n]
-    min_idx = np.argmin(energies)
+    lowest_indices = np.argsort(energies)[:n]
 
     # 🔹 subset
-    distances_lowest = distances[highlight_idx]
-    energies_lowest = energies[highlight_idx]
+    distances_lowest = distances[lowest_indices]
+    energies_lowest = energies[lowest_indices]
 
     # --- plotting ---
     plt.figure()
-    if N != n:
-        plt.scatter(distances, energies, label=f"Lowest {len(lowest_N_idx)}")
+
+    min_idx = lowest_indices[0]
 
     plt.scatter(
         distances_lowest,
         energies_lowest,
-        label=f"Lowest {n}"
+        label="Lowest 100"
     )
 
     plt.scatter(
         distances[min_idx],
         energies[min_idx],
         marker="x",
-        color='red',
         s=100,
         label="Global minimum"
     )
 
-    plt.xlabel("COM distance [Å]")
-    #plt.gca().ticklabel_format(useOffset=False, axis='y')
+    plt.xlabel("COM distance [nm]")
     plt.ylabel("Energy [kJ/mol]")
-    plt.title(f"{N} Lowest Energies vs COM Distance")
+    plt.title("100 Lowest Energies vs COM Distance")
 
     plt.legend()
     plt.tight_layout()
@@ -1168,16 +975,14 @@ def compute_angles(frame):
         angle_between(normal, x),  # yz-plane
     )
 
-def make_plot(angles, energies, lowest, min_idx, title, filename):
+def make_plot(angles, energies, lowest, mask, title, filename):
     plt.figure()
-    plt.scatter(angles, energies, label="All")
-    plt.scatter(angles[lowest], energies[lowest], label=f"Lowest {len(lowest)}")
-    plt.scatter(angles[min_idx], energies[min_idx], marker="x", color='red', s=100, label="Global minimum")
+    plt.scatter(angles[mask], energies[mask])
+    plt.scatter(angles[lowest], energies[lowest])
     plt.xlabel("Angle [deg]")
-    plt.ylabel("Energy [kJ/mol]")
+    plt.ylabel("Energy")
     plt.title(title)
     plt.tight_layout()
-    plt.legend()
     plt.savefig(filename)
     plt.close()
 
@@ -1185,10 +990,7 @@ def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_low
     """Plot energy vs angles and save directly to given output paths."""
 
     frames = read_xyz_trajectory(xyz_file)
-    energies = pd.read_csv(energy_csv, index_col=0).iloc[:, 0].to_numpy()
-    # convert to relative energies
-    energies = energies - np.min(energies)
-
+    energies = pd.read_csv(energy_csv).iloc[:, 0].to_numpy()
 
     if len(frames) != len(energies):
         raise ValueError("Mismatch between frames and energies")
@@ -1219,19 +1021,17 @@ def plot_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_low
     # 🔹 recompute lowest after filtering
     n = min(n_lowest, len(energies))
 
-    lowest = np.argsort(energies)[:n]
+    lowest = np.argsort(energies)[:n_lowest]
     mask = np.ones(len(energies), dtype=bool)
     mask[lowest] = False
-    min_idx = np.argmin(energies)
 
     # make_plot now takes full paths
-    make_plot(angles_xy, energies, lowest, min_idx, "XY plane", xy_path)
-    make_plot(angles_xz, energies, lowest, min_idx, "XZ plane", xz_path)
-    make_plot(angles_yz, energies, lowest, min_idx, "YZ plane", yz_path)
+    make_plot(angles_xy, energies, lowest, mask, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest, mask, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest, mask, "YZ plane", yz_path)
 
 
-
-def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, N_lowest, n_lowest, cutoff=1e10):
+def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path, n_lowest, cutoff=1e10 ):
     """
     Plot the lowest `n_lowest` energies vs angles relative to XY, XZ, YZ planes.
 
@@ -1251,16 +1051,14 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
         Number of lowest energies to highlight
     """
 
-    def make_plot(angles, energies, lowest_N_idx, lowest_idx, min_idx, title, filename):
+    def make_plot(angles, energies, lowest_idx, title, filename):
         mask = np.ones(len(energies), dtype=bool)
         mask[lowest_idx] = False
 
         plt.figure()
-        if {len(lowest_N_idx)} != {len(lowest_idx)}:
-            plt.scatter(angles[mask], energies[mask], label=f"Lowest {len(lowest_N_idx)}")
-
-        plt.scatter(angles[lowest_idx], energies[lowest_idx], label=f"Lowest {len(lowest_idx)}")
-        plt.scatter(angles[min_idx], energies[min_idx], marker="x", color='red', s=100, label="Global minimum")
+        plt.scatter(angles[mask], energies[mask], label="Other points")
+        plt.scatter(angles[lowest_idx], energies[lowest_idx], color='red',
+                    label=f"Lowest {len(lowest_idx)}")
         plt.xlabel("Angle [deg]")
         plt.ylabel("Energy [kJ/mol]")
         plt.title(title)
@@ -1272,16 +1070,13 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
     # --- main computation ---
     frames = read_xyz_trajectory(xyz_file)
     energies = pd.read_csv(energy_csv, index_col=0).iloc[:, 0].to_numpy()
-    # convert to relative energies
-    energies = energies - np.min(energies)
-
 
     if len(frames) != len(energies):
         raise ValueError("Mismatch between frames and energies")
 
     angles_xy, angles_xz, angles_yz = [], [], []
     for frame in frames:
-        a_xy, a_xz, a_yz = compute_angles(frame)  # uses external compute_angles
+        a_xy, a_xz, a_yz = compute_angles(frame)
         angles_xy.append(a_xy)
         angles_xz.append(a_xz)
         angles_yz.append(a_yz)
@@ -1301,23 +1096,39 @@ def plot_lowest_energy_vs_angles(xyz_file, energy_csv, xy_path, xz_path, yz_path
     if len(energies) == 0:
         raise ValueError("No valid energies left after filtering")
 
-    # 🔹 select N lowest points (to plot)
-    N = min(N_lowest, len(energies))
-    lowest_N_idx = np.argsort(energies)[:N]
-
-    # subset everything to N lowest
-    energies = energies[lowest_N_idx]
-    angles_xy = angles_xy[lowest_N_idx]
-    angles_xz = angles_xz[lowest_N_idx]
-    angles_yz = angles_yz[lowest_N_idx]
-
-    # 🔹 select n lowest within those
+    # 🔹 recompute lowest after filtering
     n = min(n_lowest, len(energies))
-    highlight_idx = np.argsort(energies)[:n]
-    min_idx = np.argmin(energies)
+    lowest_idx = np.argsort(energies)[:n]
 
-    # plot
-    make_plot(angles_xy, energies, lowest_N_idx, highlight_idx, min_idx, "XY plane", xy_path)
-    make_plot(angles_xz, energies, lowest_N_idx, highlight_idx, min_idx, "XZ plane", xz_path)
-    make_plot(angles_yz, energies, lowest_N_idx, highlight_idx, min_idx, "YZ plane", yz_path)
+    make_plot(angles_xy, energies, lowest_idx, "XY plane", xy_path)
+    make_plot(angles_xz, energies, lowest_idx, "XZ plane", xz_path)
+    make_plot(angles_yz, energies, lowest_idx, "YZ plane", yz_path)
 
+
+def trim_xyz_from_out(dirs, base_dir):
+    import os
+
+    for d in dirs:
+        dpath = os.path.join(base_dir, str(d))
+        out_file = os.path.join(dpath, "structure.out")
+        xyz_file = os.path.join(dpath, "structure.xyz")
+        new_xyz = os.path.join(dpath, "structure_new.xyz")
+
+        # --- get cutoff from .out ---
+        with open(out_file) as f:
+            for line in f:
+                if "MULTIPLE XYZ STEP" in line:
+                    step = int(line.strip().split()[-1]) - 1
+                    break
+
+        # --- read xyz ---
+        with open(xyz_file) as f:
+            lines = f.readlines()
+
+        n_atoms = int(lines[0].strip())
+        frame_len = n_atoms + 2
+
+        # --- write trimmed xyz ---
+        start = step * frame_len
+        with open(new_xyz, "w") as f:
+            f.writelines(lines[start:])

@@ -38,9 +38,6 @@ rule lowest10:
         "<pseudosimulation>lowest_10_binding_energies.txt"
 
 checkpoint lowest_E_indices:
-    """
-    Write in a .txt file where the N lowest energy indices are written down (eg for later plotting).
-    """
     input:
         energy_csv = "{path}energy.csv"
     output:

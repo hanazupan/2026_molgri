@@ -262,7 +262,7 @@ rule stack_all_eigenvectors:
 rule get_all_eigenvectors:
     input:
         expand(f"<outputs_molecular_plots>eigenvectors/{{tau}}/ALL_EIGENVECTORS_zoom{{zoom_level}}_view{{view_index}}_{{COM_or_full}}.png",
-            tau=[1, 10, 100], zoom_level=[8],view_index=[1, 4],
+            tau=[10, 100], zoom_level=[8],view_index=[1, 2],
             COM_or_full=["full"]),
 
 def input_zeroth_eigenvector(wc):

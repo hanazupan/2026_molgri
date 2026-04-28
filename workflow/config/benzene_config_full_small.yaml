@@ -1,0 +1,33 @@
+grid:
+  unique_network_name: "spherical_positions_50rot"
+  rotation_algorithm: "hypercube"
+  rotation_random_seed: 1
+  N_rotations: 50
+  periodic_in: [ False, False ]
+  translation_algorithm: "spherical"
+  translation_subgrids_A: [ 30, [1, 15, 20] ]
+
+pseudotrajectory:
+  molecule_1: "benzene"
+  molecule_2: "benzene"
+  structure_ending: "gro"
+  trajectory_ending: "xtc"
+
+analysis:
+  energy_program: GROMACS
+  view_index: [ 1 ]
+  length_shortened_trajectory_ns: 10
+  energy_types: ["LJ (SR)", "Coulomb (SR)"]
+  upper_E_limit: 0
+  analyse_first_N_frames: None
+
+sqra:
+  cutting_factor: "auto"
+  tolerance_rate_matrix_row_sum: 1e-16
+  sigma: 0
+  tolerance_eigendecomposition: 0
+
+eigenvectors:
+  num_interesting_timescales: 4
+  num_interesting_eigenvectors: 8
+  num_extremes_to_plot: "auto"

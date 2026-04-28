@@ -1,7 +1,8 @@
-configfile: "workflow/config/defaults.yaml"
+configfile: "workflow/config/benzene_100_1_1_100_config.yaml"
 
 wildcard_constraints:
-    path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
+    path = "<simulation>|<pseudosimulation>|<outputs_assignment>",
+    N_xyz=r"\d+"
 
 from workflow.helpers.build_subgrids import auto_create_grid
 
@@ -27,6 +28,10 @@ pathvars:
     #outputs
     output_specific_molecule = f"<output_directory><molecules>",
     output_specific_molecule_network = f"<output_specific_molecule><network>",
+
+    #curta
+    remote_base_directory = "/home/nadjar02/MA",
+    remote_test_dir = f"<remote_base_directory><molecules><network>",
 
     # network
     outputs_network = "<output_specific_molecule_network>network/",
@@ -63,9 +68,13 @@ include: "rules/sqra.smk"
 include: "rules/graphene_xylene_specific.smk"
 include: "rules/molecular_visualizations.smk"
 include: "rules/print_info.smk"
+include: "rules/orca.smk"
 
 
-N=[1, 5, 10, 50]
+N=[1, 5, 20, 50]
+N_xyz =[10]
+N_low_E=20
+n_low_e=20
 view_index=config["analysis"]["view_index"]
 zoom_level = config["analysis"]["zoom_level"]
 

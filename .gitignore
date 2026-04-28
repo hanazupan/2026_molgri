@@ -197,6 +197,7 @@ workflow/*.csv
 *.tga
 *.mpg
 *.xtc
+*.gro
 *.xyz
 monomer.gro
 
@@ -205,6 +206,8 @@ outputs
 output
 nobackup
 januar_outdated_outputs/
+pics
+*.txt
 
 *.odt
 

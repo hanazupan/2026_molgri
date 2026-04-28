@@ -1,0 +1,49 @@
+grid:
+  unique_network_name: cart_10_3_3_3
+  rotation_algorithm: hypercube
+  rotation_random_seed: 1
+  N_rotations: 10
+  translation_algorithm: cartesian
+  periodic_in: [false, false, false]
+  translation_subgrids_A: [[-4, 4, 3], [-4, 4, 3], [3, 5, 3]]
+pseudotrajectory:
+  molecule_1: benzene
+  molecule_2: benzene
+  structure_ending: gro
+  trajectory_ending: xtc
+analysis:
+  energy_program: GROMACS
+  length_shortened_trajectory_ns: 10
+  energy_types: ["LJ (SR)", "Coulomb (SR)"]
+  upper_E_limit: 0
+  analyse_first_N_frames: None
+  zoom_level: 0
+  view_index: [1, 2, 4, 5]
+energy:
+  energy_program: ORCA
+orca:
+  CHUNK_SIZE: 270
+  functional: "PBE0"
+  basis_set: "def2-TZVP"
+  solvent: None
+  dispersion_correction: "D3"
+  num_scf: None
+  num_cores: 4
+  ram_per_core: 300
+msm:
+  num_interesting_timescales: 4
+  num_interesting_eigenvectors: 4
+  num_extremes_to_plot: auto
+  taus: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]
+eigenvectors:
+  num_interesting_timescales: 4
+  num_interesting_eigenvectors: 4
+  num_extremes_to_plot: auto
+sqra:
+  # rate matrix reduction
+  capping_factor: 1e20
+  cutting_factor: "auto"
+  tolerance_rate_matrix_row_sum: 1e-1
+  # eigendecomposition
+  tolerance_eigendecomposition: 0
+  sigma: 0

@@ -1,250 +1,453 @@
-import os.path
-
+from workflow.helpers.orca_reader import QuantumSetup, OrcaReader, QuantumMolecule, OrcaWriter, write_energies_with_indices, read_times_into_txt, write_energies_from_xyzact_dat
+from workflow.helpers.orca_reader import read_important_stuff_into_csv, split_xyz_trajectory, find_invalid_frames_with_overlapping_atoms, xtc_to_xyz
+from workflow.helpers.orca_reader import plot_energy_vs_angles, plot_energy_vs_distance, plot_lowest_energy_vs_distance, plot_lowest_energy_vs_angles
+from workflow.helpers.orca_reader import remove_coordinates
 import numpy as np
-import pandas as pd
+from pathlib import Path
 
-from workflow.helpers.io import get_num_atoms, read_object, write_object
-from MDAnalysis import Universe
-import MDAnalysis as md
+# path on curta
+# REMOTE_BASE_DIR = "/home/nadjar02/MA"
+# REMOTE_TEST_DIR = f"{REMOTE_BASE_DIR}cart_10_1_2_3"
+REMOTE_BASE_DIR = "<remote_base_directory>"
+REMOTE_TEST_DIR = "<remote_test_dir>"
 
-from workflow.helpers.orca_reader import AVOGADRO_CONSTANT, HARTREE_TO_J
+#path on qcm
+# LOCAL_TEST_DIR = "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/cart_10_1_2_3"
+LOCAL_TEST_DIR = "<output_specific_molecule_network>"
+GRID_DIR = "<pseudosimulation>"
 
-PATH_REMOTE = "../<pseudosimulation>"
+#FRAMES = glob_wildcards( "/home/nadjar02/MA/2026_molgri/nobackup/benzene_benzene/spherical_grid_20_42_4/{frame}/structure.out" ).frame
+CHUNK_SIZE = config["orca"]["CHUNK_SIZE"]
+tolerance = float(config["orca"]["tolerance_atom_overlap"])
 
-N_structures_per_batch = int(config["curta"]["num_structures_per_batch"])
-N_batches = int(config["curta"]["num_batches"])
+setup = QuantumSetup(
+    functional=config["orca"]["functional"],
+    basis_set=config["orca"]["basis_set"],
+    solvent=config["orca"]["solvent"],
+    dispersion_correction=config["orca"]["dispersion_correction"],
+    num_scf=config["orca"]["num_scf"],
+    num_cores=config["orca"]["num_cores"],
+    ram_per_core=config["orca"]["ram_per_core"]
+)
 
-
-NUM_GRID_POINTS = N_structures_per_batch * N_batches
-
-########################   HERE THE OPTION OF COMLETELY SPLIT TRAJECTORIES (BATCH + FRAME) ################
-
-def _determine_batch_subfolders():
-    all_paths = []
-    for batch in range(N_batches):
-        section_size = NUM_GRID_POINTS//N_batches
-        batch_start_index = batch*section_size
-        batch_end_index = np.min([(batch+1)*section_size, NUM_GRID_POINTS])
-        all_paths.extend([f"batch_{batch}/{str(i).zfill(10)}/" for i in range(batch_start_index, batch_end_index)])
-
-    return all_paths
-
-def _determine_batch_folders(wildcards, file_needed):
-    all_paths = []
-    for batch in range(N_batches):
-        section_size = NUM_GRID_POINTS//N_batches
-        batch_start_index = batch*section_size
-        batch_end_index = np.min([(batch+1)*section_size, NUM_GRID_POINTS])
-        all_paths.extend([f"{wildcards.where}batch_{batch}/{str(i).zfill(10)}/{file_needed}" for i in range(batch_start_index, batch_end_index)])
-    return all_paths
-
-def determine_output_files_in_batches(wildcards):
-    return _determine_batch_folders(wildcards, "orca.out")
-
-def determine_input_files_in_batches(wildcards):
-    return _determine_batch_folders(wildcards,"orca.inp")
-
-paths = [f"{PATH_REMOTE}{my_path}orca.out" for my_path in
-                            _determine_batch_subfolders() if
-                            os.path.exists(f"{PATH_REMOTE}{my_path}orca.out")]
-
-rule completely_split_trajectory:
-    """
-    If needed (e.g. for orca calculations) split a single file trajectory info a folder of single-structure files named
-    from 0000000000 to the total num of points.
-
-    Warning, this is not a general tool for any .xyz files but specifically for my pseudotrajectory file.
-    """
+rule xtc_to_xyz:
     input:
-        trajectory="<pseudosimulation>trajectory.<ext_trj>"
+        xtc = f"<pseudosimulation>trajectory.xtc",
+        gro = f"<pseudosimulation>structure.gro"
     output:
-        all_out = expand(f"{PATH_REMOTE}{{specific_paths}}trajectory.<ext_trj>",
-            specific_paths=_determine_batch_subfolders(), allow_missing=True),
-        to_touch = touch("<pseudosimulation>trajectory_completely_split.touch")
+        xyz = f"{GRID_DIR}trajectory.xyz"
     run:
-        with open(input.trajectory, "r") as f:
-            all_lines = f.readlines() # throwing away the last \n line
+        xtc_to_xyz(
+            input.xtc,
+            input.gro,
+            output.xyz
+        )
 
-        split_len = len(all_lines)//NUM_GRID_POINTS
-        print("total len ", len(all_lines))
-
-        for i, output_file in enumerate(output.all_out):
-            with open(output_file, "w") as f:
-                f.writelines(all_lines[i*split_len:(i+1)*split_len])
-
-rule provide_all_inps:
+rule find_invalid_frames:
     input:
-        expand(f"{PATH_REMOTE}{{specific_paths}}orca.inp",
-            specific_paths=_determine_batch_subfolders())
+        trajectory = "<pseudosimulation>trajectory.xyz"
     output:
-
-
-rule inp_into_every_batch_every_subfolder:
-    """
-    We want to create subdirectories with chunks of the trajectory.
-    """
-    input:
-        inp = "<inputs_orca>orca.inp"
-    params:
-        N_structures_per_chunk=N_structures_per_batch
-    output:
-        inp = expand(f"{PATH_REMOTE}{{specific_paths}}orca.inp",
-            specific_paths=_determine_batch_subfolders()),
-        touchfile = touch("<pseudosimulation>all_orca_inp_exist.touch")
+        valid = "<outputs_indices>valid_indices.npy",
+        invalid = "<outputs_indices>invalid_indices.npy"
     run:
-        for el in output.inp:
-            shell("""
-            cp  {input.inp} {el}
-            """)
+        valid_indices, invalid_indices = find_invalid_frames_with_overlapping_atoms(
+            input.trajectory
+        )
 
-rule copy_runfiles_to_curta:
+        np.save(output.valid, valid_indices)
+        np.save(output.invalid, invalid_indices)
+
+rule copy_trajectory:
     input:
-        script_run_orca_job = f"<inputs_orca>run_ORCA.sh",
-        script_submit_all_jobs = f"<inputs_orca>submit_on_curta.sh",
+        f"{GRID_DIR}trajectory.xyz"
     output:
-        script_run_orca_job=f"{PATH_REMOTE}run_ORCA.sh",
-        script_submit_all_jobs=f"{PATH_REMOTE}submit_on_curta.sh",
+        f"{LOCAL_TEST_DIR}trajectory.xyz"
     shell:
         """
-        cp  {input.script_run_orca_job} {output.script_run_orca_job}
-        cp  {input.script_submit_all_jobs} {output.script_submit_all_jobs}
+        echo "copy trajectory"
+        cp {input} {output}
         """
 
-
-rule energies_from_curta_to_local:
+rule clean_trajectory:
     input:
-        remote_csv_file = f"{PATH_REMOTE}orca_data.csv",
-        #report_failed = f"{PATH_REMOTE}report_failed.txt"
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz"
     output:
-        csv_file = f"<pseudosimulation>energy.csv"
-    run:
-        rough_csv = read_object(input.remote_csv_file)
-        rough_csv["SP Energy [Hartree]"] = pd.to_numeric(rough_csv["Final Single Point Energy"].map(lambda x: x.split()[-1] if isinstance(x, str) else x), errors="coerce")
-        rough_csv["Dispersion [Hartree]"] = pd.to_numeric(rough_csv["Last Dispersion Correction"].map(lambda x: x.split()[-1] if isinstance(x,str) else x),errors="coerce")
-        rough_csv["Energy [Hartree]"] = (rough_csv["SP Energy [Hartree]"] + rough_csv["Dispersion [Hartree]"])
-        rough_csv["Energy [kJ/mol]"] = (rough_csv["SP Energy [Hartree]"] + rough_csv["Dispersion [Hartree]"] ) * HARTREE_TO_J * AVOGADRO_CONSTANT / 1000.0
-        rough_csv["Total index"] = rough_csv.index.map(lambda x: int(x.split("/")[-2]))
-        rough_csv["File"] = rough_csv.index
-        rough_csv["Time [h:m:s]"]=pd.to_timedelta(rough_csv["Total Run Time"].map(lambda x: x.split(":")[-1].replace("msec", "ms") if isinstance(x, str) else x), errors="coerce")
-        rough_csv["Time [s]"] = rough_csv["Time [h:m:s]"].dt.total_seconds()
-        print("Length of rough csv ", len(rough_csv))
-        clean_csv = rough_csv[["File", "Total index", "Energy [Hartree]", "Final Single Point Energy", "Energy [kJ/mol]", "Time [h:m:s]", "Time [s]"]]
-        clean_csv = clean_csv.set_index("Total index").sort_index()
-        print("Length of clean csv ", len(clean_csv))
-
-        # failed_calcs = np.loadtxt(input.report_failed, dtype=str)
-        # print(failed_calcs)
-        # failed_calcs = [int(calc.split("/")[-1]) for calc in failed_calcs]
-        # clean_csv.loc[clean_csv.index[failed_calcs], "Energy [kJ/mol]"] = np.nan
-
-        write_object(clean_csv, output.csv_file)
-
-
-########################   END: HERE THE OPTION OF COMPLETELY SPLIT TRAJECTORIES (BATCH + FRAME)  ################
-
-
-rule trajectory_slice:
-    """
-    We want to extract just the frame with index frame_i from a full trajectory.
-    """
-    input:
-        structure="<pseudosimulation>structure.<ext_str>",
-        trajectory="<pseudosimulation>trajectory.<ext_trj>",
-    output:
-        frame_gro="<pseudosimulation>trajectory_slices/frame_{frame_i}.<ext_str>",
-    run:
-        N_atoms = get_num_atoms(input.structure)
-        block_len = N_atoms + 2
-        frame_index = int(wildcards.frame_i)
-
-        # which lines in the file to read
-        start=frame_index*block_len +1
-        end=(frame_index+1)*block_len
-
-        shell(f"""sed -s -n {start},{end}p {input.trajectory} > {output.frame_gro}""")
-
-rule trajectory_into_chunks:
-    """
-    We want to create subdirectories with chunks of the trajectory.
-    """
-    input:
-        structure="<pseudosimulation>structure.<ext_str>",
-        trajectory="<pseudosimulation>trajectory.<ext_trj>",
-        grid_info="<outputs_network>grid_info.yaml"
+        xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz"
     params:
-        N_structures_per_chunk=N_structures_per_batch
-    output:
-        trajectories = expand(f"{PATH_REMOTE}batch_{{i}}/trajectory.xyz", i=range(N_batches))
+        tol=2e-2
     run:
-        N_atoms = get_num_atoms(input.structure)
-        block_len = N_atoms + 2
-        frames_per_chunk = int(params.N_structures_per_chunk)
+        remove_coordinates(
+            input_file=input.xyz,
+            output_file=output.xyz,
+            tol=params.tol
+        )
 
-        total_N_frames = read_object(input.grid_info)["N_total"]
-        total_N_directories = total_N_frames//frames_per_chunk
-
-        # create the directories
-        for trj in output.trajectories:
-            Path(os.path.dirname(trj)).mkdir(parents=True,exist_ok=True)
-        # create the split files
-
-        start_of_chunk = list(range(1, total_N_frames*block_len+1, frames_per_chunk*block_len))
-
-        for i, start_line_number in enumerate(start_of_chunk):
-            end_line_number = start_line_number + frames_per_chunk*block_len -1
-            shell(f"""sed -s -n {start_line_number},{end_line_number}p {input.trajectory} > {output.trajectories[i]}""")
-
-
-rule inp_into_every_batch:
-    """
-    We want to create subdirectories with chunks of the trajectory.
-    """
+checkpoint split_trajectory:
     input:
-        inp = f"{PATH_REMOTE}orca.inp"
-    params:
-        N_structures_per_chunk=N_structures_per_batch
+        xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz"
     output:
-        inp = expand(f"{PATH_REMOTE}batch_{{i}}/orca.inp", i=range(N_batches))
+        flag=f"{LOCAL_TEST_DIR}split_done.txt"
     run:
-        from shutil import copy
+        split_xyz_trajectory(
+            xyz_file=input.xyz,
+            output_base_dir=f"{LOCAL_TEST_DIR}",
+            structures_per_chunk= CHUNK_SIZE
+        )
 
-        for out in output.inp:
-            copy(input.inp, out)
+        with open(output.flag, "w") as f:
+            f.write("done")
+        # just create a flag so Snakemake knows we're done
+        #Path(output[0]).mkdir(exist_ok=True)
 
-
-# rule extract_energies_on_curta:
-#     input:
-#         orca_output = expand(f"{PATH_REMOTE}batch_{{i}}/orca.out", i=range(10))
-#     output:
-#         csv_file = f"{PATH_REMOTE}orca.csv"
-#     params:
-#         N_structures_per_chunk=N_structures_per_batch
-#     run:
-#         from workflow.helpers.orca_reader import read_important_stuff_into_csv
+# def get_frames(wildcards):
+#     checkpoints.split_trajectory.get()
 #
-#         read_important_stuff_into_csv(input.orca_output, output.csv_file, chunksize=int(params.N_structures_per_chunk))
+#     base_dir = Path(LOCAL_TEST_DIR)
+#
+#     return sorted([
+#         p.name for p in base_dir.iterdir()
+#         if p.is_dir() and p.name.isdigit()
+#     ])
 
-# rule copy_energy_to_local:
-#     """
-#     For the pseudotrajectory, read the energy of each frame.
-#     """
+import os
+import re
+
+# def get_frames(wildcards):
+#     return sorted([
+#         d for d in os.listdir(LOCAL_TEST_DIR)
+#         if d.isdigit()
+#     ])
+#
+# def get_frames(wildcards):
+#     return sorted([
+#         d for d in os.listdir("<output_specific_molecule_network>")
+#         if d.isdigit()
+#     ])
+
+def get_total_structures(config):
+    grid = config["grid"]
+    n_rot = grid["N_rotations"]
+    sub = grid["translation_subgrids_A"]
+
+    factors = []
+
+    for x in sub:
+        if isinstance(x, list):
+            # take last element (e.g. [2, 12, 100] -> 100)
+            factors.append(x[-1])
+        else:
+            # scalar (e.g. 42)
+            factors.append(x)
+
+    total = n_rot
+    for f in factors:
+        total *= f
+
+    return total
+
+def get_frames(wildcards):
+    #total = list(range(1, get_total_structures(config)))
+    total = get_total_structures(config)
+    n_files = total/CHUNK_SIZE
+    return list(range(1, int(n_files) + 1))
+
+rule write_orca_input:
+    input:
+        xyz=lambda wc: f"{LOCAL_TEST_DIR}{wc.frame}/structure.xyz"
+    output:
+        inp=f"{LOCAL_TEST_DIR}{{frame}}/structure.inp"
+    params:
+        setup=setup
+    run:
+        molecule = QuantumMolecule(
+            xyz_file=input.xyz,
+            charge=0,
+            multiplicity=1
+        )
+
+        writer = OrcaWriter(molecule, params.setup)
+        writer.make_input(geo_optimization=False)
+        writer.write_to_file(output.inp)
+
+
+
+rule copy_to_curta:
+    input:
+        lambda wc: expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.inp",
+            frame=get_frames(wc)
+        )
+    output:
+        touch(f"{LOCAL_TEST_DIR}copied_to_curta.txt")
+    shell:
+        f"""
+        echo "=== Copying to Curta ==="
+        ssh curta "mkdir -p {REMOTE_BASE_DIR}"
+        rsync -av {LOCAL_TEST_DIR} curta:{REMOTE_TEST_DIR}
+        touch {output}
+        """
+
+# rule run_orca_curta:
 #     input:
-#         energy=f"{PATH_REMOTE}orca.csv"
+#         f"{LOCAL_TEST_DIR}copied_to_curta.txt"
 #     output:
-#         energy_csv = "<pseudosimulation>energy.csv"
+#         touch(f"{LOCAL_TEST_DIR}curta_started.txt")
+#     shell:
+#         f"""
+#         echo "=== Running ORCA on Curta ==="
+#         ssh curta "cd {REMOTE_TEST_DIR} && bash ~/run/submit_on_curta.sh"
+#         touch {output}
+#         """
+
+# rule copy_back_from_curta:
+#     input:
+#         f"{LOCAL_TEST_DIR}curta_started.txt"
+#     output:
+#         touch(f"{LOCAL_TEST_DIR}copied_back.txt")
+#     shell:
+#         f"""
+#         echo "=== Copying results back ==="
+#         rsync -av curta:{REMOTE_TEST_DIR} {LOCAL_TEST_DIR}
+#         touch {output}
+#         """
+
+# rule run_orca_locally:
+#     input:
+#         inp=f"{LOCAL_TEST_DIR}{{frame}}/structure.inp"
+#     output:
+#         out=f"{LOCAL_TEST_DIR}{{frame}}/structure.out"
+#     log:
+#         f"{LOCAL_TEST_DIR}{{frame}}/orca.log"
+#     resources:
+#         orca=1
 #     shell:
 #         """
-#         cp {input.energy} {output.energy_csv}
+#         cd $(dirname {input.inp})
+#         orca structure.inp > {log} 2>&1
 #         """
 
-
-rule convert_to_lammps:
+rule read_orca:
     input:
-        trajectory = "<pseudosimulation>trajectory.<ext_trj>",
-    output:
-        lammps_trajectory = "<pseudosimulation>lammps_trajectory.dcd",
+        orca_out= lambda wildcards: expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.out",
+            frame=get_frames()
+        )
+
     run:
-        u = Universe(input.trajectory)
-        with md.coordinates.LAMMPS.DCDWriter(output.lammps_trajectory,n_atoms=u.atoms.n_atoms) as W:
-            for ts in u.trajectory:
-                W.write(u.atoms)
+        reader = OrcaReader(input.orca_out)
+
+        energy = reader.extract_energies_orca_output()
+        print("Energy:", energy)
+
+        time = reader.extract_time_orca_output()
+        print("Time:", time)
+
+        print("Finished:", reader.assert_normal_finish(False))
+
+# rule write_csv:
+#     input:
+#         expand(
+#             f"{LOCAL_TEST_DIR}{frame}/structure.out",
+#             frame=FRAMES
+#         )
+#     output:
+#         csv=f"{LOCAL_TEST_DIR}output.csv"
+#     params:
+#         setup=setup
+#     run:
+#         read_important_stuff_into_csv(
+#             out_files_to_read=input,
+#             csv_file_to_write=output.csv,
+#             setup=params.setup,
+#             num_points=len(input)
+#         )
+
+rule write_large_csv:
+    input:
+        lambda wc: expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        csv=f"{LOCAL_TEST_DIR}output.csv"
+    run:
+        read_important_stuff_into_csv(
+            out_files_to_read=input,
+            csv_file_to_write=output.csv,
+            setup=setup,
+            num_points=len(input),
+            chunksize=CHUNK_SIZE
+        )
+
+rule write_times:
+    input:
+        lambda wc: expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        txt=f"{LOCAL_TEST_DIR}times.txt"
+    run:
+        read_times_into_txt(
+            out_files_to_read=input,
+            txt_file_to_write=output.txt,
+            setup=setup
+        )
+
+
+rule write_small_csv:
+    input:
+        traj=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        outs=lambda wc: expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.out",
+            frame=get_frames(wc)
+        )
+    output:
+        csv=f"{LOCAL_TEST_DIR}energy.csv"
+    run:
+        write_energies_with_indices(
+            out_files_to_read=input.outs,
+            trajectory_path=input.traj,
+            csv_file_to_write=output.csv,
+	    tol=tolerance
+        )
+
+# rule write_small_csv_xyzact:
+#     input:
+#         traj="<output_specific_molecule_network>trajectory.xyz",
+#         dat=lambda wc: expand(
+#             "<output_specific_molecule_network>{frame}/structure.xyzact.dat",
+#             frame=get_frames(wc)
+#         )
+#     output:
+#         csv="<output_specific_molecule_network>energy.csv"
+#     run:
+#         write_energies_from_xyzact_dat(
+#             dat_file=input.dat,
+#             trajectory_path=input.traj,
+#             csv_file_to_write=output.csv
+#         )
+
+
+rule copy_energy_csv:
+    input:
+        f"{LOCAL_TEST_DIR}energy.csv"
+    output:
+        f"{GRID_DIR}energy.csv"
+    shell:
+        """
+        echo "energy.csv copied to pseudotrajectory"
+        cp {input} {output}
+        """
+
+rule extract_low_E_structures:
+    input:
+        en=f"{LOCAL_TEST_DIR}energy.csv",
+        traj=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        ind=f"{GRID_DIR}lowest_{{N_xyz}}_binding_energies.txt"
+    output:
+        directory(f"{GRID_DIR}lowest_{{N_xyz}}_structures/")
+    params:
+        setup=setup
+    wildcard_constraints:
+        N_xyz=r"\d+"
+    run:
+        from workflow.helpers.orca_reader import (
+            load_required_indices,
+            build_energy_map,
+            extract_structures_with_orca,
+        )
+
+        indices = load_required_indices(input.ind)
+        energy_map = build_energy_map(input.en)
+
+        extract_structures_with_orca(
+            traj_path=input.traj,
+            indices=indices,
+            energy_map=energy_map,
+            output_dir=output[0],
+            setup=params.setup,
+        )
+
+rule copy_xyz_to_curta:
+    input:
+        f"{GRID_DIR}lowest_{{N_xyz}}_structures/"
+    output:
+        touch(f"{LOCAL_TEST_DIR}copied_low_E_to_curta_{{N_xyz}}.txt")
+    shell:
+        """
+        set -euo pipefail
+
+        echo "=== Creating remote directory ==="
+        ssh curta "mkdir -p {REMOTE_TEST_DIR}"
+
+        echo "=== Copying via SCP ==="
+        scp -r {input} curta:{REMOTE_TEST_DIR}
+
+        echo "=== Done ==="
+
+        touch {output}
+        """
+
+rule plot_energy_vs_distance:
+    input:
+        #xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}energy.csv"
+    output:
+        f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
+    run:
+        plot_energy_vs_distance(input.xyz, input.energy, output[0], n_lowest=int(wildcards.n_low_e))
+
+
+rule plot_lowest_energy_vs_distance:
+    input:
+        #xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}energy.csv"
+    output:
+        f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png"
+    run:
+        plot_lowest_energy_vs_distance(input.xyz, input.energy, output[0], N_lowest=int(wildcards.N_low_E), n_lowest=int(wildcards.n_low_e))
+
+
+
+rule plot_energy_vs_angles:
+    input:
+        #xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}energy.csv"
+    output:
+        xy=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",
+        xz=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",
+        yz=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_yz.png"
+    run:
+        plot_energy_vs_angles(
+            input.xyz,
+            input.energy,
+            output.xy,
+            output.xz,
+            output.yz,
+            n_lowest=int(wildcards.N_low_E)
+        ) 
+
+
+rule plot_lowest_energy_vs_angles:
+    input:
+        #xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        energy=f"{LOCAL_TEST_DIR}energy.csv"
+    output:
+        xy=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",
+        xz=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xz.png",
+        yz=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_yz.png"
+    run:
+        plot_lowest_energy_vs_angles(
+            input.xyz,
+            input.energy,
+            output.xy,
+            output.xz,
+            output.yz,
+            N_lowest=int(wildcards.N_low_E),
+            n_lowest=int(wildcards.n_low_e),
+        )

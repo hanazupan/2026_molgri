@@ -56,7 +56,7 @@ def build_translation_network(subgrids: tuple, periodic_in) -> TranslationNetwor
         subgrids (tuple): if the network is cartesian, there will be three elements corresponding to x-,
             y- and z-direction; if spherical, two elements corresponding to radial and unit sphere subgrids
         periodic_in (tuple): only makes sense for the Cartesian grids, a 3-element tuple that encodes whether the
-            gridshould be considered periodic in x, y and/or z-direction.
+            grid should be considered periodic in x, y and/or z-direction.
 
     Returns:
         a TranslationNetwork object
