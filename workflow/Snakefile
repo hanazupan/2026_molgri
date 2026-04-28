@@ -2,6 +2,7 @@ configfile: "workflow/config/defaults.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
+    N_xyz=r"\d+"
 
 from workflow.helpers.build_subgrids import auto_create_grid
 
@@ -27,6 +28,10 @@ pathvars:
     #outputs
     output_specific_molecule = f"<output_directory><molecules>",
     output_specific_molecule_network = f"<output_specific_molecule><network>",
+
+    #curta
+    remote_base_directory = "/home/nadjar02/MA",
+    remote_test_dir = f"<remote_base_directory><molecules><network>",
 
     # network
     outputs_network = "<output_specific_molecule_network>network/",
@@ -66,6 +71,9 @@ include: "rules/print_info.smk"
 
 
 N=[1, 5, 10, 50]
+N_xyz =[10]
+N_low_E=20
+n_low_e=20
 view_index=config["analysis"]["view_index"]
 zoom_level = config["analysis"]["zoom_level"]
 
@@ -140,6 +148,51 @@ if "make_pseudotrajectory_lammps" in config["analysis"]["parts_to_perform"]:
         [rules.convert_to_lammps.output,]
     )
 
+def orca_inputs(wildcards):
+    frames = get_frames(wildcards)
+    # frames = list(range(1, 43))
+    print(frames)
+
+    return [
+        f"{GRID_DIR}trajectory.xyz",
+        f"{LOCAL_TEST_DIR}trajectory.xyz",
+        f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        f"{LOCAL_TEST_DIR}split_done.txt",
+        # f"{LOCAL_TEST_DIR}copied_to_curta.txt"
+        ] + \
+        expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.xyz",
+            frame=frames
+        ) + \
+        expand(
+            f"{LOCAL_TEST_DIR}{{frame}}/structure.inp",
+            frame=frames
+        )
+
+def orca_energies(wildcards):
+    frames = get_frames(wildcards)
+    return [
+        f"{LOCAL_TEST_DIR}output.csv",
+        f"{LOCAL_TEST_DIR}energy.csv",
+        f"{GRID_DIR}energy.csv",
+        f"{LOCAL_TEST_DIR}times.txt",
+    ]
+
+def distance_angles_plots():
+    return [
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png",n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_yz.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xz.png",N_low_E=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xz.png",N_low_E=[100],n_low_e=[20]),
+        expand(f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_yz.png",N_low_E=[100],n_low_e=[20]),
+    ]
+
 rule all:
     input:
-        DESIRED_RESULTS
+        DESIRED_RESULTS,
+        #orca_inputs,
+        #orca_energies,
+        #distance_angles_plots(),
