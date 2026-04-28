@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: "cart_100_1_1_100"
+  unique_network_name: "cart_100_1_1_100_gro"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 100
@@ -34,6 +34,7 @@ orca:
   num_scf: None
   num_cores: 8
   ram_per_core: 300
+  tolerance_atom_overlap: 1e-3
 
 plotting:
   upper_E_limit: 0

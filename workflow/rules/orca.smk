@@ -391,8 +391,8 @@ rule copy_xyz_to_curta:
 
 rule plot_energy_vs_distance:
     input:
-        xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
-        #xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        #xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}energy.csv"
     output:
         f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_distance_{{n_low_e}}_lowest_highlighted.png"
@@ -402,8 +402,8 @@ rule plot_energy_vs_distance:
 
 rule plot_lowest_energy_vs_distance:
     input:
-        xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
-        #xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        #xyz = f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}energy.csv"
     output:
         f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_distance.png"
@@ -414,8 +414,8 @@ rule plot_lowest_energy_vs_distance:
 
 rule plot_energy_vs_angles:
     input:
-        xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
-        #xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}energy.csv"
     output:
         xy=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/energy_vs_angles_{{N_low_E}}_highlighted_xy.png",
@@ -434,8 +434,8 @@ rule plot_energy_vs_angles:
 
 rule plot_lowest_energy_vs_angles:
     input:
-        xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
-        #xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
+        #xyz=f"{LOCAL_TEST_DIR}cleaned_trajectory.xyz",
+        xyz=f"{LOCAL_TEST_DIR}trajectory.xyz",
         energy=f"{LOCAL_TEST_DIR}energy.csv"
     output:
         xy=f"{LOCAL_TEST_DIR}molecular_plots/distances_angles/{{N_low_E}}_lowest_{{n_low_e}}_energy_vs_angles_xy.png",

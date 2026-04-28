@@ -1056,7 +1056,7 @@ def plot_energy_vs_distance(xyz_file, energy_csv, output_png, n_lowest, cutoff=1
         label="Global minimum"
     )
 
-    plt.xlabel("COM distance [nm]")
+    plt.xlabel("COM distance [Å]")
     plt.ylabel("Energy [kJ/mol]")
     plt.title("Energy vs COM Distance")
 
@@ -1124,7 +1124,7 @@ def plot_lowest_energy_vs_distance(xyz_file, energy_csv, output_png, N_lowest, n
         label="Global minimum"
     )
 
-    plt.xlabel("COM distance [nm]")
+    plt.xlabel("COM distance [Å]")
     #plt.gca().ticklabel_format(useOffset=False, axis='y')
     plt.ylabel("Energy [kJ/mol]")
     plt.title(f"{N} Lowest Energies vs COM Distance")

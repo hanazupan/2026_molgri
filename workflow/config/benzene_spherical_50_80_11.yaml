@@ -1,7 +1,7 @@
 perform_simulation: True
 
 grid:
-  unique_network_name: "spherical_50_80_11_gro"
+  unique_network_name: "spherical_50_80_11"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 50
@@ -27,6 +27,7 @@ orca:
   num_scf: None
   num_cores: 8
   ram_per_core: 300
+  tolerance_atom_overlap: 1e-3
 
 plotting:
   upper_E_limit: 0
