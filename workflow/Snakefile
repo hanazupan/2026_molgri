@@ -1,4 +1,4 @@
-configfile: "workflow/config/defaults.yaml"
+configfile: "workflow/config/f6benzene_50_7_7_11.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>"

@@ -1,0 +1,8 @@
+menu color off
+menu color on
+color Display Background white
+menu color off
+menu graphics off
+menu graphics on
+mol modstyle 0 0 Licorice 0.300000 10.000000 10.000000
+axes location Off

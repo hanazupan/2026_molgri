@@ -1,0 +1,2 @@
+gmx trjconv -f trajectory.xtc -s structure.gro -o frames.pdb
+obabel frames.pdb -O frames.xyz

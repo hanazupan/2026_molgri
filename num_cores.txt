@@ -1,0 +1,86 @@
+benzene:
+cart_10_3_3_3
+    Number of structures:  270
+    Average time per structure [s]:  279.7929296296296
+    Average time per structure [h:m:s]:  0:04:39
+    Number of cores: 4
+    Ram per core: 300
+
+spherical_20_42_4
+    Number of structures:  80
+    Average time per structure [s]:  439.75496577380943
+    Average time per structure [h:m:s]:  0:07:19
+    Number of cores: 4
+    Ram per core: 300
+
+cart_20_7_7_4
+    Number of structures:  279
+    Average time per structure [s]:  155.43999129544287
+    Average time per structure [h:m:s]:  0:02:35
+    Number of cores: 4
+    Ram per core: 400
+
+cart_100_1_1_100
+    Number of structures:  500
+    Average time per structure [s]:  106.60875588235294
+    Average time per structure [h:m:s]:  0:01:46
+    Number of cores: 4
+    Ram per core: 300
+
+spherical_40_42_7
+    Number of structures:  210
+    Average time per structure [s]:  67.41585909863946
+    Average time per structure [h:m:s]:  0:01:07
+    Number of cores: 8
+    Ram per core: 300
+
+cart_50_7_7_11
+    Number of structures:  539
+    Average time per structure [s]:  98.62503287569575
+    Average time per structure [h:m:s]:  0:01:38
+    Number of cores: 4
+    Ram per core: 300
+
+spherical_50_80_11
+    Number of structures:  220
+    Average time per structure [s]:  76.63673870454544
+    Average time per structure [h:m:s]:  0:01:16
+    Number of cores: 8
+    Ram per core: 300
+
+
+f6benzene:
+cart_100_1_1_100
+    Number of structures:  100
+    Average time per structure [s]:  136.4220895
+    Average time per structure [h:m:s]:  0:02:16
+    Number of cores: 8
+    Ram per core: 200
+
+cart_50_7_7_11
+    Number of structures:  175
+    Average time per structure [s]:  114.10472679035247
+    Average time per structure [h:m:s]:  0:01:54
+    Number of cores: 8
+    Ram per core: 300
+
+
+benzene_f6benzene:
+cart_100_1_1_100
+    Number of structures:  100
+    Average time per structure [s]:  110.97555280000002
+    Average time per structure [h:m:s]:  0:01:50
+    Number of cores: 8
+    Ram per core: 300
+
+cart_50_7_7_11
+    Number of structures:  175
+    Average time per structure [s]:  126.15583525046384
+    Average time per structure [h:m:s]:  0:02:06
+    Number of cores: 4
+    Ram per core: 300
+
+
+
+
+

@@ -83,11 +83,11 @@ rule save_network_properties:
         distances = "<outputs_network>distances.npz",
         surfaces = "<outputs_network>surfaces.npz",
         volumes = "<outputs_network>volumes.npy",
-        boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
+        # boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
     run:
         full_network = read_object(input.network_file)
-        boundaries_to_bulk = np.array([n.is_boundary_to_bulk() for n in full_network.sorted_nodes])
-        write_object(boundaries_to_bulk, output.boundaries_to_bulk)
+        #boundaries_to_bulk = np.array([n.is_boundary_to_bulk() for n in full_network.sorted_nodes])
+        #write_object(boundaries_to_bulk, output.boundaries_to_bulk)
         write_object(full_network.grid, output.grid)
         write_object(full_network.volumes, output.volumes)
 

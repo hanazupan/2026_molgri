@@ -1,0 +1,21 @@
+ 69 """
+ 70 def all_inputs(wildcards):
+ 71     frames = get_frames(wildcards)
+ 72
+ 73     return [
+ 74         f"{GRID_DIR}/trajectory.xyz",
+ 75         f"{LOCAL_TEST_DIR}/trajectory.xyz",
+ 76         f"{LOCAL_TEST_DIR}/cleaned_trajectory.xyz",
+ 77         f"{LOCAL_TEST_DIR}/split_done.txt",
+ 78         f"{LOCAL_TEST_DIR}/copied_to_curta.txt"
+ 79         ] + \
+ 80         expand(
+ 81             f"{LOCAL_TEST_DIR}/{{frame}}/structure.xyz",
+ 82             frame=frames
+ 83         ) + \
+ 84         expand(
+ 85             f"{LOCAL_TEST_DIR}/{{frame}}/structure.inp",
+ 86             frame=frames
+ 87         )
+ 88 """
+
