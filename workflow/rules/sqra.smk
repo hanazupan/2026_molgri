@@ -20,7 +20,7 @@ rule make_sqra:
         volumes = "<outputs_network>volumes.npy",
         distances= "<outputs_network>distances.npz",
         surfaces= "<outputs_network>surfaces.npz",
-        boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
+        #boundaries_to_bulk= f"<outputs_network>boundaries_to_bulk.npy"
     output:
         rate_matrix = f"<outputs_transitions>sqra/sqra.npz",
     params:
@@ -35,9 +35,9 @@ rule make_sqra:
         volumes = read_object(input.volumes)
         distances = read_object(input.distances)
         surfaces = read_object(input.surfaces)
-        bulk_neighbours = read_object(input.boundaries_to_bulk)
+        #bulk_neighbours = read_object(input.boundaries_to_bulk)
 
-        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces, bulk_neighbours = bulk_neighbours )
+        sqra = SQRA(energies=my_energy_array,volumes=volumes,distances=distances,surfaces=surfaces )
         rate_matrix = sqra.get_rate_matrix(params.diffusion_coefficient,params.T_in_K,
             capping_factor=params.capping_factor, flow_to_bulk=float(params.flow_to_bulk))
         print("Written initial sqra has shape ", rate_matrix.shape)

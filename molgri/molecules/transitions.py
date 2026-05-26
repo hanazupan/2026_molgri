@@ -173,12 +173,12 @@ class SQRA:
     distances, surfaces, volumes - but only one energy evaluation per cell
     """
 
-    def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array, bulk_neighbours: NDArray):
+    def __init__(self, energies: NDArray, volumes: NDArray, distances: csr_array, surfaces: csr_array):
         self.energies = energies
         self.volumes = volumes
         self.distances = distances
         self.surfaces = surfaces
-        self.bulk_neighbours = bulk_neighbours
+        #self.bulk_neighbours = bulk_neighbours
 
 
     def get_rate_matrix(self, D: float, T: float, capping_factor: float, flow_to_bulk: float) -> csr_array:

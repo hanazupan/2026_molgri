@@ -1,4 +1,4 @@
-configfile: "workflow/config/f6benzene_50_7_7_11.yaml"
+configfile: "workflow/config/bnz_hfb_50_7_7_11.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
@@ -63,6 +63,7 @@ include: "rules/sqra.smk"
 include: "rules/graphene_xylene_specific.smk"
 include: "rules/molecular_visualizations.smk"
 include: "rules/print_info.smk"
+include: "rules/spheres.smk"
 
 
 N=[1, 5, 10, 50]
@@ -143,3 +144,4 @@ if "make_pseudotrajectory_lammps" in config["analysis"]["parts_to_perform"]:
 rule all:
     input:
         DESIRED_RESULTS
+        #"sphere_patch_50_new.xyz",
