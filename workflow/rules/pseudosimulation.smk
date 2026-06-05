@@ -18,6 +18,7 @@ rule copy_molecular_files_from_input:
 
         m1 = read_object(input.molecule_1)
         m2 = read_object(input.molecule_2)
+        u = mda.Universe("file.gro", format="GRO")
 
         # center molecules
         m1 = move_to_center(m1)
@@ -25,6 +26,47 @@ rule copy_molecular_files_from_input:
 
         write_object(m1, output.molecule_1)
         write_object(m2, output.molecule_2)
+
+
+# rule copy_molecular_files_from_input:
+#     input:
+#         molecule_1 = f"<inputs_structures><molecule1>.<ext_str>",
+#         molecule_2 = f"<inputs_structures><molecule2>.<ext_str>"
+#     output:
+#         molecule_1 = f"<pseudosimulation>molecule1.<ext_str>",
+#         molecule_2 = f"<pseudosimulation>molecule2.<ext_str>"
+#     run:
+#         import mdtraj as md
+#         from molgri.molecules.bimolecular import move_to_center
+
+#         traj1 = md.load(input.molecule_1)
+#         traj1.save_gro(output.molecule_1)
+
+#         traj2 = md.load(input.molecule_2)
+#         traj2.save_gro(output.molecule_2)
+
+#         m1 = read_object(input.molecule_1)
+#         m2 = read_object(input.molecule_2)
+
+#         # set masses manually
+#         for atom in m1.atoms:
+#             if atom.name.startswith("C"):
+#                 atom.mass = 12.011
+#             elif atom.name.startswith("H"):
+#                 atom.mass = 1.008
+
+#         for atom in m2.atoms:
+#             if atom.name.startswith("C"):
+#                 atom.mass = 12.011
+#             elif atom.name.startswith("F"):
+#                 atom.mass = 18.998
+
+#         # center molecules
+#         m1 = move_to_center(m1)
+#         m2 = move_to_center(m2)
+
+#         write_object(m1, output.molecule_1)
+#         write_object(m2, output.molecule_2)
 
 rule create_structure:
     input:

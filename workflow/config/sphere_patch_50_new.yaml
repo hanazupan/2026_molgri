@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: "sphere_patch_50_new"
+  unique_network_name: "sphere_patch_100_new"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 30
@@ -8,8 +8,8 @@ grid:
   translation_subgrids_A: [ [-5,5,3], [-5,5,3], [-5, 5, 5] ]
 
 pseudotrajectory:
-  molecule_1: "sphere_patch_50_new"
-  molecule_2: "sphere_patch_50_new"
+  molecule_1: "sphere_patch_100_new"
+  molecule_2: "sphere_patch_100_new"
   structure_ending: "xyz"
   trajectory_ending: "xtc"
 

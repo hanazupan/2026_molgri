@@ -279,5 +279,6 @@ rule align_to_xy:
         structure = "/home/hanaz63/2026_molgri/inputs/one_molecule_structures/benzene2.gro"
     run:
         input_u = read_object(input.structure)
+        input_u = assign_masses(u)
         output_u = move_universe_to_xy_plane(input_u)
         write_object(output_u, output.structure)

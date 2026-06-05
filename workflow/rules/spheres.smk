@@ -4,9 +4,9 @@ from molgri.utils.spheres import random_sphere_points
 
 rule sphere_patch_xyz:
     output:
-        "sphere_patch_50_new.xyz"
+        "sphere_patch_100_new.xyz"
     params:
-        n=50,
+        n=100,
         patch_angle_deg=60
     run:
         points = random_sphere_points(params.n)
