@@ -143,7 +143,4 @@ if "make_pseudotrajectory_lammps" in config["analysis"]["parts_to_perform"]:
 
 rule all:
     input:
-        #DESIRED_RESULTS
-        f"<outputs_other_plots>array_reduced_sqra.png",
-        f"<outputs_other_plots>array_sqra.png"
-        #"sphere_patch_50_new.xyz",
+        DESIRED_RESULTS
