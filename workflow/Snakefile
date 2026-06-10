@@ -1,4 +1,4 @@
-configfile: "workflow/config/bnz_hfb_50_7_7_11.yaml"
+configfile: "workflow/config/benzene_50_7_7_11.yaml"
 
 wildcard_constraints:
     path = "<simulation>|<pseudosimulation>|<outputs_assignment>"
@@ -143,5 +143,7 @@ if "make_pseudotrajectory_lammps" in config["analysis"]["parts_to_perform"]:
 
 rule all:
     input:
-        DESIRED_RESULTS
+        #DESIRED_RESULTS
+        f"<outputs_other_plots>array_reduced_sqra.png",
+        f"<outputs_other_plots>array_sqra.png"
         #"sphere_patch_50_new.xyz",

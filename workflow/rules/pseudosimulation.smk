@@ -2,6 +2,7 @@
 Everything here is saved to the pseudosimulation/gromacs folder: creating a structure, pseudotrajectory and calculating the energy along it.
 """
 from workflow.helpers.io import read_object, write_object
+import MDAnalysis as mda
 
 rule copy_molecular_files_from_input:
     """

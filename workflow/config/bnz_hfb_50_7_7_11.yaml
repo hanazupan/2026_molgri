@@ -1,5 +1,5 @@
 grid:
-  unique_network_name: "cart_50_7_7_11_gro"
+  unique_network_name: "cart_50_7_7_11"
   rotation_algorithm: "hypercube"
   rotation_random_seed: 1
   N_rotations: 50
